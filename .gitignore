@@ -1,2 +1,17 @@
 node_modules
 dist
+# Lock files - use only npm
+pnpm-lock.yaml
+yarn.lock
+# Environment files
+.env
+.env.local
+.env.production
+# Editor files
+.vscode/
+.idea/
+# OS files
+.DS_Store
+Thumbs.db
+# Build cache
+.cache/
