@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Helvetica Neue', Arial, sans-serif;
+  }
+  
+  body {
+    margin: 0;
+    background-color: #fafafa;
+    color: #171717;
+    font-family: inherit;
+    line-height: 1.6;
+  }
+
+  /* Scrollbar personalizado estilo iOS */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+  }
+}
+
+@layer components {
+  .ios-card {
+    @apply bg-white rounded-ios shadow-ios border border-ios-gray-200;
+  }
+  
+  .ios-input {
+    @apply bg-white border border-ios-gray-300 rounded-ios-sm px-4 py-3 text-ios-gray-900 placeholder-ios-gray-500 focus:outline-none focus:ring-2 focus:ring-ios-gray-400 focus:border-transparent transition-all duration-200;
+  }
+  
+  .ios-button {
+    @apply bg-ios-gray-900 text-white font-medium py-3 px-6 rounded-ios-sm hover:bg-ios-gray-800 focus:outline-none focus:ring-2 focus:ring-ios-gray-600 focus:ring-offset-2 transition-all duration-200;
+  }
+  
+  .ios-button-secondary {
+    @apply bg-white text-ios-gray-900 font-medium py-3 px-6 rounded-ios-sm border border-ios-gray-300 hover:bg-ios-gray-50 focus:outline-none focus:ring-2 focus:ring-ios-gray-400 focus:ring-offset-2 transition-all duration-200;
+  }
+
+  /* Colores adicionales para el botón de borrar */
+  .bg-ios-gray-150 {
+    background-color: #f1f1f1;
+  }
+  
+  .border-ios-gray-150 {
+    border-color: #f1f1f1;
+  }
+
+  /* Color para drag and drop */
+  .bg-ios-gray-25 {
+    background-color: #fcfcfc;
+  }
+}
