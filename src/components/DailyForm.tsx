@@ -427,43 +427,45 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   const previewText = createMemo(() => formatReportForCopy(currentReport()));
 
   return (
-        <div class="space-y-6">
+        <div class="space-y-4 sm:space-y-6">
       {/* Card de acciones principales - Primera fila con diseño mejorado */}
-      <div class="bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-2xl p-6 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.1),0_4px_24px_-4px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.12),0_8px_32px_-8px_rgba(0,0,0,0.08)] transition-all duration-300">
-        <div class="flex items-center justify-between mb-5">
-          <div class="flex items-center space-x-4">
-            <div class="w-10 h-10 bg-gradient-to-br from-gray-600 to-gray-800 rounded-xl flex items-center justify-center shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
-              <span class="text-white text-lg">⚡</span>
+      <div class="bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.1),0_4px_24px_-4px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.12),0_8px_32px_-8px_rgba(0,0,0,0.08)] transition-all duration-300">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-5 gap-4">
+          <div class="flex items-center space-x-3 sm:space-x-4">
+            <div class="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-gray-600 to-gray-800 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
+              <span class="text-white text-base sm:text-lg">⚡</span>
                   </div>
             <div>
-              <h3 class="text-lg font-semibold text-gray-900">Panel de control</h3>
-              <p class="text-sm text-gray-500">Gestiona tu reporte diario</p>
+              <h3 class="text-base sm:text-lg font-semibold text-gray-900">Panel de control</h3>
+              <p class="text-xs sm:text-sm text-gray-500">Gestiona tu reporte diario</p>
             </div>
           </div>
 
-          <div class="flex items-center space-x-3">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             <button
-              class="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 transition-colors duration-200 px-4 py-2.5 rounded-xl hover:bg-white border border-gray-200 hover:border-gray-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+              class="flex items-center justify-center sm:justify-start space-x-2 text-xs sm:text-sm text-gray-600 hover:text-gray-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-white border border-gray-200 hover:border-gray-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
               onClick={() => setShowPreview(!showPreview())}
             >
-              <span class="text-base">{showPreview() ? '👁️' : '👁️'}</span>
-              <span>{showPreview() ? 'Ocultar vista previa' : 'Mostrar vista previa'}</span>
+              <span class="text-sm sm:text-base">{showPreview() ? '👁️' : '👁️'}</span>
+              <span class="hidden sm:inline">{showPreview() ? 'Ocultar vista previa' : 'Mostrar vista previa'}</span>
+              <span class="sm:hidden">Vista previa</span>
             </button>
             
                     <button
-              class={`flex items-center space-x-2 px-5 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-800 transition-all duration-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2),0_4px_16px_-4px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.2)] ${isSaving() ? 'opacity-50 cursor-not-allowed' : ''}`}
+              class={`flex items-center justify-center sm:justify-start space-x-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-gray-800 transition-all duration-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2),0_4px_16px_-4px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.2)] ${isSaving() ? 'opacity-50 cursor-not-allowed' : ''}`}
               onClick={handleSave}
               disabled={isSaving()}
             >
-              <span class="text-base">{isSaving() ? '⏳' : '💾'}</span>
-              <span>{isSaving() ? 'Guardando...' : 'Guardar reporte'}</span>
+              <span class="text-sm sm:text-base">{isSaving() ? '⏳' : '💾'}</span>
+              <span class="hidden sm:inline">{isSaving() ? 'Guardando...' : 'Guardar reporte'}</span>
+              <span class="sm:hidden">Guardar</span>
                     </button>
             
               <button
-              class="flex items-center space-x-2 px-4 py-2.5 bg-blue-50 text-blue-700 text-sm font-semibold rounded-xl hover:bg-blue-100 transition-all duration-200 border border-blue-200 hover:border-blue-300 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+              class="flex items-center justify-center sm:justify-start space-x-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-50 text-blue-700 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-blue-100 transition-all duration-200 border border-blue-200 hover:border-blue-300 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
               onClick={handleCopy}
               >
-              <span class="text-base">📋</span>
+              <span class="text-sm sm:text-base">📋</span>
               <span>Copiar</span>
               </button>
             </div>
@@ -471,18 +473,18 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
         {/* Status Message - Más prominente */}
         {saveStatus() && (
-          <div class={`mb-4 p-4 rounded-xl text-sm font-medium flex items-center space-x-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] ${saveStatus().includes('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'} transition-all duration-300`}>
-            <span class="text-lg">{saveStatus().includes('Error') ? '❌' : '✅'}</span>
+          <div class={`mb-3 sm:mb-4 p-3 sm:p-4 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium flex items-center space-x-2 sm:space-x-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] ${saveStatus().includes('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'} transition-all duration-300`}>
+            <span class="text-sm sm:text-lg">{saveStatus().includes('Error') ? '❌' : '✅'}</span>
             <span>{saveStatus()}</span>
                   </div>
                 )}
 
         {/* Vista previa integrada - Más elegante */}
         {showPreview() && (
-          <div class="mb-4">
-            <div class="bg-gray-900 border border-gray-700 rounded-xl p-5 max-h-64 overflow-y-auto shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.15)]">
-              <div class="flex items-center space-x-2 mb-3">
-                <span class="text-green-400 text-sm">●</span>
+          <div class="mb-3 sm:mb-4">
+            <div class="bg-gray-900 border border-gray-700 rounded-lg sm:rounded-xl p-3 sm:p-5 max-h-48 sm:max-h-64 overflow-y-auto shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.15)]">
+              <div class="flex items-center space-x-2 mb-2 sm:mb-3">
+                <span class="text-green-400 text-xs sm:text-sm">●</span>
                 <span class="text-gray-400 text-xs font-medium uppercase tracking-wider">Terminal - Vista previa</span>
               </div>
               <pre class="text-xs text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">
@@ -492,9 +494,9 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           </div>
         )}
         
-        <div class="pt-4 border-t border-gray-200">
+        <div class="pt-3 sm:pt-4 border-t border-gray-200">
           <div class="flex items-center justify-center space-x-2 text-gray-400">
-            <span class={`w-2 h-2 rounded-full transition-all duration-300 ${isAutoSaving() ? 'bg-blue-400 animate-pulse' : 'bg-green-400 animate-pulse'}`}></span>
+            <span class={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all duration-300 ${isAutoSaving() ? 'bg-blue-400 animate-pulse' : 'bg-green-400 animate-pulse'}`}></span>
             <p class="text-xs font-medium uppercase tracking-wider">
               {isAutoSaving() ? 'Guardando automáticamente...' : 'Guardado automático activo'}
             </p>
@@ -503,7 +505,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       </div>
 
       {/* Instrucciones de Drag & Drop - Más sutil */}
-      <div class="bg-blue-50/50 border border-blue-100 rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+      <div class="bg-blue-50/50 border border-blue-100 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
         <div class="flex items-center space-x-2 mb-1">
           <span class="text-blue-500 text-xs">💡</span>
           <span class="text-xs font-medium text-blue-700">Reorganiza tus tareas</span>
@@ -514,56 +516,56 @@ const DailyForm: Component<DailyFormProps> = (props) => {
               </div>
 
       {/* Secciones principales - Diseño mejorado */}
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
         {/* Sección: Ayer completé */}
-        <div class="bg-white border border-gray-100 rounded-2xl p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
-          <div class="flex items-center justify-between mb-5">
-            <div class="flex items-center space-x-3">
-              <div class="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-                <span class="text-green-500 text-sm">✓</span>
+        <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+          <div class="flex items-center justify-between mb-4 sm:mb-5">
+            <div class="flex items-center space-x-2 sm:space-x-3">
+              <div class="w-6 h-6 sm:w-8 sm:h-8 bg-green-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                <span class="text-green-500 text-xs sm:text-sm">✓</span>
               </div>
               <div>
-                <h2 class="text-base font-semibold text-gray-800">¿Qué logré ayer?</h2>
-                <p class="text-xs text-gray-500">Reconoce tus avances</p>
+                <h2 class="text-sm sm:text-base font-semibold text-gray-800">¿Qué logré ayer?</h2>
+                <p class="text-xs text-gray-500 hidden sm:block">Reconoce tus avances</p>
               </div>
             </div>
-            <div class="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <div class="text-[9px] sm:text-[10px] text-gray-400 bg-gray-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
               Destino
             </div>
           </div>
 
-          <div class="space-y-2 min-h-[180px] p-2" ref={completedYesterdayContainer!}></div>
+          <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={completedYesterdayContainer!}></div>
           
           {/* Indicador visual de drop zone - Más sutil */}
-          <div class="absolute inset-3 border border-dashed border-green-200 rounded-xl bg-green-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="yesterday-drop-indicator">
-            <div class="text-green-600 font-medium text-xs bg-white px-3 py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
+          <div class="absolute inset-2 sm:inset-3 border border-dashed border-green-200 rounded-lg sm:rounded-xl bg-green-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="yesterday-drop-indicator">
+            <div class="text-green-600 font-medium text-xs bg-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
               Suelta las tareas aquí
             </div>
           </div>
         </div>
 
         {/* Sección: Hoy trabajaré en */}
-        <div class="bg-white border border-gray-100 rounded-2xl p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
-          <div class="flex items-center justify-between mb-5">
-            <div class="flex items-center space-x-3">
-              <div class="w-8 h-8 bg-blue-50 rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-                <span class="text-blue-500 text-sm">→</span>
+        <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+          <div class="flex items-center justify-between mb-4 sm:mb-5">
+            <div class="flex items-center space-x-2 sm:space-x-3">
+              <div class="w-6 h-6 sm:w-8 sm:h-8 bg-blue-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                <span class="text-blue-500 text-xs sm:text-sm">→</span>
               </div>
               <div>
-                <h2 class="text-base font-semibold text-gray-800">¿En qué me enfocaré hoy?</h2>
-                <p class="text-xs text-gray-500">Define tus prioridades</p>
+                <h2 class="text-sm sm:text-base font-semibold text-gray-800">¿En qué me enfocaré hoy?</h2>
+                <p class="text-xs text-gray-500 hidden sm:block">Define tus prioridades</p>
               </div>
             </div>
-            <div class="text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <div class="text-[9px] sm:text-[10px] text-gray-400 bg-gray-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
               Destino
             </div>
           </div>
           
-          <div class="space-y-2 min-h-[180px] p-2" ref={todayTasksContainer!}></div>
+          <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={todayTasksContainer!}></div>
           
           {/* Indicador visual de drop zone - Más sutil */}
-          <div class="absolute inset-3 border border-dashed border-blue-200 rounded-xl bg-blue-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="today-drop-indicator">
-            <div class="text-blue-600 font-medium text-xs bg-white px-3 py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
+          <div class="absolute inset-2 sm:inset-3 border border-dashed border-blue-200 rounded-lg sm:rounded-xl bg-blue-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="today-drop-indicator">
+            <div class="text-blue-600 font-medium text-xs bg-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
               Suelta las tareas aquí
             </div>
           </div>
@@ -571,14 +573,14 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       </div>
 
       {/* Sección: Objetivos de la semana - Más uniforme */}
-      <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
-        <div class="flex items-center space-x-3 mb-5">
-          <div class="w-8 h-8 bg-purple-50 rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-            <span class="text-purple-500 text-sm">⚡</span>
+      <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+        <div class="flex items-center space-x-2 sm:space-x-3 mb-4 sm:mb-5">
+          <div class="w-6 h-6 sm:w-8 sm:h-8 bg-purple-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+            <span class="text-purple-500 text-xs sm:text-sm">⚡</span>
           </div>
           <div>
-            <h2 class="text-base font-semibold text-gray-800">¿Qué quiero lograr esta semana?</h2>
-            <p class="text-xs text-gray-500">Objetivos de esta semana</p>
+            <h2 class="text-sm sm:text-base font-semibold text-gray-800">¿Qué quiero lograr esta semana?</h2>
+            <p class="text-xs text-gray-500 hidden sm:block">Objetivos de esta semana</p>
           </div>
         </div>
         
@@ -586,24 +588,24 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       </div>
 
       {/* Sección: Aprendizaje - Más limpia */}
-      <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
-        <div class="flex items-center space-x-3 mb-5">
-          <div class="w-8 h-8 bg-amber-50 rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-            <span class="text-amber-500 text-sm">📚</span>
+      <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+        <div class="flex items-center space-x-2 sm:space-x-3 mb-4 sm:mb-5">
+          <div class="w-6 h-6 sm:w-8 sm:h-8 bg-amber-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+            <span class="text-amber-500 text-xs sm:text-sm">📚</span>
           </div>
           <div>
-            <h2 class="text-base font-semibold text-gray-800">¿Qué estoy aprendiendo?</h2>
-            <p class="text-xs text-gray-500">Documenta tu crecimiento</p>
+            <h2 class="text-sm sm:text-base font-semibold text-gray-800">¿Qué estoy aprendiendo?</h2>
+            <p class="text-xs text-gray-500 hidden sm:block">Documenta tu crecimiento</p>
           </div>
         </div>
         
         <div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
+            <label class="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
               Mi aprendizaje actual
             </label>
             <textarea
-              class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all duration-200 bg-white h-24 resize-none shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+              class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg text-xs sm:text-sm placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all duration-200 bg-white h-20 sm:h-24 resize-none shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
               placeholder="¿Qué nuevas habilidades, conceptos o ideas estás desarrollando? (usa - para separar varios elementos)"
               value={learning()}
               onInput={(e) => {
