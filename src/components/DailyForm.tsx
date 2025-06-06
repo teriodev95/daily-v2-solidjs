@@ -1,4 +1,4 @@
-import { Component, createSignal, onMount, createMemo } from 'solid-js';
+import { Component, createSignal, onMount, createMemo, onCleanup } from 'solid-js';
 import { DailyReport } from '../types';
 import { getTodayFormatted, getCurrentWeekNumber } from '../utils/dateUtils';
 import { saveReport, loadReport } from '../utils/database';
@@ -14,6 +14,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   const [isSaving, setIsSaving] = createSignal(false);
   const [saveStatus, setSaveStatus] = createSignal<string>('');
   const [showPreview, setShowPreview] = createSignal(false);
+  const [isAutoSaving, setIsAutoSaving] = createSignal(false);
 
   // Containers para las secciones dinámicas
   let completedYesterdayContainer: HTMLDivElement;
@@ -24,6 +25,54 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   let completedYesterdayData: string[] = [''];
   let todayTasksData: string[] = [''];
   let weekGoalsData: string[] = [''];
+
+  // Timer para el debounce del auto-guardado
+  let autoSaveTimer: number | null = null;
+
+  // Función de auto-guardado con debounce
+  const triggerAutoSave = () => {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+    
+    autoSaveTimer = window.setTimeout(() => {
+      handleAutoSave();
+    }, 1500); // Esperar 1.5 segundos después de que el usuario deje de escribir
+  };
+
+  // Función de auto-guardado inmediato (para cuando el usuario sale del campo)
+  const triggerImmediateAutoSave = () => {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+    handleAutoSave();
+  };
+
+  // Función de auto-guardado
+  const handleAutoSave = async () => {
+    setIsAutoSaving(true);
+    try {
+      const report = currentReport();
+      const savedReport = saveReport(report);
+      // Guardado silencioso - sin mensaje de toast
+      props.onSave?.(savedReport);
+    } catch (error) {
+      console.error('Error en auto-guardado:', error);
+      // Solo mostrar error si es crítico, pero de forma sutil
+      setSaveStatus('Error en auto-guardado');
+      setTimeout(() => setSaveStatus(''), 1500);
+    } finally {
+      setIsAutoSaving(false);
+    }
+  };
+
+  // Limpiar timer al desmontar el componente
+  onCleanup(() => {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+    }
+  });
 
   // Función para crear un textarea con drag and drop
   const createTextarea = (
@@ -73,9 +122,15 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     textarea.placeholder = placeholder;
     textarea.value = value;
     
-    // Event listener para actualizar el valor
+    // Event listener para actualizar el valor y triggear auto-guardado
     textarea.addEventListener('input', (e) => {
       onUpdate(index, (e.target as HTMLTextAreaElement).value);
+      triggerAutoSave(); // Activar auto-guardado cuando el usuario escriba
+    });
+
+    // Event listener para guardado inmediato cuando termina de editar
+    textarea.addEventListener('blur', (e) => {
+      triggerImmediateAutoSave(); // Guardar inmediatamente cuando sale del campo
     });
 
     // Botón de eliminar más uniforme
@@ -92,6 +147,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     
     removeButton.addEventListener('click', () => {
       onRemove(index);
+      triggerAutoSave(); // Activar auto-guardado cuando se elimine un elemento
     });
 
     container.appendChild(textarea);
@@ -153,6 +209,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           // Re-renderizar ambas secciones
           renderCompletedYesterday();
           renderTodayTasks();
+          triggerAutoSave(); // Activar auto-guardado después del drag and drop
         }
       } else if (sourceSection === 'today' && sectionType === 'yesterday') {
         // Buscar el elemento por valor para mayor seguridad
@@ -168,6 +225,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           // Re-renderizar ambas secciones
           renderCompletedYesterday();
           renderTodayTasks();
+          triggerAutoSave(); // Activar auto-guardado después del drag and drop
         }
       }
     });
@@ -191,11 +249,15 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       const element = createTextarea(
         '¿Qué específico completé?',
         value,
-        (idx, val) => { completedYesterdayData[idx] = val; },
+        (idx, val) => { 
+          completedYesterdayData[idx] = val; 
+          triggerAutoSave(); // Activar auto-guardado
+        },
         (idx) => {
           if (completedYesterdayData.length > 1) {
             completedYesterdayData.splice(idx, 1);
             renderCompletedYesterday();
+            triggerAutoSave(); // Activar auto-guardado
           }
         },
         index,
@@ -208,6 +270,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     const addButton = createAddButton('+ ¿Algo más que logré?', () => {
       completedYesterdayData.push('');
       renderCompletedYesterday();
+      triggerAutoSave(); // Activar auto-guardado al agregar elemento
     });
     completedYesterdayContainer.appendChild(addButton);
     
@@ -222,11 +285,15 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       const element = createTextarea(
         '¿En qué me concentraré?',
         value,
-        (idx, val) => { todayTasksData[idx] = val; },
+        (idx, val) => { 
+          todayTasksData[idx] = val; 
+          triggerAutoSave(); // Activar auto-guardado
+        },
         (idx) => {
           if (todayTasksData.length > 1) {
             todayTasksData.splice(idx, 1);
             renderTodayTasks();
+            triggerAutoSave(); // Activar auto-guardado
           }
         },
         index,
@@ -239,6 +306,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     const addButton = createAddButton('+ ¿Otra prioridad para hoy?', () => {
       todayTasksData.push('');
       renderTodayTasks();
+      triggerAutoSave(); // Activar auto-guardado al agregar elemento
     });
     todayTasksContainer.appendChild(addButton);
     
@@ -251,13 +319,17 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     
     weekGoalsData.forEach((value, index) => {
       const element = createTextarea(
-        '¿Qué meta me propongo?',
+        '¿Qué objetivo específico quiero lograr? (usa - para separar varios)',
         value,
-        (idx, val) => { weekGoalsData[idx] = val; },
+        (idx, val) => { 
+          weekGoalsData[idx] = val; 
+          triggerAutoSave(); // Activar auto-guardado
+        },
         (idx) => {
           if (weekGoalsData.length > 1) {
             weekGoalsData.splice(idx, 1);
             renderWeekGoals();
+            triggerAutoSave(); // Activar auto-guardado
           }
         },
         index,
@@ -267,9 +339,10 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       weekGoalsContainer.appendChild(element);
     });
 
-    const addButton = createAddButton('+ ¿Otra meta esta semana?', () => {
+    const addButton = createAddButton('+ ¿Otro objetivo para la semana?', () => {
       weekGoalsData.push('');
       renderWeekGoals();
+      triggerAutoSave(); // Activar auto-guardado al agregar elemento
     });
     weekGoalsContainer.appendChild(addButton);
   };
@@ -421,9 +494,9 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         
         <div class="pt-4 border-t border-gray-200">
           <div class="flex items-center justify-center space-x-2 text-gray-400">
-            <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+            <span class={`w-2 h-2 rounded-full transition-all duration-300 ${isAutoSaving() ? 'bg-blue-400 animate-pulse' : 'bg-green-400 animate-pulse'}`}></span>
             <p class="text-xs font-medium uppercase tracking-wider">
-              Guardado automático activo
+              {isAutoSaving() ? 'Guardando automáticamente...' : 'Guardado automático activo'}
             </p>
           </div>
         </div>
@@ -531,9 +604,15 @@ const DailyForm: Component<DailyFormProps> = (props) => {
             </label>
             <textarea
               class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all duration-200 bg-white h-24 resize-none shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
-              placeholder="¿Qué nuevas habilidades, conceptos o ideas estás desarrollando?"
+              placeholder="¿Qué nuevas habilidades, conceptos o ideas estás desarrollando? (usa - para separar varios elementos)"
               value={learning()}
-              onInput={(e) => setLearning(e.currentTarget.value)}
+              onInput={(e) => {
+                setLearning(e.currentTarget.value);
+                triggerAutoSave(); // Activar auto-guardado
+              }}
+              onBlur={() => {
+                triggerImmediateAutoSave(); // Guardar inmediatamente cuando sale del campo
+              }}
             />
           </div>
         </div>

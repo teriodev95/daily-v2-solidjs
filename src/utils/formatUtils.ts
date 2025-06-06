@@ -39,11 +39,12 @@ export const formatReportForCopy = (report: DailyReport): string => {
   lines.push('');
   lines.push('⚡ ¿QUÉ QUIERO LOGRAR ESTA SEMANA?');
 
-  // Agregar objetivos de la semana
+  // Agregar objetivos de la semana (formato simple, respetando el formato del usuario)
   if (report.weekGoals.length > 0) {
     report.weekGoals.forEach(goal => {
       if (goal.trim()) {
-        lines.push(`▪️ ${goal.trim()}`);
+        // Solo agregar el texto tal como lo escribió el usuario
+        lines.push(goal.trim());
       }
     });
   } else {
@@ -53,19 +54,10 @@ export const formatReportForCopy = (report: DailyReport): string => {
   lines.push('');
   lines.push('📚 ¿QUÉ ESTOY APRENDIENDO?');
 
-  // Agregar aprendizaje
+  // Agregar aprendizaje (formato simple, respetando el formato del usuario)
   if (report.learning && report.learning.trim()) {
-    // Dividir en líneas si es muy largo
-    const learningText = report.learning.trim();
-    if (learningText.length > 60) {
-      // Dividir en chunks más manejables
-      const chunks = learningText.match(/.{1,60}(\s|$)/g) || [learningText];
-      chunks.forEach(chunk => {
-        lines.push(`▪️ ${chunk.trim()}`);
-      });
-    } else {
-      lines.push(`▪️ ${learningText}`);
-    }
+    // Mostrar el texto exactamente como lo escribió el usuario
+    lines.push(report.learning.trim());
   } else {
     lines.push('▫️ Sin aprendizaje documentado');
   }
