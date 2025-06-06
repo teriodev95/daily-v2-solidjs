@@ -8,7 +8,7 @@ export const formatReportForCopy = (report: DailyReport): string => {
     '',
     '═══════════════════════════',
     '',
-    '✅ ¿QUÉ LOGRÉ AYER?'
+    '**✅ ¿QUÉ LOGRÉ AYER?**'
   ];
 
   // Agregar tareas completadas ayer
@@ -23,7 +23,7 @@ export const formatReportForCopy = (report: DailyReport): string => {
   }
 
   lines.push('');
-  lines.push('🎯 ¿EN QUÉ ME ENFOCARÉ HOY?');
+  lines.push('**🎯 ¿EN QUÉ ME ENFOCARÉ HOY?**');
 
   // Agregar tareas de hoy
   if (report.todayTasks.length > 0) {
@@ -37,7 +37,7 @@ export const formatReportForCopy = (report: DailyReport): string => {
   }
 
   lines.push('');
-  lines.push('⚡ ¿QUÉ QUIERO LOGRAR ESTA SEMANA?');
+  lines.push('**⚡ ¿QUÉ QUIERO LOGRAR ESTA SEMANA?**');
 
   // Agregar objetivos de la semana (formato simple, respetando el formato del usuario)
   if (report.weekGoals.length > 0) {
@@ -52,7 +52,7 @@ export const formatReportForCopy = (report: DailyReport): string => {
   }
 
   lines.push('');
-  lines.push('📚 ¿QUÉ ESTOY APRENDIENDO?');
+  lines.push('**📚 ¿QUÉ ESTOY APRENDIENDO?**');
 
   // Agregar aprendizaje (formato simple, respetando el formato del usuario)
   if (report.learning && report.learning.trim()) {
