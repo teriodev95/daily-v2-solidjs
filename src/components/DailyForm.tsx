@@ -727,57 +727,57 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
       {/* Modal de Telegram */}
       {showTelegramModal() && (
-        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] overflow-hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div class="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-4xl max-h-[95vh] overflow-hidden">
             {/* Header del Modal */}
-            <div class="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-blue-100">
-              <div class="flex items-center space-x-4">
-                <div class="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Smartphone class="text-white w-6 h-6" />
+            <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-blue-100">
+              <div class="flex items-center space-x-3 sm:space-x-4 min-w-0">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                  <Smartphone class="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <div>
-                  <h3 class="text-xl font-semibold text-gray-900">Enviar a Telegram</h3>
-                  <p class="text-sm text-gray-600">Edita tu mensaje antes de copiarlo y enviarlo</p>
+                <div class="min-w-0">
+                  <h3 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">Enviar a Telegram</h3>
+                  <p class="text-xs sm:text-sm text-gray-600 hidden sm:block">Edita tu mensaje antes de copiarlo y enviarlo</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowTelegramModal(false)}
-                class="flex items-center justify-center w-10 h-10 text-gray-400 hover:text-gray-600 hover:bg-white rounded-xl transition-all duration-200 shadow-sm border border-gray-200 hover:border-gray-300"
+                class="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm border border-gray-200 hover:border-gray-300 flex-shrink-0"
               >
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
             {/* Contenido del Modal */}
-            <div class="p-6 bg-gray-50 flex-1 min-h-0">
-              <div class="mb-6">
-                <div class="flex items-center justify-between mb-3">
+            <div class="p-3 sm:p-6 bg-gray-50 flex-1 min-h-0">
+              <div class="mb-4 sm:mb-6">
+                <div class="flex items-center justify-between mb-2 sm:mb-3">
                   <label class="block text-sm font-semibold text-gray-700">
                     Tu mensaje para Telegram
                   </label>
-                  <div class="flex items-center space-x-2 text-xs text-gray-500">
+                  <div class="hidden sm:flex items-center space-x-2 text-xs text-gray-500">
                     <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                     <span>Editable en tiempo real</span>
                   </div>
                 </div>
                 <div class="relative">
                   <textarea
-                    class="w-full h-80 px-4 py-4 border border-gray-300 rounded-xl text-sm placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white resize-none font-mono leading-relaxed shadow-sm"
+                    class="w-full h-48 sm:h-80 px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 rounded-lg sm:rounded-xl text-xs sm:text-sm placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white resize-none font-mono leading-relaxed shadow-sm"
                     placeholder="Tu mensaje se generará aquí..."
                     value={telegramMessage()}
                     onInput={(e) => setTelegramMessage(e.currentTarget.value)}
                   />
-                  <div class="absolute bottom-3 right-3 text-xs text-gray-400 bg-white px-2 py-1 rounded-md border border-gray-200">
-                    {telegramMessage().length} caracteres
+                  <div class="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 text-xs text-gray-400 bg-white px-2 py-1 rounded-md border border-gray-200">
+                    {telegramMessage().length}
                   </div>
                 </div>
               </div>
 
               {/* Botones del Modal */}
-              <div class="flex items-center justify-between bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-                <div class="flex items-center space-x-2 text-sm text-gray-600">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200 shadow-sm space-y-3 sm:space-y-0">
+                <div class="hidden sm:flex items-center space-x-2 text-sm text-gray-600">
                   <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
                     <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -786,10 +786,10 @@ const DailyForm: Component<DailyFormProps> = (props) => {
                   <span class="font-medium">El mensaje se copiará al portapapeles</span>
                 </div>
                 
-                <div class="flex items-center space-x-3">
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
                   <button
                     onClick={() => setShowTelegramModal(false)}
-                    class="px-6 py-3 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 hover:border-gray-400 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md flex items-center space-x-2"
+                    class="flex items-center justify-center space-x-2 px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 hover:border-gray-400 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
                   >
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -798,12 +798,13 @@ const DailyForm: Component<DailyFormProps> = (props) => {
                   </button>
                   <button
                     onClick={handleCopyTelegramMessage}
-                    class="px-8 py-3 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border border-blue-500 hover:border-blue-600 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg flex items-center space-x-2"
+                    class="flex items-center justify-center space-x-2 px-6 sm:px-8 py-3 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border border-blue-500 hover:border-blue-600 rounded-lg sm:rounded-xl transition-all duration-200 shadow-md hover:shadow-lg"
                   >
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
-                    <span>Copiar y Enviar</span>
+                    <span class="hidden sm:inline">Copiar y Enviar</span>
+                    <span class="sm:hidden">Copiar</span>
                   </button>
                 </div>
               </div>
