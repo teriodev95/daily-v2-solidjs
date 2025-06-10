@@ -8,6 +8,7 @@ export interface DailyReport {
   todayTasks: string[];
   weekGoals: string[];
   learning: string;
+  impediments: string;
   createdAt: Date;
   updatedAt: Date;
 }

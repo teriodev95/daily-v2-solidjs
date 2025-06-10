@@ -27,21 +27,23 @@ const App: Component = () => {
                 <span class="text-white text-lg font-semibold">D</span>
               </div>
               <div class="min-w-0">
-                <h1 class="text-lg sm:text-xl font-semibold text-ios-gray-900 truncate">Daily Check</h1>
-                <p class="text-xs sm:text-sm text-ios-gray-500">Tu reporte diario</p>
+                <h1 class="text-lg sm:text-xl font-semibold text-ios-gray-900 truncate">
+                  Daily Check
+                </h1>
+                <p class="text-xs sm:text-sm text-ios-gray-500">
+                  Tu reporte diario
+                </p>
               </div>
             </div>
+            
+            {/* Navegación */}
             <div class="flex items-center space-x-2 flex-shrink-0">
-              <div class="text-right">
-                <p class="text-xs sm:text-sm font-medium text-ios-gray-900 hidden sm:block">{new Date().toLocaleDateString('es-ES', { 
+              
+              <div class="text-right hidden sm:block">
+                <p class="text-xs sm:text-sm font-medium text-ios-gray-900">{new Date().toLocaleDateString('es-ES', { 
                   weekday: 'long', 
                   year: 'numeric', 
                   month: 'long', 
-                  day: 'numeric' 
-                })}</p>
-                <p class="text-xs sm:text-sm font-medium text-ios-gray-900 sm:hidden">{new Date().toLocaleDateString('es-ES', { 
-                  weekday: 'short', 
-                  month: 'short', 
                   day: 'numeric' 
                 })}</p>
                 <p class="text-xs text-ios-gray-500">Semana {Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}</p>

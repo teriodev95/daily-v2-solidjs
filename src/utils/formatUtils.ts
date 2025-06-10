@@ -63,6 +63,17 @@ export const formatReportForCopy = (report: DailyReport): string => {
   }
 
   lines.push('');
+  lines.push('**🚧 ¿QUÉ IMPEDIMENTOS TENGO?**');
+
+  // Agregar impedimentos (formato simple, respetando el formato del usuario)
+  if (report.impediments && report.impediments.trim()) {
+    // Mostrar el texto exactamente como lo escribió el usuario
+    lines.push(report.impediments.trim());
+  } else {
+    lines.push('▫️ Sin impedimentos identificados');
+  }
+
+  lines.push('');
   lines.push('═══════════════════════════');
   lines.push('');
   lines.push(`⏰ Generado: ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`);

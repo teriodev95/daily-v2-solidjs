@@ -21,7 +21,9 @@
     "vite-plugin-solid": "^2.11.6"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@types/pouchdb": "^6.4.2",
+    "lucide-solid": "^0.514.0",
     "nano": "^10.1.4",
     "pouchdb-browser": "^9.0.0",
     "solid-js": "^1.9.5"
