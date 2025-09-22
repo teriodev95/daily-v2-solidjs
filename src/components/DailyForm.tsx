@@ -605,24 +605,40 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
               {/* Menú desplegable de opciones de impresión */}
               {showPrintMenu() && (
-                <div class="absolute top-full mt-1 left-0 z-10 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+                <div class="absolute top-full mt-2 left-0 z-10 bg-white border border-gray-200 rounded-xl shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] py-2 min-w-[220px] overflow-hidden">
                   <button
-                    class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+                    class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200 flex items-center space-x-3"
                     onClick={() => {
                       generateDailyTemplatePDF(currentReport());
                       setShowPrintMenu(false);
                     }}
                   >
-                    📄 Completo
+                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-7.5A3.375 3.375 0 0 0 5.25 11.25v2.625m14.25 0a3.375 3.375 0 0 1-3.375 3.375h-7.5a3.375 3.375 0 0 1-3.375-3.375m14.25 0V16.5a2.25 2.25 0 0 1-2.25 2.25h-7.5a2.25 2.25 0 0 1-2.25-2.25v-0.75" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div class="font-semibold text-gray-900">Reporte completo</div>
+                      <div class="text-xs text-gray-500">Todas las secciones incluidas</div>
+                    </div>
                   </button>
                   <button
-                    class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+                    class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200 flex items-center space-x-3"
                     onClick={() => {
                       generateDailyObjectivesPDF(currentReport());
                       setShowPrintMenu(false);
                     }}
                   >
-                    🎯 Solo objetivos del día
+                    <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg class="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div class="font-semibold text-gray-900">Solo objetivos</div>
+                      <div class="text-xs text-gray-500">Enfoque en tareas del día</div>
+                    </div>
                   </button>
                 </div>
               )}
