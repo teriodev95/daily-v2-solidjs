@@ -332,15 +332,39 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     const container = document.createElement('div');
     container.className = 'flex items-center space-x-3 group bg-white rounded-xl border border-gray-200 p-3 hover:border-gray-300 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]';
 
-    // Checkbox para marcar como completado
+    // Checkbox personalizado con diseño moderno
+    const checkboxContainer = document.createElement('div');
+    checkboxContainer.className = 'relative flex items-center justify-center flex-shrink-0';
+    
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = goal.completed;
-    checkbox.className = 'w-5 h-5 text-green-500 rounded border-gray-300 focus:ring-green-500 focus:ring-2 cursor-pointer';
+    checkbox.className = 'sr-only'; // Ocultar checkbox nativo
     checkbox.addEventListener('change', () => {
       onToggle(index);
       triggerAutoSave();
     });
+
+    // Checkbox visual personalizado
+    const checkboxVisual = document.createElement('div');
+    checkboxVisual.className = `w-6 h-6 rounded-lg border-2 transition-all duration-200 cursor-pointer flex items-center justify-center ${
+      goal.completed 
+        ? 'bg-green-500 border-green-500 shadow-[0_2px_8px_-2px_rgba(34,197,94,0.4)]' 
+        : 'bg-white border-gray-300 hover:border-green-400 hover:shadow-[0_2px_8px_-2px_rgba(34,197,94,0.2)]'
+    }`;
+    
+    // Icono de check
+    if (goal.completed) {
+      checkboxVisual.innerHTML = '<svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>';
+    }
+
+    // Event listeners para el checkbox visual
+    checkboxVisual.addEventListener('click', () => {
+      checkbox.click();
+    });
+
+    checkboxContainer.appendChild(checkbox);
+    checkboxContainer.appendChild(checkboxVisual);
 
     // Textarea
     const textarea = document.createElement('textarea');
@@ -370,7 +394,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       if (canRemove) onRemove(index);
     });
 
-    container.appendChild(checkbox);
+    container.appendChild(checkboxContainer);
     container.appendChild(textarea);
     container.appendChild(removeButton);
 
@@ -390,7 +414,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         },
         (idx) => {
           weekGoalsData[idx].completed = !weekGoalsData[idx].completed;
-          renderWeekGoals();
+          renderWeekGoals(); // Re-renderizar para actualizar el estado visual
+          triggerAutoSave();
         },
         (idx) => {
           if (weekGoalsData.length > 1) {
