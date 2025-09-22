@@ -1,4 +1,4 @@
-import { DailyReport } from '../types';
+import { DailyReport, WeekGoal } from '../types';
 
 // Formatear reporte para copia
 export const formatReportForCopy = (report: DailyReport): string => {
@@ -39,14 +39,30 @@ export const formatReportForCopy = (report: DailyReport): string => {
   lines.push('');
   lines.push('**⚡ ¿QUÉ QUIERO LOGRAR ESTA SEMANA?**');
 
-  // Agregar objetivos de la semana (formato simple, respetando el formato del usuario)
-  if (report.weekGoals.length > 0) {
-    report.weekGoals.forEach(goal => {
-      if (goal.trim()) {
-        // Solo agregar el texto tal como lo escribió el usuario
-        lines.push(goal.trim());
-      }
-    });
+  // Agregar objetivos de la semana con numeración y tachado si están completados
+  if (report.weekGoals && report.weekGoals.length > 0) {
+    // Verificar si es array de strings o WeekGoal
+    if (typeof report.weekGoals[0] === 'string') {
+      // Formato antiguo: array de strings
+      (report.weekGoals as string[]).forEach((goal, index) => {
+        if (goal.trim()) {
+          lines.push(`${index + 1}. ${goal.trim()}`);
+        }
+      });
+    } else {
+      // Formato nuevo: array de WeekGoal con estado de completado
+      (report.weekGoals as WeekGoal[]).forEach((goal, index) => {
+        if (goal.text && goal.text.trim()) {
+          const goalNumber = index + 1;
+          if (goal.completed) {
+            // Tachar el texto si está completado usando ~~ para strikethrough en Telegram
+            lines.push(`${goalNumber}. ~~${goal.text.trim()}~~`);
+          } else {
+            lines.push(`${goalNumber}. ${goal.text.trim()}`);
+          }
+        }
+      });
+    }
   } else {
     lines.push('▫️ Sin metas semanales definidas');
   }

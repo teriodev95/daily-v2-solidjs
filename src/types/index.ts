@@ -1,3 +1,8 @@
+export interface WeekGoal {
+  text: string;
+  completed: boolean;
+}
+
 export interface DailyReport {
   id?: string;
   _id?: string;
@@ -6,7 +11,7 @@ export interface DailyReport {
   weekNumber: number;
   completedYesterday: string[];
   todayTasks: string[];
-  weekGoals: string[];
+  weekGoals: string[] | WeekGoal[];
   learning: string;
   impediments: string;
   createdAt: Date;

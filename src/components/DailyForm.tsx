@@ -1,10 +1,11 @@
 import { Component, createSignal, onMount, createMemo, onCleanup } from 'solid-js';
-import { DailyReport } from '../types';
+import { DailyReport, WeekGoal } from '../types';
 import { getTodayFormatted, getCurrentWeekNumber } from '../utils/dateUtils';
 import { saveReport, loadReport } from '../utils/database';
 import { formatReportForCopy, copyToClipboard } from '../utils/formatUtils';
+import { generateDailyTemplatePDF, generateDailyObjectivesPDF } from '../utils/pdfGenerator';
 import { Button, Card, SectionHeader, StatusMessage, HelpPanel, Icon } from './ui';
-import { Trash2, Save, Smartphone, Zap, Check, ArrowRight, BookOpen, Clock, AlertTriangle, HelpCircle } from 'lucide-solid';
+import { Trash2, Save, Smartphone, Zap, Check, ArrowRight, BookOpen, Clock, AlertTriangle, HelpCircle, Printer } from 'lucide-solid';
 
 interface DailyFormProps {
   onSave?: (report: DailyReport) => void;
@@ -20,6 +21,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   const [showTelegramModal, setShowTelegramModal] = createSignal(false);
   const [telegramMessage, setTelegramMessage] = createSignal('');
   const [showGoalsHelp, setShowGoalsHelp] = createSignal(false);
+  const [showPrintMenu, setShowPrintMenu] = createSignal(false);
 
   // Containers para las secciones dinámicas
   let completedYesterdayContainer: HTMLDivElement;
@@ -29,7 +31,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   // Datos internos (no reactivos)
   let completedYesterdayData: string[] = [''];
   let todayTasksData: string[] = [''];
-  let weekGoalsData: string[] = [''];
+  let weekGoalsData: WeekGoal[] = [{ text: '', completed: false }];
 
   // Timer para el debounce del auto-guardado
   let autoSaveTimer: number | null = null;
@@ -319,38 +321,110 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     createDropZone('today', todayTasksContainer);
   };
 
+  const createGoalItem = (
+    goal: WeekGoal,
+    index: number,
+    onUpdate: (index: number, text: string) => void,
+    onToggle: (index: number) => void,
+    onRemove: (index: number) => void,
+    canRemove: boolean
+  ) => {
+    const container = document.createElement('div');
+    container.className = 'flex items-center space-x-3 group bg-white rounded-xl border border-gray-200 p-3 hover:border-gray-300 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]';
+
+    // Checkbox para marcar como completado
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = goal.completed;
+    checkbox.className = 'w-5 h-5 text-green-500 rounded border-gray-300 focus:ring-green-500 focus:ring-2 cursor-pointer';
+    checkbox.addEventListener('change', () => {
+      onToggle(index);
+      triggerAutoSave();
+    });
+
+    // Textarea
+    const textarea = document.createElement('textarea');
+    textarea.className = `flex-1 h-20 resize-none px-0 py-2 border-0 text-sm text-gray-700 placeholder-gray-400 focus:ring-0 focus:outline-none bg-transparent ${goal.completed ? 'line-through opacity-60' : ''}`;
+    textarea.placeholder = '¿Qué objetivo específico quiero lograr?';
+    textarea.value = goal.text;
+
+    textarea.addEventListener('input', (e) => {
+      onUpdate(index, (e.target as HTMLTextAreaElement).value);
+      triggerAutoSave();
+    });
+
+    textarea.addEventListener('blur', () => {
+      triggerImmediateAutoSave();
+    });
+
+    // Botón de eliminar
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = canRemove
+      ? 'w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 flex-shrink-0'
+      : 'w-8 h-8 flex items-center justify-center text-gray-300 rounded-lg cursor-not-allowed opacity-50 flex-shrink-0';
+    removeButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    removeButton.disabled = !canRemove;
+
+    removeButton.addEventListener('click', () => {
+      if (canRemove) onRemove(index);
+    });
+
+    container.appendChild(checkbox);
+    container.appendChild(textarea);
+    container.appendChild(removeButton);
+
+    return container;
+  };
+
   const renderWeekGoals = () => {
     weekGoalsContainer.innerHTML = '';
-    
-    weekGoalsData.forEach((value, index) => {
-      const element = createTextarea(
-        '¿Qué objetivo específico quiero lograr? (usa - para separar varios)',
-        value,
-        (idx, val) => { 
-          weekGoalsData[idx] = val; 
-          triggerAutoSave(); // Activar auto-guardado
+
+    weekGoalsData.forEach((goal, index) => {
+      const element = createGoalItem(
+        goal,
+        index,
+        (idx, text) => {
+          weekGoalsData[idx].text = text;
+          triggerAutoSave();
+        },
+        (idx) => {
+          weekGoalsData[idx].completed = !weekGoalsData[idx].completed;
+          renderWeekGoals();
         },
         (idx) => {
           if (weekGoalsData.length > 1) {
             weekGoalsData.splice(idx, 1);
             renderWeekGoals();
-            triggerAutoSave(); // Activar auto-guardado
+            triggerAutoSave();
           }
         },
-        index,
-        weekGoalsData.length > 1,
-        'goals'
+        weekGoalsData.length > 1
       );
       weekGoalsContainer.appendChild(element);
     });
 
     const addButton = createAddButton('+ ¿Otro objetivo para la semana?', () => {
-      weekGoalsData.push('');
+      weekGoalsData.push({ text: '', completed: false });
       renderWeekGoals();
-      triggerAutoSave(); // Activar auto-guardado al agregar elemento
+      triggerAutoSave();
     });
     weekGoalsContainer.appendChild(addButton);
   };
+
+  // Cerrar menú de impresión al hacer clic fuera
+  onMount(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.relative')) {
+        setShowPrintMenu(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    onCleanup(() => {
+      document.removeEventListener('click', handleClickOutside);
+    });
+  });
 
   // Cargar datos y renderizar al montar
   onMount(() => {
@@ -358,8 +432,22 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     if (saved) {
       completedYesterdayData = saved.completedYesterday || [''];
       todayTasksData = saved.todayTasks || [''];
-      weekGoalsData = saved.weekGoals || [''];
-      
+
+      // Mantener compatibilidad con formato anterior (strings) y nuevo (WeekGoal)
+      if (saved.weekGoals) {
+        if (Array.isArray(saved.weekGoals)) {
+          if (saved.weekGoals.length > 0 && typeof saved.weekGoals[0] === 'string') {
+            // Convertir formato antiguo (string[]) a nuevo (WeekGoal[])
+            weekGoalsData = (saved.weekGoals as string[]).map(text => ({ text, completed: false }));
+          } else {
+            // Ya está en formato nuevo
+            weekGoalsData = saved.weekGoals as WeekGoal[];
+          }
+        }
+      } else {
+        weekGoalsData = [{ text: '', completed: false }];
+      }
+
       // Mantener compatibilidad con formato anterior y nuevo
       if (typeof saved.learning === 'string') {
         setLearning(saved.learning);
@@ -424,7 +512,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     // Limpiar datos internos
     completedYesterdayData = [''];
     todayTasksData = [''];
-    weekGoalsData = [''];
+    weekGoalsData = [{ text: '', completed: false }];
     setLearning('');
     setImpediments('');
     
@@ -480,34 +568,66 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           </div>
 
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+            {/* Botón de Imprimir con menú desplegable */}
+            <div class="relative">
+              <button
+                class="flex items-center justify-center space-x-2 text-xs sm:text-sm text-blue-600 hover:text-blue-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-blue-50 border border-blue-200 hover:border-blue-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+                onClick={() => setShowPrintMenu(!showPrintMenu())}
+              >
+                <Printer class="w-3 h-3 sm:w-4 sm:h-4" />
+                <span>Imprimir</span>
+              </button>
+
+              {/* Menú desplegable de opciones de impresión */}
+              {showPrintMenu() && (
+                <div class="absolute top-full mt-1 left-0 z-10 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+                  <button
+                    class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+                    onClick={() => {
+                      generateDailyTemplatePDF(currentReport());
+                      setShowPrintMenu(false);
+                    }}
+                  >
+                    📄 Completo
+                  </button>
+                  <button
+                    class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+                    onClick={() => {
+                      generateDailyObjectivesPDF(currentReport());
+                      setShowPrintMenu(false);
+                    }}
+                  >
+                    🎯 Solo objetivos del día
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
-              class="flex items-center justify-center sm:justify-start space-x-2 text-xs sm:text-sm text-red-600 hover:text-red-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-red-50 border border-red-200 hover:border-red-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+              class="flex items-center justify-center space-x-2 text-xs sm:text-sm text-red-600 hover:text-red-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-red-50 border border-red-200 hover:border-red-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
               onClick={handleClearForm}
             >
               <Trash2 class="w-3 h-3 sm:w-4 sm:h-4" />
-              <span class="hidden sm:inline">Limpiar formulario</span>
-              <span class="sm:hidden">Limpiar</span>
+              <span>Limpiar</span>
             </button>
-            
-                    <button
-              class={`flex items-center justify-center sm:justify-start space-x-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-gray-800 transition-all duration-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2),0_4px_16px_-4px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.2)] ${isSaving() ? 'opacity-50 cursor-not-allowed' : ''}`}
+
+            <button
+              class={`flex items-center justify-center space-x-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-gray-800 transition-all duration-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2),0_4px_16px_-4px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.2)] ${isSaving() ? 'opacity-50 cursor-not-allowed' : ''}`}
               onClick={handleSave}
               disabled={isSaving()}
             >
               {isSaving() ? <Clock class="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : <Save class="w-3 h-3 sm:w-4 sm:h-4" />}
-              <span class="hidden sm:inline">{isSaving() ? 'Guardando...' : 'Guardar reporte'}</span>
-              <span class="sm:hidden">Guardar</span>
-                    </button>
-            
-              <button
-              class="flex items-center justify-center sm:justify-start space-x-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-50 text-blue-700 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-blue-100 transition-all duration-200 border border-blue-200 hover:border-blue-300 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+              <span>{isSaving() ? 'Guardando...' : 'Guardar'}</span>
+            </button>
+
+            <button
+              class="flex items-center justify-center space-x-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-50 text-blue-700 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-blue-100 transition-all duration-200 border border-blue-200 hover:border-blue-300 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
               onClick={handleOpenTelegramModal}
-              >
+            >
               <Smartphone class="w-3 h-3 sm:w-4 sm:h-4" />
-              <span class="hidden sm:inline">Enviar a Telegram</span>
-              <span class="sm:hidden">Telegram</span>
-              </button>
-            </div>
+              <span>Telegram</span>
+            </button>
+          </div>
         </div>
 
         {/* Status Message - Más prominente */}
