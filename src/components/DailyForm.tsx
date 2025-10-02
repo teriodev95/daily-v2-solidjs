@@ -5,10 +5,12 @@ import { saveReport, loadReport } from '../utils/database';
 import { formatReportForCopy, copyToClipboard } from '../utils/formatUtils';
 import { generateDailyTemplatePDF, generateDailyObjectivesPDF } from '../utils/pdfGenerator';
 import { Button, Card, SectionHeader, StatusMessage, HelpPanel, Icon } from './ui';
-import { Trash2, Save, Smartphone, Zap, Check, ArrowRight, BookOpen, Clock, AlertTriangle, HelpCircle, Printer } from 'lucide-solid';
+import { Trash2, Save, Smartphone, Zap, Check, ArrowRight, BookOpen, Clock, AlertTriangle, HelpCircle, Printer, Package, FileText } from 'lucide-solid';
 
 interface DailyFormProps {
   onSave?: (report: DailyReport) => void;
+  onOpenFormatosPDF?: () => void;
+  onGenerateSolimPDF?: () => void;
 }
 
 const DailyForm: Component<DailyFormProps> = (props) => {
@@ -26,11 +28,13 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   // Containers para las secciones dinámicas
   let completedYesterdayContainer: HTMLDivElement;
   let todayTasksContainer: HTMLDivElement;
+  let pilaContainer: HTMLDivElement;
   let weekGoalsContainer: HTMLDivElement;
 
   // Datos internos (no reactivos)
   let completedYesterdayData: string[] = [''];
   let todayTasksData: string[] = [''];
+  let pilaData: string[] = [];
   let weekGoalsData: WeekGoal[] = [{ text: '', completed: false }];
 
   // Timer para el debounce del auto-guardado
@@ -83,22 +87,27 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
   // Función para crear un textarea con drag and drop
   const createTextarea = (
-    placeholder: string, 
-    value: string, 
+    placeholder: string,
+    value: string,
     onUpdate: (index: number, value: string) => void,
     onRemove: (index: number) => void,
     index: number,
     canRemove: boolean,
-    sectionType: 'yesterday' | 'today' | 'goals'
+    sectionType: 'yesterday' | 'today' | 'pila' | 'goals'
   ) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'relative';
+    wrapper.dataset.index = index.toString();
+    wrapper.dataset.section = sectionType;
+
     const container = document.createElement('div');
     container.className = 'flex items-center space-x-3 group bg-white rounded-xl border border-gray-200 p-3 hover:border-gray-300 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]';
-    
-    // Hacer el container draggable solo para yesterday y today
-    if (sectionType === 'yesterday' || sectionType === 'today') {
+
+    // Hacer el container draggable para yesterday, today y pila
+    if (sectionType === 'yesterday' || sectionType === 'today' || sectionType === 'pila') {
       container.draggable = true;
       container.className += ' cursor-move hover:shadow-sm';
-      
+
       // Agregar icono de drag - Más visible y uniforme
       const dragHandle = document.createElement('div');
       dragHandle.className = 'flex items-center justify-center w-6 h-6 text-gray-400 hover:text-gray-600 transition-colors duration-200 flex-shrink-0';
@@ -107,19 +116,142 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
       // Eventos de drag
       container.addEventListener('dragstart', (e) => {
-        // Usar el valor actual del textarea para mayor confiabilidad
         const currentValue = textarea.value;
-        
+
         e.dataTransfer!.setData('text/plain', JSON.stringify({
           sourceSection: sectionType,
           sourceIndex: index,
           value: currentValue
         }));
         container.style.opacity = '0.5';
+        wrapper.classList.add('dragging');
       });
 
       container.addEventListener('dragend', (e) => {
         container.style.opacity = '1';
+        wrapper.classList.remove('dragging');
+        // Limpiar todos los indicadores de drop
+        document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+
+        // Limpiar indicadores de las zonas de drop globales
+        ['yesterday-drop-indicator', 'today-drop-indicator', 'pila-drop-indicator'].forEach(id => {
+          const indicator = document.getElementById(id);
+          if (indicator) {
+            indicator.style.opacity = '0';
+          }
+        });
+
+        // Remover clases de highlight de todos los containers
+        document.querySelectorAll('.bg-blue-50').forEach(el => {
+          el.classList.remove('bg-blue-50', 'border-blue-300');
+        });
+      });
+
+      // Eventos para reordenamiento dentro de la misma sección
+      wrapper.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const draggingElement = document.querySelector('.dragging');
+        if (!draggingElement || draggingElement === wrapper) return;
+
+        const rect = wrapper.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+
+        // Limpiar indicadores previos
+        wrapper.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+
+        // Crear indicador visual
+        const indicator = document.createElement('div');
+        indicator.className = 'drop-indicator absolute left-0 right-0 h-0.5 bg-blue-500 z-10';
+
+        if (e.clientY < midpoint) {
+          indicator.style.top = '-2px';
+          wrapper.dataset.dropPosition = 'before';
+        } else {
+          indicator.style.bottom = '-2px';
+          wrapper.dataset.dropPosition = 'after';
+        }
+
+        wrapper.appendChild(indicator);
+      });
+
+      wrapper.addEventListener('dragleave', (e) => {
+        // Solo remover si realmente salimos del wrapper
+        if (!wrapper.contains(e.relatedTarget as Node)) {
+          wrapper.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+          delete wrapper.dataset.dropPosition;
+        }
+      });
+
+      wrapper.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        wrapper.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+
+        // Limpiar indicadores de las zonas de drop globales
+        ['yesterday-drop-indicator', 'today-drop-indicator', 'pila-drop-indicator'].forEach(id => {
+          const indicator = document.getElementById(id);
+          if (indicator) {
+            indicator.style.opacity = '0';
+          }
+        });
+
+        // Remover clases de highlight
+        document.querySelectorAll('.bg-blue-50').forEach(el => {
+          el.classList.remove('bg-blue-50', 'border-blue-300');
+        });
+
+        const data = JSON.parse(e.dataTransfer!.getData('text/plain'));
+        const { sourceSection, sourceIndex, value } = data;
+        const dropPosition = wrapper.dataset.dropPosition;
+
+        delete wrapper.dataset.dropPosition;
+
+        if (!dropPosition) return;
+
+        // Calcular el índice de destino
+        let targetIndex = parseInt(wrapper.dataset.index || '0');
+        if (dropPosition === 'after') {
+          targetIndex += 1;
+        }
+
+        // Si es la misma sección, hacer reordenamiento
+        if (sourceSection === sectionType) {
+          const array = getArrayBySection(sectionType);
+          if (array && sourceIndex !== targetIndex) {
+            // Remover del índice original
+            const [item] = array.splice(sourceIndex, 1);
+            // Ajustar índice si movemos hacia abajo
+            const adjustedIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+            // Insertar en nueva posición
+            array.splice(adjustedIndex, 0, item);
+
+            // Re-renderizar
+            const renderFn = getRenderFunctionBySection(sectionType);
+            if (renderFn) renderFn();
+            triggerAutoSave();
+          }
+        } else {
+          // Mover entre secciones
+          const sourceArray = getArrayBySection(sourceSection);
+          const destArray = getArrayBySection(sectionType);
+
+          if (sourceArray && destArray) {
+            const elementIndex = sourceArray.findIndex(item => item === value);
+
+            if (elementIndex >= 0) {
+              sourceArray.splice(elementIndex, 1);
+              destArray.splice(targetIndex, 0, value);
+
+              const sourceRender = getRenderFunctionBySection(sourceSection);
+              const destRender = getRenderFunctionBySection(sectionType);
+
+              if (sourceRender) sourceRender();
+              if (destRender) destRender();
+              triggerAutoSave();
+            }
+          }
+        }
       });
     }
 
@@ -159,13 +291,31 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
     container.appendChild(textarea);
     container.appendChild(removeButton);
-    
-    return container;
+
+    wrapper.appendChild(container);
+    return wrapper;
+  };
+
+  // Helper functions para obtener arrays y funciones de render por sección
+  const getArrayBySection = (section: string) => {
+    if (section === 'yesterday') return completedYesterdayData;
+    if (section === 'today') return todayTasksData;
+    if (section === 'pila') return pilaData;
+    return null;
+  };
+
+  const getRenderFunctionBySection = (section: string) => {
+    if (section === 'yesterday') return renderCompletedYesterday;
+    if (section === 'today') return renderTodayTasks;
+    if (section === 'pila') return renderPila;
+    return null;
   };
 
   // Función para crear zona de drop
-  const createDropZone = (sectionType: 'yesterday' | 'today', container: HTMLElement) => {
-    const indicatorId = sectionType === 'yesterday' ? 'yesterday-drop-indicator' : 'today-drop-indicator';
+  const createDropZone = (sectionType: 'yesterday' | 'today' | 'pila', container: HTMLElement) => {
+    const indicatorId = sectionType === 'yesterday' ? 'yesterday-drop-indicator' :
+                        sectionType === 'today' ? 'today-drop-indicator' :
+                        'pila-drop-indicator';
     
     container.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -200,39 +350,25 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       
       // No hacer nada si se suelta en la misma sección
       if (sourceSection === sectionType) return;
-      
-      // Validar que el índice sea válido antes de proceder
-      if (sourceSection === 'yesterday' && sectionType === 'today') {
-        // Buscar el elemento por valor para mayor seguridad
-        const sourceArray = completedYesterdayData;
+
+      const sourceArray = getArrayBySection(sourceSection);
+      const destArray = getArrayBySection(sectionType);
+      const sourceRender = getRenderFunctionBySection(sourceSection);
+      const destRender = getRenderFunctionBySection(sectionType);
+
+      if (sourceArray && destArray && sourceRender && destRender) {
         const elementIndex = sourceArray.findIndex(item => item === value);
-        
+
         if (elementIndex >= 0) {
-          // Primero eliminar de origen
-          completedYesterdayData.splice(elementIndex, 1);
-          // Luego agregar a destino
-          todayTasksData.push(value);
-          
+          // Eliminar de origen
+          sourceArray.splice(elementIndex, 1);
+          // Agregar a destino
+          destArray.push(value);
+
           // Re-renderizar ambas secciones
-          renderCompletedYesterday();
-          renderTodayTasks();
-          triggerAutoSave(); // Activar auto-guardado después del drag and drop
-        }
-      } else if (sourceSection === 'today' && sectionType === 'yesterday') {
-        // Buscar el elemento por valor para mayor seguridad
-        const sourceArray = todayTasksData;
-        const elementIndex = sourceArray.findIndex(item => item === value);
-        
-        if (elementIndex >= 0) {
-          // Primero eliminar de origen
-          todayTasksData.splice(elementIndex, 1);
-          // Luego agregar a destino
-          completedYesterdayData.push(value);
-          
-          // Re-renderizar ambas secciones
-          renderCompletedYesterday();
-          renderTodayTasks();
-          triggerAutoSave(); // Activar auto-guardado después del drag and drop
+          sourceRender();
+          destRender();
+          triggerAutoSave();
         }
       }
     });
@@ -319,6 +455,41 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     
     // Configurar zona de drop
     createDropZone('today', todayTasksContainer);
+  };
+
+  const renderPila = () => {
+    pilaContainer.innerHTML = '';
+
+    pilaData.forEach((value, index) => {
+      const element = createTextarea(
+        'Tarea para después...',
+        value,
+        (idx, val) => {
+          pilaData[idx] = val;
+          triggerAutoSave();
+        },
+        (idx) => {
+          pilaData.splice(idx, 1);
+          renderPila();
+          triggerAutoSave();
+        },
+        index,
+        true,
+        'pila'
+      );
+      pilaContainer.appendChild(element);
+    });
+
+    // Si no hay tareas en la pila, mostrar mensaje
+    if (pilaData.length === 0) {
+      const emptyMessage = document.createElement('div');
+      emptyMessage.className = 'flex items-center justify-center min-h-[100px] text-gray-400 text-sm';
+      emptyMessage.innerHTML = '<div class="text-center"><p>📦</p><p class="mt-2">Arrastra aquí las tareas para después</p></div>';
+      pilaContainer.appendChild(emptyMessage);
+    }
+
+    // Configurar zona de drop
+    createDropZone('pila', pilaContainer);
   };
 
   const createGoalItem = (
@@ -457,6 +628,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     if (saved) {
       completedYesterdayData = saved.completedYesterday || [''];
       todayTasksData = saved.todayTasks || [''];
+      pilaData = saved.pila || [];
 
       // Mantener compatibilidad con formato anterior (strings) y nuevo (WeekGoal)
       if (saved.weekGoals) {
@@ -498,6 +670,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
     renderCompletedYesterday();
     renderTodayTasks();
+    renderPila();
     renderWeekGoals();
   });
 
@@ -507,6 +680,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     weekNumber: getCurrentWeekNumber(),
     completedYesterday: completedYesterdayData,
     todayTasks: todayTasksData,
+    pila: pilaData,
     weekGoals: weekGoalsData,
     learning: learning(),
     impediments: impediments(),
@@ -537,13 +711,15 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     // Limpiar datos internos
     completedYesterdayData = [''];
     todayTasksData = [''];
+    pilaData = [];
     weekGoalsData = [{ text: '', completed: false }];
     setLearning('');
     setImpediments('');
-    
+
     // Re-renderizar todas las secciones
     renderCompletedYesterday();
     renderTodayTasks();
+    renderPila();
     renderWeekGoals();
     
     // Limpiar localStorage
@@ -643,6 +819,23 @@ const DailyForm: Component<DailyFormProps> = (props) => {
                 </div>
               )}
             </div>
+
+            <button
+              class="flex items-center justify-center space-x-2 text-xs sm:text-sm text-purple-600 hover:text-purple-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-purple-50 border border-purple-200 hover:border-purple-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+              onClick={() => props.onGenerateSolimPDF?.()}
+              title="Generar formato SOLIM"
+            >
+              <FileText class="w-3 h-3 sm:w-4 sm:h-4" />
+              <span>SOLIM</span>
+            </button>
+
+            <button
+              class="flex items-center justify-center space-x-2 text-xs sm:text-sm text-orange-600 hover:text-orange-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-orange-50 border border-orange-200 hover:border-orange-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+              onClick={() => props.onOpenFormatosPDF?.()}
+            >
+              <FileText class="w-3 h-3 sm:w-4 sm:h-4" />
+              <span>Formatos</span>
+            </button>
 
             <button
               class="flex items-center justify-center space-x-2 text-xs sm:text-sm text-red-600 hover:text-red-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-red-50 border border-red-200 hover:border-red-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
@@ -749,6 +942,33 @@ const DailyForm: Component<DailyFormProps> = (props) => {
             <div class="text-blue-600 font-medium text-xs bg-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
               Suelta las tareas aquí
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sección: Pila (tareas para después) */}
+      <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+        <div class="flex items-center justify-between mb-4 sm:mb-5">
+          <div class="flex items-center space-x-2 sm:space-x-3">
+            <div class="w-6 h-6 sm:w-8 sm:h-8 bg-orange-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+              <Package class="text-orange-500 w-3 h-3 sm:w-4 sm:h-4" />
+            </div>
+            <div>
+              <h2 class="text-sm sm:text-base font-semibold text-gray-800">Pila de tareas</h2>
+              <p class="text-xs text-gray-500 hidden sm:block">Tareas para después</p>
+            </div>
+          </div>
+          <div class="text-[9px] sm:text-[10px] text-gray-400 bg-gray-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            Destino
+          </div>
+        </div>
+
+        <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={pilaContainer!}></div>
+
+        {/* Indicador visual de drop zone */}
+        <div class="absolute inset-2 sm:inset-3 border border-dashed border-orange-200 rounded-lg sm:rounded-xl bg-orange-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="pila-drop-indicator">
+          <div class="text-orange-600 font-medium text-xs bg-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
+            Suelta las tareas aquí
           </div>
         </div>
       </div>

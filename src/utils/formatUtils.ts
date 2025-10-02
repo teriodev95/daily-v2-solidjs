@@ -89,6 +89,15 @@ export const formatReportForCopy = (report: DailyReport): string => {
     lines.push('▫️ Sin impedimentos identificados');
   }
 
+  // Agregar contador de la pila si hay tareas
+  if (report.pila && report.pila.length > 0) {
+    const pilaCount = report.pila.filter(task => task.trim()).length;
+    if (pilaCount > 0) {
+      lines.push('');
+      lines.push(`📦 **${pilaCount} ${pilaCount === 1 ? 'tarea' : 'tareas'} en la pila**`);
+    }
+  }
+
   lines.push('');
   lines.push('═══════════════════════════');
   lines.push('');

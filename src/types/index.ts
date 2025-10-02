@@ -11,6 +11,7 @@ export interface DailyReport {
   weekNumber: number;
   completedYesterday: string[];
   todayTasks: string[];
+  pila: string[];
   weekGoals: string[] | WeekGoal[];
   learning: string;
   impediments: string;

@@ -30,9 +30,9 @@ const App: Component = () => {
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Desktop Layout */}
           <div class="hidden lg:flex items-center justify-between h-20">
-            
+
             {/* Lado izquierdo - Logo y título */}
-            <div class="flex items-center space-x-4 min-w-0 flex-1">
+            <div class="flex items-center space-x-4 min-w-0">
               <div class="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
                 <span class="text-white text-lg font-bold">D</span>
               </div>
@@ -46,33 +46,8 @@ const App: Component = () => {
               </div>
             </div>
 
-            {/* Centro - Botones de acción */}
-            <div class="flex items-center justify-center flex-1">
-              <div class="flex items-center space-x-3 bg-gray-50/80 rounded-2xl p-2 border border-gray-200/60 shadow-sm">
-                <button
-                  onClick={handleQuickSolimPDF}
-                  class="px-4 py-2 text-gray-700 rounded-xl text-sm font-semibold hover:bg-white hover:shadow-sm transition-all duration-200 border border-transparent hover:border-gray-200"
-                  title="Generar formato SOLIM"
-                >
-                  SOLIM
-                </button>
-
-                <div class="w-px h-6 bg-gray-300"></div>
-
-                <button
-                  onClick={() => setIsFormatosPDFModalOpen(true)}
-                  class="px-4 py-2 text-gray-700 rounded-xl text-sm font-semibold hover:bg-white hover:shadow-sm transition-all duration-200 border border-transparent hover:border-gray-200 flex items-center space-x-2"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span>Formatos</span>
-                </button>
-              </div>
-            </div>
-
             {/* Lado derecho - Fecha y semana */}
-            <div class="flex items-center justify-end flex-1">
+            <div class="flex items-center justify-end">
               <div class="text-right bg-gray-50/60 rounded-2xl px-4 py-3 border border-gray-200/40 shadow-sm">
                 <div class="flex flex-col items-end space-y-0.5">
                   <p class="text-sm font-semibold text-gray-900 leading-tight">
@@ -91,62 +66,32 @@ const App: Component = () => {
           </div>
 
           {/* Mobile/Tablet Layout */}
-          <div class="flex lg:hidden flex-col space-y-3 py-4">
-            
-            {/* Fila superior - Logo, título y fecha */}
-            <div class="flex items-center justify-between">
-              <div class="flex items-center space-x-3 min-w-0 flex-1">
-                <div class="w-9 h-9 bg-gray-900 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-                  <span class="text-white text-base font-bold">D</span>
-                </div>
-                <div class="min-w-0">
-                  <h1 class="text-lg font-bold text-gray-900 truncate">
-                    Daily Check
-                  </h1>
-                  <p class="text-xs text-gray-500 hidden sm:block">
-                    Tu reporte diario
-                  </p>
-                </div>
+          <div class="flex lg:hidden items-center justify-between py-4">
+            <div class="flex items-center space-x-3 min-w-0 flex-1">
+              <div class="w-9 h-9 bg-gray-900 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
+                <span class="text-white text-base font-bold">D</span>
               </div>
-
-              <div class="text-right bg-gray-50/60 rounded-2xl px-3 py-2 border border-gray-200/40 shadow-sm">
-                <div class="flex flex-col items-end space-y-0.5">
-                  <p class="text-sm font-semibold text-gray-900 leading-tight">
-                    {new Date().toLocaleDateString('es-ES', {
-                      day: 'numeric',
-                      month: 'short'
-                    })}
-                  </p>
-                  <p class="text-xs text-gray-500 font-medium">
-                    Sem. {Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}
-                  </p>
-                </div>
+              <div class="min-w-0">
+                <h1 class="text-lg font-bold text-gray-900 truncate">
+                  Daily Check
+                </h1>
+                <p class="text-xs text-gray-500 hidden sm:block">
+                  Tu reporte diario
+                </p>
               </div>
             </div>
 
-            {/* Fila inferior - Botones centrados */}
-            <div class="flex items-center justify-center">
-              <div class="flex items-center space-x-2 bg-gray-50/80 rounded-2xl p-1.5 border border-gray-200/60 shadow-sm">
-                <button
-                  onClick={handleQuickSolimPDF}
-                  class="px-4 py-2 text-gray-700 rounded-xl text-sm font-semibold hover:bg-white hover:shadow-sm transition-all duration-200 border border-transparent hover:border-gray-200"
-                  title="Generar formato SOLIM"
-                >
-                  SOLIM
-                </button>
-
-                <div class="w-px h-5 bg-gray-300"></div>
-
-                <button
-                  onClick={() => setIsFormatosPDFModalOpen(true)}
-                  class="px-4 py-2 text-gray-700 rounded-xl text-sm font-semibold hover:bg-white hover:shadow-sm transition-all duration-200 border border-transparent hover:border-gray-200 flex items-center space-x-2"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span class="hidden sm:inline">Formatos</span>
-                  <span class="sm:hidden">PDF</span>
-                </button>
+            <div class="text-right bg-gray-50/60 rounded-2xl px-3 py-2 border border-gray-200/40 shadow-sm">
+              <div class="flex flex-col items-end space-y-0.5">
+                <p class="text-sm font-semibold text-gray-900 leading-tight">
+                  {new Date().toLocaleDateString('es-ES', {
+                    day: 'numeric',
+                    month: 'short'
+                  })}
+                </p>
+                <p class="text-xs text-gray-500 font-medium">
+                  Sem. {Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}
+                </p>
               </div>
             </div>
           </div>
@@ -155,7 +100,11 @@ const App: Component = () => {
 
       {/* Contenido Principal */}
       <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <DailyForm onSave={handleReportSave} />
+        <DailyForm
+          onSave={handleReportSave}
+          onOpenFormatosPDF={() => setIsFormatosPDFModalOpen(true)}
+          onGenerateSolimPDF={handleQuickSolimPDF}
+        />
       </main>
 
       {/* Footer minimalista */}
