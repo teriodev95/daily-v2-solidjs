@@ -19,8 +19,18 @@ export interface DailyReport {
   updatedAt: Date;
 }
 
+export interface PriorityTask {
+  taskText: string;
+  taskIndex: number;
+  startTime: number;
+  pausedTime: number; // Tiempo acumulado cuando se pausó
+  isPaused: boolean;
+  isMinimized: boolean;
+}
+
 export interface AppState {
   currentReport: DailyReport;
   reports: DailyReport[];
   theme: string;
+  activePriority?: PriorityTask;
 } 

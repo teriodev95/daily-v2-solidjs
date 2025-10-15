@@ -1,5 +1,7 @@
-import { Component, createSignal, onMount, createMemo, onCleanup } from 'solid-js';
-import { DailyReport, WeekGoal } from '../types';
+import { Component, createSignal, onMount, createMemo, onCleanup, Show } from 'solid-js';
+import { DailyReport, WeekGoal, PriorityTask } from '../types';
+import PriorityModal from './PriorityModal';
+import PriorityFAB from './PriorityFAB';
 import { getTodayFormatted, getCurrentWeekNumber } from '../utils/dateUtils';
 import { saveReport, loadReport } from '../utils/database';
 import { formatReportForCopy, copyToClipboard } from '../utils/formatUtils';
@@ -24,6 +26,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   const [telegramMessage, setTelegramMessage] = createSignal('');
   const [showGoalsHelp, setShowGoalsHelp] = createSignal(false);
   const [showPrintMenu, setShowPrintMenu] = createSignal(false);
+  const [activePriority, setActivePriority] = createSignal<PriorityTask | null>(null);
 
   // Containers para las secciones dinámicas
   let completedYesterdayContainer: HTMLDivElement;
@@ -39,6 +42,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
   // Timer para el debounce del auto-guardado
   let autoSaveTimer: number | null = null;
+  let priorityTimer: number | null = null;
 
   // Función de auto-guardado con debounce
   const triggerAutoSave = () => {
@@ -83,7 +87,119 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     if (autoSaveTimer) {
       clearTimeout(autoSaveTimer);
     }
+    if (priorityTimer) {
+      clearInterval(priorityTimer);
+    }
   });
+
+  // Funciones para manejar la prioridad
+  const handleActivatePriority = (taskIndex: number) => {
+    const taskText = todayTasksData[taskIndex];
+    if (!taskText || taskText.trim() === '') return;
+
+    const existingPriority = loadPriority();
+
+    // Si es la misma tarea, mantener el tiempo acumulado
+    const isSameTask = existingPriority?.taskText === taskText;
+
+    const priority: PriorityTask = {
+      taskText,
+      taskIndex,
+      startTime: Date.now(),
+      pausedTime: isSameTask ? existingPriority.pausedTime : 0,
+      isPaused: false,
+      isMinimized: false
+    };
+
+    setActivePriority(priority);
+    savePriority(priority);
+  };
+
+  const handleCompletePriority = () => {
+    const priority = activePriority();
+    if (!priority) return;
+
+    // Mover tarea a completedYesterday
+    const taskText = priority.taskText;
+    completedYesterdayData.push(taskText);
+
+    // Eliminar de todayTasks
+    const taskIndex = todayTasksData.findIndex(task => task === taskText);
+    if (taskIndex >= 0) {
+      todayTasksData.splice(taskIndex, 1);
+    }
+
+    // Re-renderizar ambas secciones
+    renderCompletedYesterday();
+    renderTodayTasks();
+
+    // Limpiar prioridad
+    setActivePriority(null);
+    clearPriority();
+
+    // Guardar cambios
+    triggerAutoSave();
+  };
+
+  const handleMinimizePriority = () => {
+    const priority = activePriority();
+    if (!priority) return;
+
+    // Calcular y guardar el tiempo transcurrido hasta ahora
+    const currentTime = Date.now();
+    const sessionTime = currentTime - priority.startTime;
+    const totalTime = priority.pausedTime + sessionTime;
+
+    const updatedPriority = {
+      ...priority,
+      pausedTime: totalTime,
+      isPaused: true,
+      isMinimized: true
+    };
+    setActivePriority(updatedPriority);
+    savePriority(updatedPriority);
+  };
+
+  const handleOpenPriority = () => {
+    const priority = activePriority();
+    if (!priority) return;
+
+    // Reiniciar el contador desde donde se quedó
+    const updatedPriority = {
+      ...priority,
+      startTime: Date.now(),
+      isPaused: false,
+      isMinimized: false
+    };
+    setActivePriority(updatedPriority);
+    savePriority(updatedPriority);
+  };
+
+  const handleUpdatePriorityTime = () => {
+    const priority = activePriority();
+    if (!priority) return;
+    savePriority(priority);
+  };
+
+  // Funciones para persistir prioridad en localStorage
+  const savePriority = (priority: PriorityTask) => {
+    localStorage.setItem('solidjs-daily-priority', JSON.stringify(priority));
+  };
+
+  const loadPriority = (): PriorityTask | null => {
+    const saved = localStorage.getItem('solidjs-daily-priority');
+    if (!saved) return null;
+
+    try {
+      return JSON.parse(saved) as PriorityTask;
+    } catch {
+      return null;
+    }
+  };
+
+  const clearPriority = () => {
+    localStorage.removeItem('solidjs-daily-priority');
+  };
 
   // Función para crear un textarea con drag and drop
   const createTextarea = (
@@ -101,7 +217,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     wrapper.dataset.section = sectionType;
 
     const container = document.createElement('div');
-    container.className = 'flex items-center space-x-3 group bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-3 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]';
+    container.className = 'relative flex items-center space-x-3 group bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-3 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]';
 
     // Hacer el container draggable para yesterday, today y pila
     if (sectionType === 'yesterday' || sectionType === 'today' || sectionType === 'pila') {
@@ -257,7 +373,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
     // Textarea más uniforme y limpio
     const textarea = document.createElement('textarea');
-    textarea.className = 'flex-1 h-20 resize-none px-0 py-2 border-0 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-0 focus:outline-none bg-transparent';
+    textarea.className = 'flex-1 h-20 resize-none px-0 py-2 pr-12 border-0 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-0 focus:outline-none bg-transparent';
     textarea.placeholder = placeholder;
     textarea.value = value;
     
@@ -272,25 +388,31 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       triggerImmediateAutoSave(); // Guardar inmediatamente cuando sale del campo
     });
 
+    container.appendChild(textarea);
+
+    // Contenedor de acciones posicionado absolutamente
+    const actionsContainer = document.createElement('div');
+    actionsContainer.className = 'absolute right-3 top-3 flex items-center space-x-1';
+
     // Botón de eliminar más uniforme
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
-    removeButton.className = 'w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all duration-200 flex-shrink-0';
+    removeButton.className = 'w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all duration-200';
     removeButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
     removeButton.disabled = !canRemove;
-    
+
     // Aplicar estilos cuando está deshabilitado
     if (!canRemove) {
-      removeButton.className = 'w-8 h-8 flex items-center justify-center text-gray-300 dark:text-gray-600 rounded-lg cursor-not-allowed opacity-50 flex-shrink-0';
+      removeButton.className = 'w-8 h-8 flex items-center justify-center text-gray-300 dark:text-gray-600 rounded-lg cursor-not-allowed opacity-50';
     }
-    
+
     removeButton.addEventListener('click', () => {
       onRemove(index);
       triggerAutoSave(); // Activar auto-guardado cuando se elimine un elemento
     });
 
-    container.appendChild(textarea);
-    container.appendChild(removeButton);
+    actionsContainer.appendChild(removeButton);
+    container.appendChild(actionsContainer);
 
     wrapper.appendChild(container);
     return wrapper;
@@ -423,13 +545,16 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
   const renderTodayTasks = () => {
     todayTasksContainer.innerHTML = '';
-    
+
     todayTasksData.forEach((value, index) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'relative';
+
       const element = createTextarea(
         '¿En qué me concentraré?',
         value,
-        (idx, val) => { 
-          todayTasksData[idx] = val; 
+        (idx, val) => {
+          todayTasksData[idx] = val;
           triggerAutoSave(); // Activar auto-guardado
         },
         (idx) => {
@@ -443,7 +568,55 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         todayTasksData.length > 1,
         'today'
       );
-      todayTasksContainer.appendChild(element);
+
+      // Agregar botón de prioridad si la tarea tiene contenido
+      if (value && value.trim() !== '') {
+        // Buscar el contenedor de acciones que ya existe
+        const actionsContainer = element.querySelector('.absolute.right-3.top-3');
+
+        if (actionsContainer) {
+          const priorityButton = document.createElement('button');
+          priorityButton.type = 'button';
+
+          // Verificar si esta tarea ya es la prioridad activa
+          const currentPriority = activePriority();
+          const isActivePriority = currentPriority && currentPriority.taskText === value;
+
+          if (isActivePriority) {
+            priorityButton.className = 'w-8 h-8 flex items-center justify-center text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-lg transition-all duration-200';
+            priorityButton.innerHTML = `
+              <svg class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            `;
+            priorityButton.title = 'Prioridad activa';
+            priorityButton.disabled = true;
+          } else {
+            priorityButton.className = 'w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-all duration-200';
+            priorityButton.innerHTML = `
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            `;
+            priorityButton.title = 'Activar como prioridad';
+            priorityButton.addEventListener('click', () => {
+              handleActivatePriority(index);
+              renderTodayTasks(); // Re-renderizar para actualizar estado del botón
+            });
+          }
+
+          // Insertar el botón de prioridad antes del botón de eliminar
+          const removeBtn = actionsContainer.querySelector('button');
+          if (removeBtn) {
+            actionsContainer.insertBefore(priorityButton, removeBtn);
+          } else {
+            actionsContainer.appendChild(priorityButton);
+          }
+        }
+      }
+
+      wrapper.appendChild(element);
+      todayTasksContainer.appendChild(wrapper);
     });
 
     const addButton = createAddButton('+ ¿Otra prioridad para hoy?', () => {
@@ -672,6 +845,33 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     renderTodayTasks();
     renderPila();
     renderWeekGoals();
+
+    // Cargar prioridad activa si existe (después de cargar las tareas)
+    const savedPriority = loadPriority();
+    if (savedPriority) {
+      // Verificar que la tarea todavía exista en todayTasks
+      const taskExists = todayTasksData.some(task => task === savedPriority.taskText);
+      if (taskExists) {
+        // Si estaba pausada, mantener el tiempo pausado
+        // Si estaba activa, calcular el tiempo transcurrido
+        if (!savedPriority.isPaused && !savedPriority.isMinimized) {
+          const now = Date.now();
+          const sessionTime = now - savedPriority.startTime;
+          const totalTime = savedPriority.pausedTime + sessionTime;
+          const updatedPriority = {
+            ...savedPriority,
+            startTime: now,
+            pausedTime: totalTime
+          };
+          setActivePriority(updatedPriority);
+          savePriority(updatedPriority);
+        } else {
+          setActivePriority(savedPriority);
+        }
+      } else {
+        clearPriority();
+      }
+    }
   });
 
   // Construir el reporte actual
@@ -1105,6 +1305,24 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           </div>
         </div>
       </div>
+
+      {/* Priority Modal */}
+      <Show when={activePriority() && !activePriority()?.isMinimized}>
+        <PriorityModal
+          priority={activePriority()!}
+          onComplete={handleCompletePriority}
+          onMinimize={handleMinimizePriority}
+          onUpdateTime={handleUpdatePriorityTime}
+        />
+      </Show>
+
+      {/* Priority FAB */}
+      <Show when={activePriority()?.isMinimized}>
+        <PriorityFAB
+          priority={activePriority()!}
+          onOpen={handleOpenPriority}
+        />
+      </Show>
 
       {/* Modal de Telegram */}
       {showTelegramModal() && (
