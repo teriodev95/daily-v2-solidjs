@@ -141,9 +141,9 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           }
         });
 
-        // Remover clases de highlight de todos los containers
-        document.querySelectorAll('.bg-blue-50').forEach(el => {
-          el.classList.remove('bg-blue-50', 'border-blue-300');
+        // Remover clases de highlight de todos los containers (excluyendo el mensaje de instrucciones)
+        document.querySelectorAll('.bg-blue-50:not(.bg-gradient-to-r), .dark\\:bg-blue-900\\/20:not(.dark\\:from-blue-900\\/20)').forEach(el => {
+          el.classList.remove('bg-blue-50', 'dark:bg-blue-900/20', 'border-blue-300', 'dark:border-blue-600');
         });
       });
 
@@ -161,7 +161,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
         // Crear indicador visual
         const indicator = document.createElement('div');
-        indicator.className = 'drop-indicator absolute left-0 right-0 h-0.5 bg-blue-500 z-10';
+        indicator.className = 'drop-indicator absolute left-0 right-0 h-0.5 bg-blue-500 dark:bg-blue-400 z-10';
 
         if (e.clientY < midpoint) {
           indicator.style.top = '-2px';
@@ -323,7 +323,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       if (indicator) {
         indicator.style.opacity = '1';
       }
-      container.classList.add('bg-blue-50', 'border-blue-300');
+      container.classList.add('bg-blue-50', 'dark:bg-blue-900/20', 'border-blue-300', 'dark:border-blue-600');
     });
 
     container.addEventListener('dragleave', (e) => {
@@ -333,7 +333,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         if (indicator) {
           indicator.style.opacity = '0';
         }
-        container.classList.remove('bg-blue-50', 'border-blue-300');
+        container.classList.remove('bg-blue-50', 'dark:bg-blue-900/20', 'border-blue-300', 'dark:border-blue-600');
       }
     });
 
@@ -883,7 +883,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       </Card>
 
       {/* Instrucciones de Drag & Drop - Más sutil */}
-      <div class="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.02)]">
+      <div class="bg-gradient-to-r from-blue-50/50 to-blue-50/30 dark:from-blue-900/20 dark:to-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.02)] select-none" style="pointer-events: auto;">
         <div class="flex items-center space-x-2 mb-1">
           <span class="text-blue-500 dark:text-blue-400 text-xs">💡</span>
           <span class="text-xs font-medium text-blue-700 dark:text-blue-300">Reorganiza tus tareas</span>
@@ -891,7 +891,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         <p class="text-xs text-blue-600 dark:text-blue-400 opacity-80">
           Arrastra las tareas entre secciones usando el icono de puntos
         </p>
-              </div>
+      </div>
 
       {/* Secciones principales - Diseño mejorado */}
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
@@ -911,7 +911,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={completedYesterdayContainer!}></div>
           
           {/* Indicador visual de drop zone - Más sutil */}
-          <div class="absolute inset-2 sm:inset-3 border border-dashed border-green-200 rounded-lg sm:rounded-xl bg-green-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="yesterday-drop-indicator">
+          <div class="absolute inset-2 sm:inset-3 border border-dashed border-green-200 dark:border-green-700 rounded-lg sm:rounded-xl bg-green-50/20 dark:bg-green-900/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="yesterday-drop-indicator">
             <div class="text-green-600 dark:text-green-400 font-medium text-xs bg-white dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]">
               Suelta las tareas aquí
             </div>
@@ -938,7 +938,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={todayTasksContainer!}></div>
           
           {/* Indicador visual de drop zone - Más sutil */}
-          <div class="absolute inset-2 sm:inset-3 border border-dashed border-blue-200 rounded-lg sm:rounded-xl bg-blue-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="today-drop-indicator">
+          <div class="absolute inset-2 sm:inset-3 border border-dashed border-blue-200 dark:border-blue-700 rounded-lg sm:rounded-xl bg-blue-50/20 dark:bg-blue-900/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="today-drop-indicator">
             <div class="text-blue-600 dark:text-blue-400 font-medium text-xs bg-white dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]">
               Suelta las tareas aquí
             </div>
@@ -966,7 +966,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={pilaContainer!}></div>
 
         {/* Indicador visual de drop zone */}
-        <div class="absolute inset-2 sm:inset-3 border border-dashed border-orange-200 rounded-lg sm:rounded-xl bg-orange-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="pila-drop-indicator">
+        <div class="absolute inset-2 sm:inset-3 border border-dashed border-orange-200 dark:border-orange-700 rounded-lg sm:rounded-xl bg-orange-50/20 dark:bg-orange-900/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="pila-drop-indicator">
           <div class="text-orange-600 dark:text-orange-400 font-medium text-xs bg-white dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]">
             Suelta las tareas aquí
           </div>

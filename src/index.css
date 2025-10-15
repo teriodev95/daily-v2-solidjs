@@ -71,6 +71,21 @@
     background-color: #fcfcfc;
   }
 
+  /* Estilos para drag and drop */
+  .dragging {
+    opacity: 0.5;
+  }
+
+  /* Indicador de drop para modo claro y oscuro */
+  .drop-indicator {
+    @apply bg-blue-500 dark:bg-blue-400;
+  }
+
+  /* Highlight de contenedores durante drag */
+  .drag-highlight {
+    @apply bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600;
+  }
+
   /* Animación para modal slide up */
   @keyframes slide-up {
     from {
