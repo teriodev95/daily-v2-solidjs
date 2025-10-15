@@ -101,7 +101,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     wrapper.dataset.section = sectionType;
 
     const container = document.createElement('div');
-    container.className = 'flex items-center space-x-3 group bg-white rounded-xl border border-gray-200 p-3 hover:border-gray-300 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]';
+    container.className = 'flex items-center space-x-3 group bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-3 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]';
 
     // Hacer el container draggable para yesterday, today y pila
     if (sectionType === 'yesterday' || sectionType === 'today' || sectionType === 'pila') {
@@ -110,7 +110,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
       // Agregar icono de drag - Más visible y uniforme
       const dragHandle = document.createElement('div');
-      dragHandle.className = 'flex items-center justify-center w-6 h-6 text-gray-400 hover:text-gray-600 transition-colors duration-200 flex-shrink-0';
+      dragHandle.className = 'flex items-center justify-center w-6 h-6 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 flex-shrink-0';
       dragHandle.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>';
       container.appendChild(dragHandle);
 
@@ -257,7 +257,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
     // Textarea más uniforme y limpio
     const textarea = document.createElement('textarea');
-    textarea.className = 'flex-1 h-20 resize-none px-0 py-2 border-0 text-sm text-gray-700 placeholder-gray-400 focus:ring-0 focus:outline-none bg-transparent';
+    textarea.className = 'flex-1 h-20 resize-none px-0 py-2 border-0 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-0 focus:outline-none bg-transparent';
     textarea.placeholder = placeholder;
     textarea.value = value;
     
@@ -275,13 +275,13 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     // Botón de eliminar más uniforme
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
-    removeButton.className = 'w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 flex-shrink-0';
+    removeButton.className = 'w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all duration-200 flex-shrink-0';
     removeButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
     removeButton.disabled = !canRemove;
     
     // Aplicar estilos cuando está deshabilitado
     if (!canRemove) {
-      removeButton.className = 'w-8 h-8 flex items-center justify-center text-gray-300 rounded-lg cursor-not-allowed opacity-50 flex-shrink-0';
+      removeButton.className = 'w-8 h-8 flex items-center justify-center text-gray-300 dark:text-gray-600 rounded-lg cursor-not-allowed opacity-50 flex-shrink-0';
     }
     
     removeButton.addEventListener('click', () => {
@@ -378,7 +378,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   const createAddButton = (text: string, onClick: () => void) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'w-full p-3 border border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-gray-400 hover:text-gray-600 hover:bg-gray-50/50 transition-all duration-200 text-sm font-medium shadow-[0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)]';
+    button.className = 'w-full p-3 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-all duration-200 text-sm font-medium shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.03)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05)]';
     button.textContent = text;
     button.addEventListener('click', onClick);
     return button;
@@ -483,7 +483,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     // Si no hay tareas en la pila, mostrar mensaje
     if (pilaData.length === 0) {
       const emptyMessage = document.createElement('div');
-      emptyMessage.className = 'flex items-center justify-center min-h-[100px] text-gray-400 text-sm';
+      emptyMessage.className = 'flex items-center justify-center min-h-[100px] text-gray-400 dark:text-gray-500 text-sm';
       emptyMessage.innerHTML = '<div class="text-center"><p>📦</p><p class="mt-2">Arrastra aquí las tareas para después</p></div>';
       pilaContainer.appendChild(emptyMessage);
     }
@@ -501,7 +501,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     canRemove: boolean
   ) => {
     const container = document.createElement('div');
-    container.className = 'flex items-center space-x-3 group bg-white rounded-xl border border-gray-200 p-3 hover:border-gray-300 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]';
+    container.className = 'flex items-center space-x-3 group bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-3 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]';
 
     // Checkbox personalizado con diseño moderno
     const checkboxContainer = document.createElement('div');
@@ -521,7 +521,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     checkboxVisual.className = `w-6 h-6 rounded-lg border-2 transition-all duration-200 cursor-pointer flex items-center justify-center ${
       goal.completed 
         ? 'bg-green-500 border-green-500 shadow-[0_2px_8px_-2px_rgba(34,197,94,0.4)]' 
-        : 'bg-white border-gray-300 hover:border-green-400 hover:shadow-[0_2px_8px_-2px_rgba(34,197,94,0.2)]'
+        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-green-400 dark:hover:border-green-500 hover:shadow-[0_2px_8px_-2px_rgba(34,197,94,0.2)]'
     }`;
     
     // Icono de check
@@ -539,7 +539,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
     // Textarea
     const textarea = document.createElement('textarea');
-    textarea.className = `flex-1 h-20 resize-none px-0 py-2 border-0 text-sm text-gray-700 placeholder-gray-400 focus:ring-0 focus:outline-none bg-transparent ${goal.completed ? 'line-through opacity-60' : ''}`;
+    textarea.className = `flex-1 h-20 resize-none px-0 py-2 border-0 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-0 focus:outline-none bg-transparent ${goal.completed ? 'line-through opacity-60' : ''}`;
     textarea.placeholder = '¿Qué objetivo específico quiero lograr?';
     textarea.value = goal.text;
 
@@ -556,8 +556,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
     removeButton.className = canRemove
-      ? 'w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 flex-shrink-0'
-      : 'w-8 h-8 flex items-center justify-center text-gray-300 rounded-lg cursor-not-allowed opacity-50 flex-shrink-0';
+      ? 'w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all duration-200 flex-shrink-0'
+      : 'w-8 h-8 flex items-center justify-center text-gray-300 dark:text-gray-600 rounded-lg cursor-not-allowed opacity-50 flex-shrink-0';
     removeButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
     removeButton.disabled = !canRemove;
 
@@ -763,8 +763,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
               <Zap class="text-white w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h3 class="text-base sm:text-lg font-semibold text-gray-900">Panel de control</h3>
-              <p class="text-xs sm:text-sm text-gray-500">Gestiona tu reporte diario</p>
+              <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Panel de control</h3>
+              <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Gestiona tu reporte diario</p>
             </div>
           </div>
 
@@ -781,9 +781,9 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
               {/* Menú desplegable de opciones de impresión */}
               {showPrintMenu() && (
-                <div class="absolute top-full mt-2 left-0 z-10 bg-white border border-gray-200 rounded-xl shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] py-2 min-w-[220px] overflow-hidden">
+                <div class="absolute top-full mt-2 left-0 z-10 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_24px_-4px_rgba(255,255,255,0.08)] py-2 min-w-[220px] overflow-hidden">
                   <button
-                    class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200 flex items-center space-x-3"
+                    class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 flex items-center space-x-3"
                     onClick={() => {
                       generateDailyTemplatePDF(currentReport());
                       setShowPrintMenu(false);
@@ -795,12 +795,12 @@ const DailyForm: Component<DailyFormProps> = (props) => {
                       </svg>
                     </div>
                     <div>
-                      <div class="font-semibold text-gray-900">Reporte completo</div>
-                      <div class="text-xs text-gray-500">Todas las secciones incluidas</div>
+                      <div class="font-semibold text-gray-900 dark:text-white">Reporte completo</div>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">Todas las secciones incluidas</div>
                     </div>
                   </button>
                   <button
-                    class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200 flex items-center space-x-3"
+                    class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 flex items-center space-x-3"
                     onClick={() => {
                       generateDailyObjectivesPDF(currentReport());
                       setShowPrintMenu(false);
@@ -812,8 +812,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
                       </svg>
                     </div>
                     <div>
-                      <div class="font-semibold text-gray-900">Solo objetivos</div>
-                      <div class="text-xs text-gray-500">Enfoque en tareas del día</div>
+                      <div class="font-semibold text-gray-900 dark:text-white">Solo objetivos</div>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">Enfoque en tareas del día</div>
                     </div>
                   </button>
                 </div>
@@ -846,7 +846,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
             </button>
 
             <button
-              class={`flex items-center justify-center space-x-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-gray-900 text-white text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-gray-800 transition-all duration-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2),0_4px_16px_-4px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.2)] ${isSaving() ? 'opacity-50 cursor-not-allowed' : ''}`}
+              class={`flex items-center justify-center space-x-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all duration-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2),0_4px_16px_-4px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.2)] ${isSaving() ? 'opacity-50 cursor-not-allowed' : ''}`}
               onClick={handleSave}
               disabled={isSaving()}
             >
@@ -872,8 +872,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
                   </div>
                 )}
         
-        <div class="pt-3 sm:pt-4 border-t border-gray-200">
-          <div class="flex items-center justify-center space-x-2 text-gray-400">
+        <div class="pt-3 sm:pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div class="flex items-center justify-center space-x-2 text-gray-400 dark:text-gray-500">
             <span class={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all duration-300 ${isAutoSaving() ? 'bg-blue-400 animate-pulse' : 'bg-green-400 animate-pulse'}`}></span>
             <p class="text-xs font-medium uppercase tracking-wider">
               {isAutoSaving() ? 'Guardando automáticamente...' : 'Guardado automático activo'}
@@ -883,12 +883,12 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       </Card>
 
       {/* Instrucciones de Drag & Drop - Más sutil */}
-      <div class="bg-blue-50/50 border border-blue-100 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+      <div class="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.02)]">
         <div class="flex items-center space-x-2 mb-1">
-          <span class="text-blue-500 text-xs">💡</span>
-          <span class="text-xs font-medium text-blue-700">Reorganiza tus tareas</span>
+          <span class="text-blue-500 dark:text-blue-400 text-xs">💡</span>
+          <span class="text-xs font-medium text-blue-700 dark:text-blue-300">Reorganiza tus tareas</span>
         </div>
-        <p class="text-xs text-blue-600 opacity-80">
+        <p class="text-xs text-blue-600 dark:text-blue-400 opacity-80">
           Arrastra las tareas entre secciones usando el icono de puntos
         </p>
               </div>
@@ -903,7 +903,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
             subtitle="Reconoce tus avances"
             color="green"
           >
-            <div class="text-[9px] sm:text-[10px] text-gray-400 bg-gray-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <div class="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_2px_rgba(255,255,255,0.03)]">
               Destino
             </div>
           </SectionHeader>
@@ -912,25 +912,25 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           
           {/* Indicador visual de drop zone - Más sutil */}
           <div class="absolute inset-2 sm:inset-3 border border-dashed border-green-200 rounded-lg sm:rounded-xl bg-green-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="yesterday-drop-indicator">
-            <div class="text-green-600 font-medium text-xs bg-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
+            <div class="text-green-600 dark:text-green-400 font-medium text-xs bg-white dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]">
               Suelta las tareas aquí
             </div>
           </div>
         </Card>
 
         {/* Sección: Hoy trabajaré en */}
-        <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+        <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
           <div class="flex items-center justify-between mb-4 sm:mb-5">
             <div class="flex items-center space-x-2 sm:space-x-3">
               <div class="w-6 h-6 sm:w-8 sm:h-8 bg-blue-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                 <ArrowRight class="text-blue-500 w-3 h-3 sm:w-4 sm:h-4" />
               </div>
               <div>
-                <h2 class="text-sm sm:text-base font-semibold text-gray-800">¿En qué me enfocaré hoy?</h2>
-                <p class="text-xs text-gray-500 hidden sm:block">Define tus prioridades</p>
+                <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿En qué me enfocaré hoy?</h2>
+                <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Define tus prioridades</p>
               </div>
             </div>
-            <div class="text-[9px] sm:text-[10px] text-gray-400 bg-gray-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <div class="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_2px_rgba(255,255,255,0.03)]">
               Destino
             </div>
           </div>
@@ -939,7 +939,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           
           {/* Indicador visual de drop zone - Más sutil */}
           <div class="absolute inset-2 sm:inset-3 border border-dashed border-blue-200 rounded-lg sm:rounded-xl bg-blue-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="today-drop-indicator">
-            <div class="text-blue-600 font-medium text-xs bg-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
+            <div class="text-blue-600 dark:text-blue-400 font-medium text-xs bg-white dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]">
               Suelta las tareas aquí
             </div>
           </div>
@@ -947,15 +947,15 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       </div>
 
       {/* Sección: Pila (tareas para después) */}
-      <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+      <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
         <div class="flex items-center justify-between mb-4 sm:mb-5">
           <div class="flex items-center space-x-2 sm:space-x-3">
             <div class="w-6 h-6 sm:w-8 sm:h-8 bg-orange-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
               <Package class="text-orange-500 w-3 h-3 sm:w-4 sm:h-4" />
             </div>
             <div>
-              <h2 class="text-sm sm:text-base font-semibold text-gray-800">Pila de tareas</h2>
-              <p class="text-xs text-gray-500 hidden sm:block">Tareas para después</p>
+              <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">Pila de tareas</h2>
+              <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Tareas para después</p>
             </div>
           </div>
           <div class="text-[9px] sm:text-[10px] text-gray-400 bg-gray-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
@@ -967,27 +967,27 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
         {/* Indicador visual de drop zone */}
         <div class="absolute inset-2 sm:inset-3 border border-dashed border-orange-200 rounded-lg sm:rounded-xl bg-orange-50/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="pila-drop-indicator">
-          <div class="text-orange-600 font-medium text-xs bg-white px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
+          <div class="text-orange-600 dark:text-orange-400 font-medium text-xs bg-white dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]">
             Suelta las tareas aquí
           </div>
         </div>
       </div>
 
       {/* Sección: Objetivos de la semana - Más uniforme */}
-      <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+      <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
         <div class="flex items-center justify-between mb-4 sm:mb-5">
           <div class="flex items-center space-x-2 sm:space-x-3">
-            <div class="w-6 h-6 sm:w-8 sm:h-8 bg-purple-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <Zap class="text-purple-500 w-3 h-3 sm:w-4 sm:h-4" />
+            <div class="w-6 h-6 sm:w-8 sm:h-8 bg-purple-50 dark:bg-purple-900/30 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+              <Zap class="text-purple-500 dark:text-purple-400 w-3 h-3 sm:w-4 sm:h-4" />
             </div>
             <div>
-              <h2 class="text-sm sm:text-base font-semibold text-gray-800">¿Qué quiero lograr esta semana?</h2>
-              <p class="text-xs text-gray-500 hidden sm:block">Objetivos de esta semana</p>
+              <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿Qué quiero lograr esta semana?</h2>
+              <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Objetivos de esta semana</p>
             </div>
           </div>
           <button
             onClick={() => setShowGoalsHelp(!showGoalsHelp())}
-            class="flex items-center justify-center w-8 h-8 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-all duration-200 border border-gray-200 hover:border-gray-300 shadow-sm"
+            class="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 shadow-sm"
           >
             <HelpCircle class="w-4 h-4" />
           </button>
@@ -995,18 +995,18 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         
         {/* Panel de ayuda para objetivos */}
         {showGoalsHelp() && (
-          <div class="mb-4 bg-gray-50 border border-gray-200 rounded-xl p-4 shadow-sm">
+          <div class="mb-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm">
             <div class="flex items-center space-x-2 mb-3">
-              <div class="w-6 h-6 bg-gray-100 rounded-lg flex items-center justify-center">
-                <HelpCircle class="w-4 h-4 text-gray-500" />
+              <div class="w-6 h-6 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                <HelpCircle class="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </div>
-              <span class="text-sm font-semibold text-gray-700">Guía para redactar objetivos efectivos</span>
+              <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Guía para redactar objetivos efectivos</span>
             </div>
             
-            <div class="space-y-4 text-sm text-gray-600">
+            <div class="space-y-4 text-sm text-gray-600 dark:text-gray-400">
               <div>
-                <p class="font-medium mb-2 text-gray-700">🎯 Características de un buen objetivo:</p>
-                <ul class="list-disc list-inside space-y-1 ml-3 text-gray-600">
+                <p class="font-medium mb-2 text-gray-700 dark:text-gray-300">🎯 Características de un buen objetivo:</p>
+                <ul class="list-disc list-inside space-y-1 ml-3 text-gray-600 dark:text-gray-400">
                   <li><strong>Específico:</strong> Define claramente qué quieres lograr</li>
                   <li><strong>Medible:</strong> Incluye números, fechas o métricas concretas</li>
                   <li><strong>Alcanzable:</strong> Realista con tus recursos y tiempo</li>
@@ -1015,8 +1015,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
               </div>
               
               <div>
-                <p class="font-medium mb-2 text-gray-700">💡 Ejemplos de objetivos bien redactados:</p>
-                <ul class="list-disc list-inside space-y-1 ml-3 text-gray-600">
+                <p class="font-medium mb-2 text-gray-700 dark:text-gray-300">💡 Ejemplos de objetivos bien redactados:</p>
+                <ul class="list-disc list-inside space-y-1 ml-3 text-gray-600 dark:text-gray-400">
                   <li>"Completar 3 módulos del curso de React antes del viernes"</li>
                   <li>"Contactar 5 clientes potenciales para presentar la propuesta"</li>
                   <li>"Reducir en 30% el tiempo de respuesta a emails esta semana"</li>
@@ -1024,10 +1024,10 @@ const DailyForm: Component<DailyFormProps> = (props) => {
               </div>
               
               <div>
-                <p class="font-medium mb-2 text-gray-700">⚡ Verbos que te ayudan:</p>
+                <p class="font-medium mb-2 text-gray-700 dark:text-gray-300">⚡ Verbos que te ayudan:</p>
                 <div class="flex flex-wrap gap-2">
                   {['Completar', 'Crear', 'Implementar', 'Contactar', 'Reducir', 'Aumentar', 'Mejorar', 'Desarrollar'].map(verb => (
-                    <span class="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium border border-gray-200">
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-600">
                       {verb}
                     </span>
                   ))}
@@ -1041,24 +1041,24 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       </div>
 
       {/* Sección: Aprendizaje - Más limpia */}
-      <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+      <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
         <div class="flex items-center space-x-2 sm:space-x-3 mb-4 sm:mb-5">
-          <div class="w-6 h-6 sm:w-8 sm:h-8 bg-amber-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-            <BookOpen class="text-amber-500 w-3 h-3 sm:w-4 sm:h-4" />
+          <div class="w-6 h-6 sm:w-8 sm:h-8 bg-amber-50 dark:bg-amber-900/30 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+            <BookOpen class="text-amber-500 dark:text-amber-400 w-3 h-3 sm:w-4 sm:h-4" />
           </div>
           <div>
-            <h2 class="text-sm sm:text-base font-semibold text-gray-800">¿Qué estoy aprendiendo?</h2>
-            <p class="text-xs text-gray-500 hidden sm:block">Documenta tu crecimiento</p>
+            <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿Qué estoy aprendiendo?</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Documenta tu crecimiento</p>
           </div>
         </div>
         
         <div>
           <div>
-            <label class="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+            <label class="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Mi aprendizaje actual
             </label>
             <textarea
-              class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg text-xs sm:text-sm placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all duration-200 bg-white h-20 sm:h-24 resize-none shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+              class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-gray-900 dark:focus:ring-white focus:border-transparent transition-all duration-200 bg-white dark:bg-gray-800 h-20 sm:h-24 resize-none shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] focus:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:focus:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]"
               placeholder="¿Qué nuevas habilidades, conceptos o ideas estás desarrollando? (usa - para separar varios elementos)"
               value={learning()}
               onInput={(e) => {
@@ -1074,24 +1074,24 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       </div>
 
       {/* Sección: Impedimentos */}
-      <div class="bg-white border border-gray-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] transition-all duration-300">
+      <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
         <div class="flex items-center space-x-2 sm:space-x-3 mb-4 sm:mb-5">
-          <div class="w-6 h-6 sm:w-8 sm:h-8 bg-red-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-            <AlertTriangle class="text-red-500 w-3 h-3 sm:w-4 sm:h-4" />
+          <div class="w-6 h-6 sm:w-8 sm:h-8 bg-red-50 dark:bg-red-900/30 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+            <AlertTriangle class="text-red-500 dark:text-red-400 w-3 h-3 sm:w-4 sm:h-4" />
           </div>
           <div>
-            <h2 class="text-sm sm:text-base font-semibold text-gray-800">¿Qué impedimentos tengo?</h2>
-            <p class="text-xs text-gray-500 hidden sm:block">Identifica obstáculos y bloqueos</p>
+            <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿Qué impedimentos tengo?</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Identifica obstáculos y bloqueos</p>
           </div>
         </div>
         
         <div>
           <div>
-            <label class="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
+            <label class="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Impedimentos actuales
             </label>
             <textarea
-              class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg text-xs sm:text-sm placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all duration-200 bg-white h-20 sm:h-24 resize-none shadow-[0_1px_3px_rgba(0,0,0,0.08)] focus:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
+              class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-gray-900 dark:focus:ring-white focus:border-transparent transition-all duration-200 bg-white dark:bg-gray-800 h-20 sm:h-24 resize-none shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] focus:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:focus:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]"
               placeholder="¿Qué obstáculos, bloqueos o dificultades estás enfrentando? (usa - para separar varios elementos)"
               value={impediments()}
               onInput={(e) => {
@@ -1108,22 +1108,22 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
       {/* Modal de Telegram */}
       {showTelegramModal() && (
-        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div class="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-4xl max-h-[95vh] overflow-hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div class="bg-white dark:bg-gray-900 rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-4xl max-h-[95vh] overflow-hidden">
             {/* Header del Modal */}
-            <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-blue-100">
+            <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20">
               <div class="flex items-center space-x-3 sm:space-x-4 min-w-0">
                 <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
                   <Smartphone class="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div class="min-w-0">
-                  <h3 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">Enviar a Telegram</h3>
-                  <p class="text-xs sm:text-sm text-gray-600 hidden sm:block">Edita tu mensaje antes de copiarlo y enviarlo</p>
+                  <h3 class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">Enviar a Telegram</h3>
+                  <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hidden sm:block">Edita tu mensaje antes de copiarlo y enviarlo</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowTelegramModal(false)}
-                class="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm border border-gray-200 hover:border-gray-300 flex-shrink-0"
+                class="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white dark:hover:bg-gray-800 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 flex-shrink-0"
               >
                 <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1132,33 +1132,33 @@ const DailyForm: Component<DailyFormProps> = (props) => {
             </div>
 
             {/* Contenido del Modal */}
-            <div class="p-3 sm:p-6 bg-gray-50 flex-1 min-h-0">
+            <div class="p-3 sm:p-6 bg-gray-50 dark:bg-gray-800 flex-1 min-h-0">
               <div class="mb-4 sm:mb-6">
                 <div class="flex items-center justify-between mb-2 sm:mb-3">
-                  <label class="block text-sm font-semibold text-gray-700">
+                  <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
                     Tu mensaje para Telegram
                   </label>
-                  <div class="hidden sm:flex items-center space-x-2 text-xs text-gray-500">
+                  <div class="hidden sm:flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
                     <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                     <span>Editable en tiempo real</span>
                   </div>
                 </div>
                 <div class="relative">
                   <textarea
-                    class="w-full h-48 sm:h-80 px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 rounded-lg sm:rounded-xl text-xs sm:text-sm placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white resize-none font-mono leading-relaxed shadow-sm"
+                    class="w-full h-48 sm:h-80 px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 dark:border-gray-600 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-all duration-200 bg-white dark:bg-gray-900 resize-none font-mono leading-relaxed shadow-sm"
                     placeholder="Tu mensaje se generará aquí..."
                     value={telegramMessage()}
                     onInput={(e) => setTelegramMessage(e.currentTarget.value)}
                   />
-                  <div class="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 text-xs text-gray-400 bg-white px-2 py-1 rounded-md border border-gray-200">
+                  <div class="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 text-xs text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
                     {telegramMessage().length}
                   </div>
                 </div>
               </div>
 
               {/* Botones del Modal */}
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200 shadow-sm space-y-3 sm:space-y-0">
-                <div class="hidden sm:flex items-center space-x-2 text-sm text-gray-600">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white dark:bg-gray-900 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-gray-700 shadow-sm space-y-3 sm:space-y-0">
+                <div class="hidden sm:flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
                   <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
                     <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1170,7 +1170,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
                   <button
                     onClick={() => setShowTelegramModal(false)}
-                    class="flex items-center justify-center space-x-2 px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 hover:border-gray-400 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
+                    class="flex items-center justify-center space-x-2 px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
                   >
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />

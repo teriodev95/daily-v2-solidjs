@@ -12,15 +12,15 @@ const SectionHeader: Component<SectionHeaderProps> = (props) => {
   const getColorClasses = () => {
     switch (props.color) {
       case 'green':
-        return { bg: 'bg-green-50', text: 'text-green-500' };
+        return { bg: 'bg-green-50 dark:bg-green-900/30', text: 'text-green-500 dark:text-green-400' };
       case 'blue':
-        return { bg: 'bg-blue-50', text: 'text-blue-500' };
+        return { bg: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-500 dark:text-blue-400' };
       case 'purple':
-        return { bg: 'bg-purple-50', text: 'text-purple-500' };
+        return { bg: 'bg-purple-50 dark:bg-purple-900/30', text: 'text-purple-500 dark:text-purple-400' };
       case 'amber':
-        return { bg: 'bg-amber-50', text: 'text-amber-500' };
+        return { bg: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-500 dark:text-amber-400' };
       default:
-        return { bg: 'bg-gray-50', text: 'text-gray-500' };
+        return { bg: 'bg-gray-50 dark:bg-gray-800', text: 'text-gray-500 dark:text-gray-400' };
     }
   };
 
@@ -33,9 +33,9 @@ const SectionHeader: Component<SectionHeaderProps> = (props) => {
           <span class={`${colors.text} text-xs sm:text-sm`}>{props.icon}</span>
         </div>
         <div>
-          <h2 class="text-sm sm:text-base font-semibold text-gray-800">{props.title}</h2>
+          <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">{props.title}</h2>
           {props.subtitle && (
-            <p class="text-xs text-gray-500 hidden sm:block">{props.subtitle}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">{props.subtitle}</p>
           )}
         </div>
       </div>

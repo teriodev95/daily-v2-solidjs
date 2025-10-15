@@ -43,13 +43,13 @@ const Modal: Component<ModalProps> = (props) => {
       <Portal mount={document.body}>
         <div class="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
-            class="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            class="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm"
             onClick={props.onClose}
             aria-hidden="true"
           />
 
           <div
-            class={`relative bg-white rounded-ios-sm shadow-ios-lg w-full ${
+            class={`relative bg-white dark:bg-gray-900 rounded-ios-sm shadow-ios-lg dark:shadow-2xl w-full ${
               sizeClasses[props.size || 'lg']
             } max-h-[90vh] flex flex-col animate-slide-up`}
             role="dialog"
@@ -57,19 +57,19 @@ const Modal: Component<ModalProps> = (props) => {
             aria-labelledby={props.title ? 'modal-title' : undefined}
           >
             {(props.title || props.showCloseButton !== false) && (
-              <div class="flex items-center justify-between px-6 py-4 border-b border-ios-gray-200">
+              <div class="flex items-center justify-between px-6 py-4 border-b border-ios-gray-200 dark:border-gray-700">
                 {props.title && (
-                  <h2 id="modal-title" class="text-lg font-medium text-ios-gray-900">
+                  <h2 id="modal-title" class="text-lg font-medium text-ios-gray-900 dark:text-white">
                     {props.title}
                   </h2>
                 )}
                 {props.showCloseButton !== false && (
                   <button
                     onClick={props.onClose}
-                    class="ml-auto p-1.5 hover:bg-ios-gray-100 rounded-ios-sm transition-colors"
+                    class="ml-auto p-1.5 hover:bg-ios-gray-100 dark:hover:bg-gray-800 rounded-ios-sm transition-colors"
                     aria-label="Cerrar modal"
                   >
-                    <svg class="w-4 h-4 text-ios-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 text-ios-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>

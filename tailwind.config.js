@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -78,6 +79,19 @@ module.exports = {
           "success": "#404040",
           "warning": "#525252",
           "error": "#171717",
+        },
+        "ios-dark": {
+          "primary": "#ffffff",
+          "secondary": "#e5e5e5",
+          "accent": "#d4d4d4",
+          "neutral": "#262626",
+          "base-100": "#000000",
+          "base-200": "#171717",
+          "base-300": "#262626",
+          "info": "#a3a3a3",
+          "success": "#34C759",
+          "warning": "#FF9500",
+          "error": "#FF3B30",
         },
       },
     ],

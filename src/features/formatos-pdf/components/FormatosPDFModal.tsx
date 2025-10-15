@@ -100,7 +100,7 @@ const FormatosPDFModal: Component<FormatosPDFModalProps> = (props) => {
       size="xl"
     >
       <div class="space-y-6">
-        <div class="flex items-center space-x-2 overflow-x-auto pb-2 border-b border-ios-gray-200 mb-4">
+        <div class="flex items-center space-x-2 overflow-x-auto pb-2 border-b border-ios-gray-200 dark:border-gray-700 mb-4">
           <For each={categories}>
             {(category) => (
               <button
@@ -108,8 +108,8 @@ const FormatosPDFModal: Component<FormatosPDFModalProps> = (props) => {
                 class={`
                   px-4 py-2 font-medium text-sm whitespace-nowrap transition-all border-b-2 -mb-[2px]
                   ${selectedCategory() === category.id
-                    ? 'text-ios-gray-900 border-ios-gray-900'
-                    : 'text-ios-gray-500 border-transparent hover:text-ios-gray-700'
+                    ? 'text-ios-gray-900 dark:text-white border-ios-gray-900 dark:border-white'
+                    : 'text-ios-gray-500 dark:text-gray-400 border-transparent hover:text-ios-gray-700 dark:hover:text-gray-300'
                   }
                 `}
               >
@@ -132,7 +132,7 @@ const FormatosPDFModal: Component<FormatosPDFModalProps> = (props) => {
 
         {filteredFormatos().length === 0 && (
           <div class="text-center py-12">
-            <p class="text-ios-gray-500">
+            <p class="text-ios-gray-500 dark:text-gray-400">
               No hay formatos disponibles en esta categoría
             </p>
           </div>
