@@ -1,5 +1,5 @@
 import { Component, createSignal, onMount, createMemo, onCleanup, Show, Index } from 'solid-js';
-import { DailyReport, WeekGoal, PriorityTask } from '../types';
+import { DailyReport, WeekGoal, PriorityTask, LearningItem } from '../types';
 import PriorityModal from './PriorityModal';
 import PriorityFAB from './PriorityFAB';
 import { getTodayFormatted, getCurrentWeekNumber } from '../utils/dateUtils';
@@ -17,7 +17,7 @@ interface DailyFormProps {
 
 const DailyForm: Component<DailyFormProps> = (props) => {
   // Estados básicos
-  const [learning, setLearning] = createSignal('');
+  const [learningData, setLearningData] = createSignal<LearningItem[]>([{ text: '', completed: false }]);
   const [impediments, setImpediments] = createSignal('');
   const [isSaving, setIsSaving] = createSignal(false);
   const [saveStatus, setSaveStatus] = createSignal<string>('');
@@ -219,7 +219,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     wrapper.dataset.section = sectionType;
 
     const container = document.createElement('div');
-    container.className = 'relative flex items-center space-x-3 group bg-white dark:bg-[#111111] rounded-xl border border-gray-200 dark:border-gray-800 p-3 hover:border-gray-300 dark:hover:border-gray-700 transition-all duration-200 shadow-sm dark:shadow-none';
+    container.className = 'group flex items-center bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-700 shadow-sm relative';
 
     // Hacer el container draggable para yesterday, today y pila
     if (sectionType === 'yesterday' || sectionType === 'today' || sectionType === 'pila') {
@@ -228,7 +228,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
       // Agregar icono de drag - Más visible y uniforme
       const dragHandle = document.createElement('div');
-      dragHandle.className = 'flex items-center justify-center w-6 h-6 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 flex-shrink-0';
+      dragHandle.className = 'flex items-center justify-center w-6 h-6 text-gray-600 hover:text-gray-400 transition-colors duration-200 flex-shrink-0 cursor-move mr-4';
       dragHandle.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>';
       container.appendChild(dragHandle);
 
@@ -375,7 +375,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
     // Textarea más uniforme y limpio
     const textarea = document.createElement('textarea');
-    textarea.className = 'flex-1 h-20 resize-none px-0 py-2 pr-12 border-0 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-0 focus:outline-none bg-transparent';
+    textarea.className = 'flex-1 h-auto min-h-[24px] resize-none border-none text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-0 text-base font-medium p-0 bg-transparent overflow-hidden';
     textarea.placeholder = placeholder;
     textarea.value = value;
 
@@ -399,7 +399,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     // Botón de eliminar más uniforme
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
-    removeButton.className = 'w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all duration-200';
+    removeButton.className = 'opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all duration-200 p-1';
     removeButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
     removeButton.disabled = !canRemove;
 
@@ -502,8 +502,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   const createAddButton = (text: string, onClick: () => void) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'w-full p-3 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-all duration-200 text-sm font-medium shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.03)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05)]';
-    button.textContent = text;
+    button.className = 'w-full py-4 border border-dashed border-gray-300 dark:border-gray-800 rounded-2xl text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-white/5 transition-all duration-200 flex items-center justify-center space-x-3 group';
+    button.innerHTML = `<span class="text-2xl font-light text-gray-400 dark:text-gray-600 group-hover:text-gray-600 dark:group-hover:text-gray-400">+</span><span class="font-medium">${text}</span>`;
     button.addEventListener('click', onClick);
     return button;
   };
@@ -534,7 +534,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       completedYesterdayContainer.appendChild(element);
     });
 
-    const addButton = createAddButton('+ ¿Algo más que logré?', () => {
+    const addButton = createAddButton('¿Algo más que logré?', () => {
       completedYesterdayData.push('');
       renderCompletedYesterday();
       triggerAutoSave(); // Activar auto-guardado al agregar elemento
@@ -621,7 +621,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       todayTasksContainer.appendChild(wrapper);
     });
 
-    const addButton = createAddButton('+ ¿Otra prioridad para hoy?', () => {
+    const addButton = createAddButton('¿Otra prioridad para hoy?', () => {
       todayTasksData.push('');
       renderTodayTasks();
       triggerAutoSave(); // Activar auto-guardado al agregar elemento
@@ -694,8 +694,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     // Checkbox visual personalizado (Circular)
     const checkboxVisual = document.createElement('div');
     checkboxVisual.className = `w-5 h-5 rounded-full border transition-all duration-200 cursor-pointer flex items-center justify-center ${goal.completed
-      ? 'bg-gray-600 border-gray-600'
-      : 'bg-transparent border-gray-500 hover:border-gray-400'
+      ? 'bg-gray-600 border-gray-600 dark:bg-gray-500 dark:border-gray-500'
+      : 'bg-transparent border-gray-400 dark:border-gray-500 hover:border-gray-600 dark:hover:border-gray-400'
       }`;
 
     // Event listeners para el checkbox visual
@@ -709,7 +709,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     // Input (Compacto)
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = `flex-1 bg-transparent border-0 p-0 text-sm text-gray-300 placeholder-gray-600 focus:ring-0 focus:outline-none truncate ${goal.completed ? 'line-through opacity-50' : ''}`;
+    input.className = `flex-1 bg-transparent border-0 p-0 text-sm text-gray-700 dark:text-gray-300 placeholder-gray-500 dark:placeholder-gray-600 focus:ring-0 focus:outline-none truncate ${goal.completed ? 'line-through opacity-50' : ''}`;
     input.placeholder = 'Escribe un objetivo...';
     input.value = goal.text;
 
@@ -771,7 +771,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       weekGoalsContainer.appendChild(element);
     });
 
-    const addButton = createAddButton('+ Añadir nuevo objetivo clave...', () => {
+    const addButton = createAddButton('Añadir nuevo objetivo clave...', () => {
       weekGoalsData.push({ text: '', completed: false });
       renderWeekGoals();
       triggerAutoSave();
@@ -779,7 +779,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
     // Estilizar el botón de agregar para que coincida con el diseño
     // Estilizar el botón de agregar para que coincida con el diseño (Icono + simple)
-    addButton.className = 'flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10 rounded-full transition-all duration-200';
+    addButton.className = 'flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-full transition-all duration-200';
     addButton.innerHTML = `
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
     `;
@@ -824,20 +824,35 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         weekGoalsData = [{ text: '', completed: false }];
       }
 
-      // Mantener compatibilidad con formato anterior y nuevo
-      if (typeof saved.learning === 'string') {
-        setLearning(saved.learning);
-      } else if (saved.learning && typeof saved.learning === 'object') {
-        // Convertir formato anterior a formato único
-        const legacyLearning = saved.learning as any;
-        const learningParts = [
-          legacyLearning.technical,
-          legacyLearning.personalGrowth,
-          legacyLearning.professionalGrowth
-        ].filter(Boolean);
-        setLearning(learningParts.join(', '));
+      // Mantener compatibilidad con formato anterior y nuevo para learning
+      if (saved.learning) {
+        if (Array.isArray(saved.learning)) {
+          // Formato nuevo: LearningItem[]
+          setLearningData(saved.learning as LearningItem[]);
+        } else if (typeof saved.learning === 'string') {
+          // Formato antiguo: string con saltos de línea
+          const lines = saved.learning.split('\n').filter(Boolean);
+          if (lines.length > 0) {
+            setLearningData(lines.map(text => ({ text, completed: false })));
+          } else {
+            setLearningData([{ text: '', completed: false }]);
+          }
+        } else if (typeof saved.learning === 'object') {
+          // Formato legacy con categorías
+          const legacyLearning = saved.learning as any;
+          const learningParts = [
+            legacyLearning.technical,
+            legacyLearning.personalGrowth,
+            legacyLearning.professionalGrowth
+          ].filter(Boolean);
+          if (learningParts.length > 0) {
+            setLearningData(learningParts.map(text => ({ text, completed: false })));
+          } else {
+            setLearningData([{ text: '', completed: false }]);
+          }
+        }
       } else {
-        setLearning('');
+        setLearningData([{ text: '', completed: false }]);
       }
 
       // Cargar impediments si existe
@@ -892,7 +907,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     todayTasks: todayTasksData,
     pila: pilaData,
     weekGoals: weekGoalsData,
-    learning: learning(),
+    learning: learningData(),
     impediments: impediments(),
     createdAt: new Date(),
     updatedAt: new Date()
@@ -923,7 +938,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     todayTasksData = [''];
     pilaData = [];
     weekGoalsData = [{ text: '', completed: false }];
-    setLearning('');
+    setLearningData([{ text: '', completed: false }]);
     setImpediments('');
 
     // Re-renderizar todas las secciones
@@ -970,17 +985,17 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       <div class="sticky top-[69px] lg:top-[80px] z-40 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 backdrop-blur-sm transition-all duration-300 flex items-center justify-center">
 
         {/* Barra de Objetivos */}
-        <div class="w-full max-w-4xl bg-[#0A0A0A] dark:bg-[#0A0A0A] rounded-full px-2 py-2 flex items-center shadow-lg border border-gray-800 overflow-hidden">
+        <div class="w-full max-w-4xl bg-white dark:bg-[#0A0A0A] rounded-full px-2 py-2 flex items-center shadow-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
           {/* Icon Section */}
-          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gray-800/50 flex items-center justify-center ml-1">
+          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800/50 flex items-center justify-center ml-1">
             <div class="relative w-5 h-5 flex items-center justify-center">
-              <div class="absolute inset-0 border-[1.5px] border-white rounded-full opacity-30"></div>
-              <div class="absolute inset-1 border-[1.5px] border-white rounded-full opacity-60"></div>
-              <div class="absolute inset-2 bg-white rounded-full"></div>
+              <div class="absolute inset-0 border-[1.5px] border-gray-900 dark:border-white rounded-full opacity-30"></div>
+              <div class="absolute inset-1 border-[1.5px] border-gray-900 dark:border-white rounded-full opacity-60"></div>
+              <div class="absolute inset-2 bg-gray-900 dark:bg-white rounded-full"></div>
             </div>
           </div>
 
-          <div class="h-6 w-px bg-gray-800 mx-3 hidden sm:block"></div>
+          <div class="h-6 w-px bg-gray-200 dark:bg-gray-800 mx-3 hidden sm:block"></div>
 
           {/* Horizontal Scrollable Goals */}
           {/* Horizontal Scrollable Goals */}
@@ -1007,23 +1022,19 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       < div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4" >
         {/* Sección: Ayer completé */}
         {/* Sección: Ayer completé */}
-        < div class="bg-white dark:bg-[#0A0A0A] border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-none transition-all duration-300" >
-          <div class="flex items-center justify-between mb-4 sm:mb-5">
-            <div class="flex items-center space-x-2 sm:space-x-3">
-              <div class="w-6 h-6 sm:w-8 sm:h-8 bg-green-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-                <Check class="text-green-500 w-3 h-3 sm:w-4 sm:h-4" />
-              </div>
-              <div>
-                <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿Qué logré ayer?</h2>
-                <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Reconoce tus avances</p>
-              </div>
+        {/* Sección: Ayer completé */}
+        <div class="space-y-4">
+          <div class="flex items-center space-x-4 mb-2 px-1">
+            <div class="w-12 h-12 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-gray-800 rounded-2xl flex items-center justify-center shadow-sm dark:shadow-lg">
+              <Check class="text-green-500 w-6 h-6" />
             </div>
-            <div class="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_2px_rgba(255,255,255,0.03)]">
-              Destino
+            <div>
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">¿Qué logré ayer?</h2>
+              <p class="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase">RECONOCE TUS AVANCES</p>
             </div>
           </div>
 
-          <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={completedYesterdayContainer!}></div>
+          <div class="space-y-3" ref={completedYesterdayContainer!}></div>
 
           {/* Indicador visual de drop zone - Más sutil */}
           <div class="absolute inset-2 sm:inset-3 border border-dashed border-green-200 dark:border-green-700 rounded-lg sm:rounded-xl bg-green-50/20 dark:bg-green-900/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="yesterday-drop-indicator">
@@ -1034,23 +1045,18 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         </div >
 
         {/* Sección: Hoy trabajaré en */}
-        < div class="bg-white dark:bg-[#0A0A0A] border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-none transition-all duration-300" >
-          <div class="flex items-center justify-between mb-4 sm:mb-5">
-            <div class="flex items-center space-x-2 sm:space-x-3">
-              <div class="w-6 h-6 sm:w-8 sm:h-8 bg-blue-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-                <ArrowRight class="text-blue-500 w-3 h-3 sm:w-4 sm:h-4" />
-              </div>
-              <div>
-                <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿En qué me enfocaré hoy?</h2>
-                <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Define tus prioridades</p>
-              </div>
+        <div class="space-y-4">
+          <div class="flex items-center space-x-4 mb-2 px-1">
+            <div class="w-12 h-12 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-gray-800 rounded-2xl flex items-center justify-center shadow-sm dark:shadow-lg">
+              <ArrowRight class="text-blue-500 w-6 h-6" />
             </div>
-            <div class="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_2px_rgba(255,255,255,0.03)]">
-              Destino
+            <div>
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">¿En qué me enfocaré hoy?</h2>
+              <p class="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase">DEFINE TUS PRIORIDADES</p>
             </div>
           </div>
 
-          <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={todayTasksContainer!}></div>
+          <div class="space-y-3" ref={todayTasksContainer!}></div>
 
           {/* Indicador visual de drop zone - Más sutil */}
           <div class="absolute inset-2 sm:inset-3 border border-dashed border-blue-200 dark:border-blue-700 rounded-lg sm:rounded-xl bg-blue-50/20 dark:bg-blue-900/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="today-drop-indicator">
@@ -1062,23 +1068,18 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       </div >
 
       {/* Sección: Pila (tareas para después) */}
-      < div class="bg-white dark:bg-[#0A0A0A] border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-none transition-all duration-300" >
-        <div class="flex items-center justify-between mb-4 sm:mb-5">
-          <div class="flex items-center space-x-2 sm:space-x-3">
-            <div class="w-6 h-6 sm:w-8 sm:h-8 bg-orange-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <Package class="text-orange-500 w-3 h-3 sm:w-4 sm:h-4" />
-            </div>
-            <div>
-              <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">Pila de tareas</h2>
-              <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Tareas para después</p>
-            </div>
+      <div class="space-y-4">
+        <div class="flex items-center space-x-4 mb-2 px-1">
+          <div class="w-12 h-12 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-gray-800 rounded-2xl flex items-center justify-center shadow-sm dark:shadow-lg">
+            <Package class="text-orange-500 w-6 h-6" />
           </div>
-          <div class="text-[9px] sm:text-[10px] text-gray-400 bg-gray-50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-            Destino
+          <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Pila de tareas</h2>
+            <p class="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase">TAREAS PARA DESPUÉS</p>
           </div>
         </div>
 
-        <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={pilaContainer!}></div>
+        <div class="space-y-3" ref={pilaContainer!}></div>
 
         {/* Indicador visual de drop zone */}
         <div class="absolute inset-2 sm:inset-3 border border-dashed border-orange-200 dark:border-orange-700 rounded-lg sm:rounded-xl bg-orange-50/20 dark:bg-orange-900/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="pila-drop-indicator">
@@ -1094,32 +1095,56 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       <div class="space-y-4">
         {/* Header inspirado en la imagen */}
         <div class="flex items-center space-x-4 mb-2 px-1">
-          <div class="w-12 h-12 bg-[#1A1A1A] border border-gray-800 rounded-2xl flex items-center justify-center shadow-lg">
+          <div class="w-12 h-12 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-gray-800 rounded-2xl flex items-center justify-center shadow-sm dark:shadow-lg">
             <BookOpen class="text-amber-500 w-6 h-6" />
           </div>
           <div>
-            <h2 class="text-xl font-bold text-white tracking-tight">¿Qué estoy aprendiendo?</h2>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">¿Qué estoy aprendiendo?</h2>
             <p class="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase">DOCUMENTA TU CRECIMIENTO</p>
           </div>
         </div>
 
         {/* Lista de items */}
         <div class="space-y-3">
-          <Index each={learning() ? learning().split('\n') : ['']}>
+          <Index each={learningData()}>
             {(item, index) => (
-              <div class="group flex items-center bg-[#0A0A0A] border border-gray-800 rounded-2xl p-4 transition-all duration-200 hover:border-gray-700 shadow-sm">
-                {/* Círculo indicador (estilo checkbox pero estático o funcional si se desea) */}
-                <div class="w-6 h-6 rounded-full border-2 border-gray-700 mr-4 flex-shrink-0 group-hover:border-gray-500 transition-colors"></div>
+              <div class="group flex items-center bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-700 shadow-sm">
+                {/* Checkbox circular funcional */}
+                <div
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const newData = [...learningData()];
+                    newData[index] = { ...newData[index], completed: !newData[index].completed };
+                    setLearningData(newData);
+                    triggerAutoSave();
+                  }}
+                  class={`w-6 h-6 rounded-full border-2 mr-4 flex-shrink-0 transition-all duration-200 flex items-center justify-center cursor-pointer ${
+                    item().completed
+                      ? 'bg-amber-500 border-amber-500'
+                      : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                  }`}
+                >
+                  {item().completed && (
+                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
 
                 <input
                   type="text"
-                  class="flex-1 bg-transparent border-none text-gray-200 placeholder-gray-600 focus:ring-0 text-base font-medium p-0"
+                  class={`flex-1 bg-transparent border-none placeholder-gray-400 dark:placeholder-gray-600 focus:ring-0 text-base font-medium p-0 ${
+                    item().completed
+                      ? 'text-gray-400 dark:text-gray-500 line-through'
+                      : 'text-gray-900 dark:text-gray-200'
+                  }`}
                   placeholder="Escribe un aprendizaje..."
-                  value={item()}
+                  value={item().text}
                   onInput={(e) => {
-                    const list = learning() ? learning().split('\n') : [''];
-                    list[index] = e.currentTarget.value;
-                    setLearning(list.join('\n'));
+                    const newData = [...learningData()];
+                    newData[index] = { ...newData[index], text: e.currentTarget.value };
+                    setLearningData(newData);
                     triggerAutoSave();
                   }}
                   onBlur={() => triggerImmediateAutoSave()}
@@ -1127,14 +1152,14 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
                 <button
                   onClick={() => {
-                    const list = learning() ? learning().split('\n') : [''];
-                    if (list.length > 0) {
-                      list.splice(index, 1);
-                      setLearning(list.join('\n'));
+                    const newData = [...learningData()];
+                    if (newData.length > 1) {
+                      newData.splice(index, 1);
+                      setLearningData(newData);
                       triggerAutoSave();
                     }
                   }}
-                  class="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all duration-200 p-1"
+                  class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-all duration-200 p-1"
                   title="Eliminar"
                 >
                   <Trash2 class="w-4 h-4" />
@@ -1147,50 +1172,79 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         {/* Botón de añadir */}
         <button
           onClick={() => {
-            const current = learning();
-            const newList = current ? current + '\n' : '';
-            setLearning(newList);
+            setLearningData([...learningData(), { text: '', completed: false }]);
             triggerAutoSave();
           }}
-          class="w-full py-4 border border-dashed border-gray-800 rounded-2xl text-gray-500 hover:text-gray-300 hover:border-gray-600 hover:bg-white/5 transition-all duration-200 flex items-center justify-center space-x-3 group"
+          class="w-full py-4 border border-dashed border-gray-300 dark:border-gray-800 rounded-2xl text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-white/5 transition-all duration-200 flex items-center justify-center space-x-3 group"
         >
-          <span class="text-2xl font-light text-gray-600 group-hover:text-gray-400">+</span>
+          <span class="text-2xl font-light text-gray-400 dark:text-gray-600 group-hover:text-gray-600 dark:group-hover:text-gray-400">+</span>
           <span class="font-medium">Añadir nuevo aprendizaje...</span>
         </button>
       </div>
 
       {/* Sección: Impedimentos */}
-      < div class="bg-white dark:bg-[#0A0A0A] border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-none transition-all duration-300" >
-        <div class="flex items-center space-x-2 sm:space-x-3 mb-4 sm:mb-5">
-          <div class="w-6 h-6 sm:w-8 sm:h-8 bg-red-50 dark:bg-red-900/30 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-            <AlertTriangle class="text-red-500 dark:text-red-400 w-3 h-3 sm:w-4 sm:h-4" />
+      {/* Sección: Impedimentos */}
+      <div class="space-y-4">
+        <div class="flex items-center space-x-4 mb-2 px-1">
+          <div class="w-12 h-12 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-gray-800 rounded-2xl flex items-center justify-center shadow-sm dark:shadow-lg">
+            <AlertTriangle class="text-red-500 w-6 h-6" />
           </div>
           <div>
-            <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿Qué impedimentos tengo?</h2>
-            <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Identifica obstáculos y bloqueos</p>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">¿Qué impedimentos tengo?</h2>
+            <p class="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase">IDENTIFICA OBSTÁCULOS</p>
           </div>
         </div>
 
-        <div>
-          <div>
-            <label class="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Impedimentos actuales
-            </label>
-            <textarea
-              class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 dark:border-gray-800 rounded-lg text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-700 focus:border-transparent transition-all duration-200 bg-white dark:bg-[#111111] h-20 sm:h-24 resize-none shadow-sm dark:shadow-none"
-              placeholder="¿Qué obstáculos, bloqueos o dificultades estás enfrentando? (usa - para separar varios elementos)"
-              value={impediments()}
-              onInput={(e) => {
-                setImpediments(e.currentTarget.value);
-                triggerAutoSave(); // Activar auto-guardado
-              }}
-              onBlur={() => {
-                triggerImmediateAutoSave(); // Guardar inmediatamente cuando sale del campo
-              }}
-            />
-          </div>
+        <div class="space-y-3">
+          <Index each={impediments() ? impediments().split('\n') : ['']}>
+            {(item, index) => (
+              <div class="group flex items-center bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-700 shadow-sm">
+                <div class="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-700 mr-4 flex-shrink-0 group-hover:border-gray-400 dark:group-hover:border-gray-500 transition-colors"></div>
+                <input
+                  type="text"
+                  class="flex-1 bg-transparent border-none text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-0 text-base font-medium p-0"
+                  placeholder="Escribe un impedimento..."
+                  value={item()}
+                  onInput={(e) => {
+                    const list = impediments() ? impediments().split('\n') : [''];
+                    list[index] = e.currentTarget.value;
+                    setImpediments(list.join('\n'));
+                    triggerAutoSave();
+                  }}
+                  onBlur={() => triggerImmediateAutoSave()}
+                />
+                <button
+                  onClick={() => {
+                    const list = impediments() ? impediments().split('\n') : [''];
+                    if (list.length > 0) {
+                      list.splice(index, 1);
+                      setImpediments(list.join('\n'));
+                      triggerAutoSave();
+                    }
+                  }}
+                  class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-all duration-200 p-1"
+                  title="Eliminar"
+                >
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </Index>
         </div>
-      </div >
+
+        <button
+          onClick={() => {
+            const current = impediments();
+            const newList = current ? current + '\n' : '';
+            setImpediments(newList);
+            triggerAutoSave();
+          }}
+          class="w-full py-4 border border-dashed border-gray-300 dark:border-gray-800 rounded-2xl text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-white/5 transition-all duration-200 flex items-center justify-center space-x-3 group"
+        >
+          <span class="text-2xl font-light text-gray-400 dark:text-gray-600 group-hover:text-gray-600 dark:group-hover:text-gray-400">+</span>
+          <span class="font-medium">Añadir nuevo impedimento...</span>
+        </button>
+      </div>
 
       {/* Priority Modal */}
       < Show when={activePriority() && !activePriority()?.isMinimized}>

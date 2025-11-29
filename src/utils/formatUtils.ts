@@ -1,4 +1,4 @@
-import { DailyReport, WeekGoal } from '../types';
+import { DailyReport, WeekGoal, LearningItem } from '../types';
 
 // Formatear reporte para copia
 export const formatReportForCopy = (report: DailyReport): string => {
@@ -70,10 +70,29 @@ export const formatReportForCopy = (report: DailyReport): string => {
   lines.push('');
   lines.push('**📚 ¿QUÉ ESTOY APRENDIENDO?**');
 
-  // Agregar aprendizaje (formato simple, respetando el formato del usuario)
-  if (report.learning && report.learning.trim()) {
-    // Mostrar el texto exactamente como lo escribió el usuario
-    lines.push(report.learning.trim());
+  // Agregar aprendizaje con soporte para el nuevo formato LearningItem[]
+  if (report.learning) {
+    if (Array.isArray(report.learning)) {
+      // Formato nuevo: LearningItem[]
+      const learnings = report.learning as LearningItem[];
+      const validLearnings = learnings.filter(item => item.text && item.text.trim());
+      if (validLearnings.length > 0) {
+        validLearnings.forEach(item => {
+          if (item.completed) {
+            lines.push(`▪️ ~~${item.text.trim()}~~`);
+          } else {
+            lines.push(`▪️ ${item.text.trim()}`);
+          }
+        });
+      } else {
+        lines.push('▫️ Sin aprendizaje documentado');
+      }
+    } else if (typeof report.learning === 'string' && report.learning.trim()) {
+      // Formato antiguo: string
+      lines.push(report.learning.trim());
+    } else {
+      lines.push('▫️ Sin aprendizaje documentado');
+    }
   } else {
     lines.push('▫️ Sin aprendizaje documentado');
   }

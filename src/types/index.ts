@@ -3,6 +3,11 @@ export interface WeekGoal {
   completed: boolean;
 }
 
+export interface LearningItem {
+  text: string;
+  completed: boolean;
+}
+
 export interface DailyReport {
   id?: string;
   _id?: string;
@@ -13,7 +18,7 @@ export interface DailyReport {
   todayTasks: string[];
   pila: string[];
   weekGoals: string[] | WeekGoal[];
-  learning: string;
+  learning: string | LearningItem[];
   impediments: string;
   createdAt: Date;
   updatedAt: Date;

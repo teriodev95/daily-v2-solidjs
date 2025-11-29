@@ -1,13 +1,16 @@
 import type { Component } from 'solid-js';
-import { createSignal, onMount } from 'solid-js';
+import { createSignal, onMount, onCleanup, Show } from 'solid-js';
 import DailyForm from './components/DailyForm';
 import { DailyReport } from './types';
 import FormatosPDFModal from './features/formatos-pdf/components/FormatosPDFModal';
 import { generarPruebaSolimPDF } from './features/formatos-pdf/services/pruebaSolimPDF';
+import { generateDailyObjectivesPDF, generateDailyTemplatePDF } from './utils/pdfGenerator';
+import { loadReport } from './utils/database';
 
 const App: Component = () => {
   const [isDarkMode, setIsDarkMode] = createSignal(true); // Iniciar en modo oscuro por defecto
   const [isFormatosPDFModalOpen, setIsFormatosPDFModalOpen] = createSignal(false);
+  const [showPrintMenu, setShowPrintMenu] = createSignal(false);
 
   onMount(() => {
     // Verificar preferencia guardada, si no existe usar modo oscuro por defecto
@@ -44,26 +47,53 @@ const App: Component = () => {
     await generarPruebaSolimPDF();
   };
 
+  const handlePrintObjectives = () => {
+    const report = loadReport();
+    if (report) {
+      generateDailyObjectivesPDF(report);
+    }
+    setShowPrintMenu(false);
+  };
+
+  const handlePrintComplete = () => {
+    const report = loadReport();
+    if (report) {
+      generateDailyTemplatePDF(report);
+    }
+    setShowPrintMenu(false);
+  };
+
+  // Cerrar menú al hacer clic fuera
+  const handleClickOutside = (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('.print-menu-container')) {
+      setShowPrintMenu(false);
+    }
+  };
+
+  onMount(() => {
+    document.addEventListener('click', handleClickOutside);
+  });
+
+  onCleanup(() => {
+    document.removeEventListener('click', handleClickOutside);
+  });
+
   return (
     <div class="min-h-screen bg-gray-50 dark:bg-black font-system transition-colors duration-200">
       {/* Header minimalista y simétrico */}
-      <header class="bg-black/95 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50 transition-colors duration-200">
+      <header class="bg-white/95 dark:bg-black/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50 transition-colors duration-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Desktop Layout */}
           <div class="hidden lg:flex items-center justify-between h-20">
 
             {/* Lado izquierdo - Logo y título */}
             <div class="flex items-center space-x-4 min-w-0">
-              <div class="w-10 h-10 bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="4" y="4" width="7" height="7" rx="1" stroke="black" stroke-width="2" />
-                  <rect x="13" y="4" width="7" height="7" rx="1" stroke="black" stroke-width="2" />
-                  <rect x="4" y="13" width="7" height="7" rx="1" stroke="black" stroke-width="2" />
-                  <rect x="13" y="13" width="7" height="7" rx="1" stroke="black" stroke-width="2" />
-                </svg>
+              <div class="w-10 h-10 bg-gray-900 dark:bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
+                <span class="text-white dark:text-black text-xl font-bold">D</span>
               </div>
               <div class="min-w-0">
-                <h1 class="text-lg font-bold text-white truncate">
+                <h1 class="text-lg font-bold text-gray-900 dark:text-white truncate">
                   Daily Check
                 </h1>
                 <p class="text-sm text-gray-500">
@@ -79,22 +109,49 @@ const App: Component = () => {
 
             {/* Lado derecho - Acciones y Toggle */}
             <div class="flex items-center justify-end space-x-6">
-              {/* Botones de acción (Print, Save, Share) */}
-              <div class="flex items-center bg-[#1A1A1A] rounded-full px-4 py-2 space-x-4 border border-gray-800">
+              {/* Botones de acción (Print, Share) */}
+              <div class="flex items-center bg-gray-100 dark:bg-[#1A1A1A] rounded-full px-4 py-2 space-x-4 border border-gray-200 dark:border-gray-800">
+                {/* Botón de imprimir con menú */}
+                <div class="relative print-menu-container flex items-center">
+                  <button
+                    class="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors flex items-center justify-center"
+                    title="Imprimir"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowPrintMenu(!showPrintMenu());
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                  </button>
+
+                  {/* Menú desplegable */}
+                  <Show when={showPrintMenu()}>
+                    <div class="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-[#1A1A1A] rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+                      <button
+                        class="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center space-x-3 transition-colors"
+                        onClick={handlePrintObjectives}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                        <div>
+                          <p class="font-medium">Solo objetivos del día</p>
+                          <p class="text-xs text-gray-500 dark:text-gray-400">Tareas de hoy con espacio para notas</p>
+                        </div>
+                      </button>
+                      <button
+                        class="w-full px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center space-x-3 transition-colors"
+                        onClick={handlePrintComplete}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg>
+                        <div>
+                          <p class="font-medium">Reporte completo</p>
+                          <p class="text-xs text-gray-500 dark:text-gray-400">Incluye todas las secciones</p>
+                        </div>
+                      </button>
+                    </div>
+                  </Show>
+                </div>
                 <button
-                  class="text-gray-400 hover:text-white transition-colors"
-                  title="Imprimir"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                </button>
-                <button
-                  class="text-gray-400 hover:text-white transition-colors"
-                  title="Guardar"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                </button>
-                <button
-                  class="text-gray-400 hover:text-white transition-colors"
+                  class="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors flex items-center justify-center"
                   title="Compartir en Telegram"
                   onClick={() => document.dispatchEvent(new CustomEvent('open-telegram-modal'))}
                 >
@@ -102,12 +159,12 @@ const App: Component = () => {
                 </button>
               </div>
 
-              <div class="h-8 w-px bg-gray-800"></div>
+              <div class="h-8 w-px bg-gray-200 dark:bg-gray-800"></div>
 
               {/* Botón de modo oscuro (Circular) */}
               <button
                 onClick={toggleTheme}
-                class="w-10 h-10 rounded-full bg-[#1A1A1A] border border-gray-800 flex items-center justify-center text-blue-400 hover:bg-gray-800 transition-all duration-200"
+                class="w-10 h-10 rounded-full bg-gray-100 dark:bg-[#1A1A1A] border border-gray-200 dark:border-gray-800 flex items-center justify-center text-blue-500 dark:text-blue-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-all duration-200"
                 aria-label="Toggle dark mode"
               >
                 {isDarkMode() ? (
