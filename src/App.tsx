@@ -47,63 +47,81 @@ const App: Component = () => {
   return (
     <div class="min-h-screen bg-gray-50 dark:bg-black font-system transition-colors duration-200">
       {/* Header minimalista y simétrico */}
-      <header class="bg-white/95 dark:bg-black/95 backdrop-blur-md border-b border-gray-200/60 dark:border-gray-800 sticky top-0 z-50 shadow-[0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.02)] transition-colors duration-200">
+      <header class="bg-black/95 backdrop-blur-md border-b border-gray-800 sticky top-0 z-50 transition-colors duration-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Desktop Layout */}
           <div class="hidden lg:flex items-center justify-between h-20">
 
             {/* Lado izquierdo - Logo y título */}
             <div class="flex items-center space-x-4 min-w-0">
-              <div class="w-10 h-10 bg-gray-900 dark:bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-                <span class="text-white dark:text-black text-lg font-bold">D</span>
+              <div class="w-10 h-10 bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="7" height="7" rx="1" stroke="black" stroke-width="2" />
+                  <rect x="13" y="4" width="7" height="7" rx="1" stroke="black" stroke-width="2" />
+                  <rect x="4" y="13" width="7" height="7" rx="1" stroke="black" stroke-width="2" />
+                  <rect x="13" y="13" width="7" height="7" rx="1" stroke="black" stroke-width="2" />
+                </svg>
               </div>
               <div class="min-w-0">
-                <h1 class="text-xl font-bold text-gray-900 dark:text-white truncate">
+                <h1 class="text-lg font-bold text-white truncate">
                   Daily Check
                 </h1>
-                <p class="text-sm text-gray-500 dark:text-gray-400">
-                  Tu reporte diario
+                <p class="text-sm text-gray-500">
+                  {new Date().toLocaleDateString('es-ES', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                  })}
                 </p>
               </div>
             </div>
 
-            {/* Lado derecho - Fecha, semana y toggle */}
-            <div class="flex items-center justify-end space-x-4">
-              {/* Botón de modo oscuro */}
+            {/* Lado derecho - Acciones y Toggle */}
+            <div class="flex items-center justify-end space-x-6">
+              {/* Botones de acción (Print, Save, Share) */}
+              <div class="flex items-center bg-[#1A1A1A] rounded-full px-4 py-2 space-x-4 border border-gray-800">
+                <button
+                  class="text-gray-400 hover:text-white transition-colors"
+                  title="Imprimir"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                </button>
+                <button
+                  class="text-gray-400 hover:text-white transition-colors"
+                  title="Guardar"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                </button>
+                <button
+                  class="text-gray-400 hover:text-white transition-colors"
+                  title="Compartir en Telegram"
+                  onClick={() => document.dispatchEvent(new CustomEvent('open-telegram-modal'))}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+              </div>
+
+              <div class="h-8 w-px bg-gray-800"></div>
+
+              {/* Botón de modo oscuro (Circular) */}
               <button
                 onClick={toggleTheme}
-                class="relative w-14 h-8 bg-gray-200 dark:bg-gray-700 rounded-full transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-ios-blue-500 dark:focus:ring-ios-blue-400 shadow-ios-inner"
+                class="w-10 h-10 rounded-full bg-[#1A1A1A] border border-gray-800 flex items-center justify-center text-blue-400 hover:bg-gray-800 transition-all duration-200"
                 aria-label="Toggle dark mode"
               >
-                <div class="absolute inset-0 flex items-center justify-between px-1">
-                  <svg class="w-4 h-4 text-yellow-500 dark:text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path>
-                  </svg>
-                  <svg class="w-4 h-4 text-gray-400 dark:text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
-                  </svg>
-                </div>
-                <div class={`absolute top-1 left-1 w-6 h-6 bg-white dark:bg-gray-900 rounded-full shadow-md transition-transform duration-300 ease-in-out transform ${isDarkMode() ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                {isDarkMode() ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                )}
               </button>
-              <div class="text-right bg-gray-50/60 dark:bg-gray-900/60 rounded-2xl px-4 py-3 border border-gray-200/40 dark:border-gray-700/40 shadow-sm">
-                <div class="flex flex-col items-end space-y-0.5">
-                  <p class="text-sm font-semibold text-gray-900 dark:text-white leading-tight">
-                    {new Date().toLocaleDateString('es-ES', {
-                      weekday: 'long',
-                      day: 'numeric',
-                      month: 'long'
-                    })}
-                  </p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                    Semana {Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))} • {new Date().getFullYear()}
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
 
+
           {/* Mobile/Tablet Layout */}
-          <div class="flex lg:hidden items-center justify-between py-4">
+          < div class="flex lg:hidden items-center justify-between py-4" >
             <div class="flex items-center space-x-3 min-w-0 flex-1">
               <div class="w-9 h-9 bg-gray-900 dark:bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
                 <span class="text-white dark:text-black text-base font-bold">D</span>
@@ -148,21 +166,21 @@ const App: Component = () => {
                 </p>
               </div>
             </div>
-          </div>
-        </div>
-      </header>
+          </div >
+        </div >
+      </header >
 
       {/* Contenido Principal */}
-      <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      < main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8" >
         <DailyForm
           onSave={handleReportSave}
           onOpenFormatosPDF={() => setIsFormatosPDFModalOpen(true)}
           onGenerateSolimPDF={handleQuickSolimPDF}
         />
-      </main>
+      </main >
 
       {/* Footer minimalista */}
-      <footer class="bg-white dark:bg-black border-t border-gray-200 dark:border-gray-800 mt-16 transition-colors duration-200">
+      < footer class="bg-white dark:bg-black border-t border-gray-200 dark:border-gray-800 mt-16 transition-colors duration-200" >
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
           <div class="text-center">
             <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
@@ -173,14 +191,14 @@ const App: Component = () => {
             </p>
           </div>
         </div>
-      </footer>
+      </footer >
 
       {/* Modal de Formatos PDF */}
-      <FormatosPDFModal
+      < FormatosPDFModal
         isOpen={isFormatosPDFModalOpen()}
         onClose={() => setIsFormatosPDFModalOpen(false)}
       />
-    </div>
+    </div >
   );
 };
 

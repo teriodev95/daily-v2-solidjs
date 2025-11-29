@@ -1,4 +1,4 @@
-import { Component, createSignal, onMount, createMemo, onCleanup, Show } from 'solid-js';
+import { Component, createSignal, onMount, createMemo, onCleanup, Show, Index } from 'solid-js';
 import { DailyReport, WeekGoal, PriorityTask } from '../types';
 import PriorityModal from './PriorityModal';
 import PriorityFAB from './PriorityFAB';
@@ -29,10 +29,10 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   const [activePriority, setActivePriority] = createSignal<PriorityTask | null>(null);
 
   // Containers para las secciones dinámicas
-  let completedYesterdayContainer: HTMLDivElement;
-  let todayTasksContainer: HTMLDivElement;
-  let pilaContainer: HTMLDivElement;
-  let weekGoalsContainer: HTMLDivElement;
+  let completedYesterdayContainer: HTMLDivElement = undefined!;
+  let todayTasksContainer: HTMLDivElement = undefined!;
+  let pilaContainer: HTMLDivElement = undefined!;
+  let weekGoalsContainer: HTMLDivElement = undefined!;
 
   // Datos internos (no reactivos)
   let completedYesterdayData: string[] = [''];
@@ -49,7 +49,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     if (autoSaveTimer) {
       clearTimeout(autoSaveTimer);
     }
-    
+
     autoSaveTimer = window.setTimeout(() => {
       handleAutoSave();
     }, 1500); // Esperar 1.5 segundos después de que el usuario deje de escribir
@@ -90,6 +90,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     if (priorityTimer) {
       clearInterval(priorityTimer);
     }
+    // Limpiar listener de Telegram
+    document.removeEventListener('open-telegram-modal', handleOpenTelegramModal);
   });
 
   // Funciones para manejar la prioridad
@@ -217,7 +219,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     wrapper.dataset.section = sectionType;
 
     const container = document.createElement('div');
-    container.className = 'relative flex items-center space-x-3 group bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-3 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]';
+    container.className = 'relative flex items-center space-x-3 group bg-white dark:bg-[#111111] rounded-xl border border-gray-200 dark:border-gray-800 p-3 hover:border-gray-300 dark:hover:border-gray-700 transition-all duration-200 shadow-sm dark:shadow-none';
 
     // Hacer el container draggable para yesterday, today y pila
     if (sectionType === 'yesterday' || sectionType === 'today' || sectionType === 'pila') {
@@ -376,7 +378,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     textarea.className = 'flex-1 h-20 resize-none px-0 py-2 pr-12 border-0 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-0 focus:outline-none bg-transparent';
     textarea.placeholder = placeholder;
     textarea.value = value;
-    
+
     // Event listener para actualizar el valor y triggear auto-guardado
     textarea.addEventListener('input', (e) => {
       onUpdate(index, (e.target as HTMLTextAreaElement).value);
@@ -436,9 +438,9 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   // Función para crear zona de drop
   const createDropZone = (sectionType: 'yesterday' | 'today' | 'pila', container: HTMLElement) => {
     const indicatorId = sectionType === 'yesterday' ? 'yesterday-drop-indicator' :
-                        sectionType === 'today' ? 'today-drop-indicator' :
-                        'pila-drop-indicator';
-    
+      sectionType === 'today' ? 'today-drop-indicator' :
+        'pila-drop-indicator';
+
     container.addEventListener('dragover', (e) => {
       e.preventDefault();
       const indicator = document.getElementById(indicatorId);
@@ -466,10 +468,10 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         indicator.style.opacity = '0';
       }
       container.classList.remove('bg-blue-50', 'border-blue-300');
-      
+
       const data = JSON.parse(e.dataTransfer!.getData('text/plain'));
       const { sourceSection, sourceIndex, value } = data;
-      
+
       // No hacer nada si se suelta en la misma sección
       if (sourceSection === sectionType) return;
 
@@ -509,13 +511,13 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   // Funciones para renderizar secciones
   const renderCompletedYesterday = () => {
     completedYesterdayContainer.innerHTML = '';
-    
+
     completedYesterdayData.forEach((value, index) => {
       const element = createTextarea(
         '¿Qué específico completé?',
         value,
-        (idx, val) => { 
-          completedYesterdayData[idx] = val; 
+        (idx, val) => {
+          completedYesterdayData[idx] = val;
           triggerAutoSave(); // Activar auto-guardado
         },
         (idx) => {
@@ -538,7 +540,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       triggerAutoSave(); // Activar auto-guardado al agregar elemento
     });
     completedYesterdayContainer.appendChild(addButton);
-    
+
     // Configurar zona de drop
     createDropZone('yesterday', completedYesterdayContainer);
   };
@@ -625,7 +627,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       triggerAutoSave(); // Activar auto-guardado al agregar elemento
     });
     todayTasksContainer.appendChild(addButton);
-    
+
     // Configurar zona de drop
     createDropZone('today', todayTasksContainer);
   };
@@ -674,12 +676,12 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     canRemove: boolean
   ) => {
     const container = document.createElement('div');
-    container.className = 'flex items-center space-x-3 group bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-3 hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]';
+    container.className = 'flex items-center space-x-3 flex-shrink-0 min-w-[280px] max-w-[320px] group';
 
-    // Checkbox personalizado con diseño moderno
+    // Checkbox personalizado circular
     const checkboxContainer = document.createElement('div');
     checkboxContainer.className = 'relative flex items-center justify-center flex-shrink-0';
-    
+
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = goal.completed;
@@ -689,18 +691,12 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       triggerAutoSave();
     });
 
-    // Checkbox visual personalizado
+    // Checkbox visual personalizado (Circular)
     const checkboxVisual = document.createElement('div');
-    checkboxVisual.className = `w-6 h-6 rounded-lg border-2 transition-all duration-200 cursor-pointer flex items-center justify-center ${
-      goal.completed 
-        ? 'bg-green-500 border-green-500 shadow-[0_2px_8px_-2px_rgba(34,197,94,0.4)]' 
-        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 hover:border-green-400 dark:hover:border-green-500 hover:shadow-[0_2px_8px_-2px_rgba(34,197,94,0.2)]'
-    }`;
-    
-    // Icono de check
-    if (goal.completed) {
-      checkboxVisual.innerHTML = '<svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>';
-    }
+    checkboxVisual.className = `w-5 h-5 rounded-full border transition-all duration-200 cursor-pointer flex items-center justify-center ${goal.completed
+      ? 'bg-gray-600 border-gray-600'
+      : 'bg-transparent border-gray-500 hover:border-gray-400'
+      }`;
 
     // Event listeners para el checkbox visual
     checkboxVisual.addEventListener('click', () => {
@@ -710,36 +706,38 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     checkboxContainer.appendChild(checkbox);
     checkboxContainer.appendChild(checkboxVisual);
 
-    // Textarea
-    const textarea = document.createElement('textarea');
-    textarea.className = `flex-1 h-20 resize-none px-0 py-2 border-0 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-0 focus:outline-none bg-transparent ${goal.completed ? 'line-through opacity-60' : ''}`;
-    textarea.placeholder = '¿Qué objetivo específico quiero lograr?';
-    textarea.value = goal.text;
+    // Input (Compacto)
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = `flex-1 bg-transparent border-0 p-0 text-sm text-gray-300 placeholder-gray-600 focus:ring-0 focus:outline-none truncate ${goal.completed ? 'line-through opacity-50' : ''}`;
+    input.placeholder = 'Escribe un objetivo...';
+    input.value = goal.text;
 
-    textarea.addEventListener('input', (e) => {
-      onUpdate(index, (e.target as HTMLTextAreaElement).value);
+    input.addEventListener('input', (e) => {
+      onUpdate(index, (e.target as HTMLInputElement).value);
       triggerAutoSave();
     });
 
-    textarea.addEventListener('blur', () => {
+    input.addEventListener('blur', () => {
       triggerImmediateAutoSave();
     });
 
-    // Botón de eliminar
+    // Botón de eliminar (visible solo en hover)
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
     removeButton.className = canRemove
-      ? 'w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all duration-200 flex-shrink-0'
-      : 'w-8 h-8 flex items-center justify-center text-gray-300 dark:text-gray-600 rounded-lg cursor-not-allowed opacity-50 flex-shrink-0';
-    removeButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
-    removeButton.disabled = !canRemove;
+      ? 'w-6 h-6 flex items-center justify-center text-gray-600 hover:text-red-400 rounded-full hover:bg-white/5 transition-all duration-200 flex-shrink-0 opacity-0 group-hover:opacity-100'
+      : 'hidden';
+    removeButton.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
 
-    removeButton.addEventListener('click', () => {
-      if (canRemove) onRemove(index);
-    });
+    if (canRemove) {
+      removeButton.addEventListener('click', () => {
+        onRemove(index);
+      });
+    }
 
     container.appendChild(checkboxContainer);
-    container.appendChild(textarea);
+    container.appendChild(input);
     container.appendChild(removeButton);
 
     return container;
@@ -773,11 +771,19 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       weekGoalsContainer.appendChild(element);
     });
 
-    const addButton = createAddButton('+ ¿Otro objetivo para la semana?', () => {
+    const addButton = createAddButton('+ Añadir nuevo objetivo clave...', () => {
       weekGoalsData.push({ text: '', completed: false });
       renderWeekGoals();
       triggerAutoSave();
     });
+
+    // Estilizar el botón de agregar para que coincida con el diseño
+    // Estilizar el botón de agregar para que coincida con el diseño (Icono + simple)
+    addButton.className = 'flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10 rounded-full transition-all duration-200';
+    addButton.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    `;
+
     weekGoalsContainer.appendChild(addButton);
   };
 
@@ -823,10 +829,11 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         setLearning(saved.learning);
       } else if (saved.learning && typeof saved.learning === 'object') {
         // Convertir formato anterior a formato único
+        const legacyLearning = saved.learning as any;
         const learningParts = [
-          saved.learning.technical,
-          saved.learning.personalGrowth, 
-          saved.learning.professionalGrowth
+          legacyLearning.technical,
+          legacyLearning.personalGrowth,
+          legacyLearning.professionalGrowth
         ].filter(Boolean);
         setLearning(learningParts.join(', '));
       } else {
@@ -845,6 +852,9 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     renderTodayTasks();
     renderPila();
     renderWeekGoals();
+
+    // Escuchar evento de apertura de modal de Telegram desde el header
+    document.addEventListener('open-telegram-modal', handleOpenTelegramModal);
 
     // Cargar prioridad activa si existe (después de cargar las tareas)
     const savedPriority = loadPriority();
@@ -895,7 +905,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       const report = currentReport();
       const savedReport = saveReport(report);
       setSaveStatus('Guardado exitosamente');
-        setTimeout(() => setSaveStatus(''), 3000);
+      setTimeout(() => setSaveStatus(''), 3000);
       props.onSave?.(savedReport);
     } catch (error) {
       console.error('Error al guardar:', error);
@@ -921,10 +931,10 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     renderTodayTasks();
     renderPila();
     renderWeekGoals();
-    
+
     // Limpiar localStorage
     localStorage.removeItem('solidjs-daily-report');
-    
+
     setSaveStatus('Formulario limpiado');
     setTimeout(() => setSaveStatus(''), 3000);
   };
@@ -954,172 +964,77 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   };
 
   return (
-        <div class="space-y-4 sm:space-y-6">
-      {/* Card de acciones principales */}
-      <Card variant="gradient" class="p-4 sm:p-6">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-5 gap-4">
-          <div class="flex items-center space-x-3 sm:space-x-4">
-            <div class="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-gray-600 to-gray-800 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)]">
-              <Zap class="text-white w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div>
-              <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Panel de control</h3>
-              <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Gestiona tu reporte diario</p>
+    <div class="space-y-4 sm:space-y-6">
+      {/* Sección: Objetivos de la semana - Floating/Sticky iOS Style */}
+      {/* Sección: Objetivos de la semana - Floating/Sticky Compact Bar */}
+      <div class="sticky top-[69px] lg:top-[80px] z-40 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 backdrop-blur-sm transition-all duration-300 flex items-center justify-center">
+
+        {/* Barra de Objetivos */}
+        <div class="w-full max-w-4xl bg-[#0A0A0A] dark:bg-[#0A0A0A] rounded-full px-2 py-2 flex items-center shadow-lg border border-gray-800 overflow-hidden">
+          {/* Icon Section */}
+          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gray-800/50 flex items-center justify-center ml-1">
+            <div class="relative w-5 h-5 flex items-center justify-center">
+              <div class="absolute inset-0 border-[1.5px] border-white rounded-full opacity-30"></div>
+              <div class="absolute inset-1 border-[1.5px] border-white rounded-full opacity-60"></div>
+              <div class="absolute inset-2 bg-white rounded-full"></div>
             </div>
           </div>
 
-          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            {/* Botón de Imprimir con menú desplegable */}
-            <div class="relative">
-              <button
-                class="flex items-center justify-center space-x-2 text-xs sm:text-sm text-blue-600 hover:text-blue-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-blue-50 border border-blue-200 hover:border-blue-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
-                onClick={() => setShowPrintMenu(!showPrintMenu())}
-              >
-                <Printer class="w-3 h-3 sm:w-4 sm:h-4" />
-                <span>Imprimir</span>
-              </button>
+          <div class="h-6 w-px bg-gray-800 mx-3 hidden sm:block"></div>
 
-              {/* Menú desplegable de opciones de impresión */}
-              {showPrintMenu() && (
-                <div class="absolute top-full mt-2 left-0 z-10 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_24px_-4px_rgba(255,255,255,0.08)] py-2 min-w-[220px] overflow-hidden">
-                  <button
-                    class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 flex items-center space-x-3"
-                    onClick={() => {
-                      generateDailyTemplatePDF(currentReport());
-                      setShowPrintMenu(false);
-                    }}
-                  >
-                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-7.5A3.375 3.375 0 0 0 5.25 11.25v2.625m14.25 0a3.375 3.375 0 0 1-3.375 3.375h-7.5a3.375 3.375 0 0 1-3.375-3.375m14.25 0V16.5a2.25 2.25 0 0 1-2.25 2.25h-7.5a2.25 2.25 0 0 1-2.25-2.25v-0.75" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div class="font-semibold text-gray-900 dark:text-white">Reporte completo</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400">Todas las secciones incluidas</div>
-                    </div>
-                  </button>
-                  <button
-                    class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 flex items-center space-x-3"
-                    onClick={() => {
-                      generateDailyObjectivesPDF(currentReport());
-                      setShowPrintMenu(false);
-                    }}
-                  >
-                    <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg class="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div class="font-semibold text-gray-900 dark:text-white">Solo objetivos</div>
-                      <div class="text-xs text-gray-500 dark:text-gray-400">Enfoque en tareas del día</div>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <button
-              class="flex items-center justify-center space-x-2 text-xs sm:text-sm text-purple-600 hover:text-purple-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-purple-50 border border-purple-200 hover:border-purple-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
-              onClick={() => props.onGenerateSolimPDF?.()}
-              title="Generar formato SOLIM"
-            >
-              <FileText class="w-3 h-3 sm:w-4 sm:h-4" />
-              <span>SOLIM</span>
-            </button>
-
-            <button
-              class="flex items-center justify-center space-x-2 text-xs sm:text-sm text-orange-600 hover:text-orange-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-orange-50 border border-orange-200 hover:border-orange-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
-              onClick={() => props.onOpenFormatosPDF?.()}
-            >
-              <FileText class="w-3 h-3 sm:w-4 sm:h-4" />
-              <span>Formatos</span>
-            </button>
-
-            <button
-              class="flex items-center justify-center space-x-2 text-xs sm:text-sm text-red-600 hover:text-red-800 transition-colors duration-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl hover:bg-red-50 border border-red-200 hover:border-red-300 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
-              onClick={handleClearForm}
-            >
-              <Trash2 class="w-3 h-3 sm:w-4 sm:h-4" />
-              <span>Limpiar</span>
-            </button>
-
-            <button
-              class={`flex items-center justify-center space-x-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all duration-200 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2),0_4px_16px_-4px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25),0_8px_24px_-8px_rgba(0,0,0,0.2)] ${isSaving() ? 'opacity-50 cursor-not-allowed' : ''}`}
-              onClick={handleSave}
-              disabled={isSaving()}
-            >
-              {isSaving() ? <Clock class="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : <Save class="w-3 h-3 sm:w-4 sm:h-4" />}
-              <span>{isSaving() ? 'Guardando...' : 'Guardar'}</span>
-            </button>
-
-            <button
-              class="flex items-center justify-center space-x-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-50 text-blue-700 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:bg-blue-100 transition-all duration-200 border border-blue-200 hover:border-blue-300 shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)]"
-              onClick={handleOpenTelegramModal}
-            >
-              <Smartphone class="w-3 h-3 sm:w-4 sm:h-4" />
-              <span>Telegram</span>
-            </button>
+          {/* Horizontal Scrollable Goals */}
+          {/* Horizontal Scrollable Goals */}
+          <div class="flex-1 flex items-center overflow-x-auto space-x-6 px-2 no-scrollbar mask-linear-fade" ref={weekGoalsContainer!}>
+            {/* Goals injected here */}
           </div>
         </div>
 
-        {/* Status Message - Más prominente */}
-        {saveStatus() && (
+      </div>
+
+      {/* Status Message - Más prominente */}
+      {
+        saveStatus() && (
           <div class={`mb-3 sm:mb-4 p-3 sm:p-4 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium flex items-center space-x-2 sm:space-x-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] ${saveStatus().includes('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'} transition-all duration-300`}>
             <span class="text-sm sm:text-lg">{saveStatus().includes('Error') ? '❌' : '✅'}</span>
             <span>{saveStatus()}</span>
-                  </div>
-                )}
-        
-        <div class="pt-3 sm:pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div class="flex items-center justify-center space-x-2 text-gray-400 dark:text-gray-500">
-            <span class={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all duration-300 ${isAutoSaving() ? 'bg-blue-400 animate-pulse' : 'bg-green-400 animate-pulse'}`}></span>
-            <p class="text-xs font-medium uppercase tracking-wider">
-              {isAutoSaving() ? 'Guardando automáticamente...' : 'Guardado automático activo'}
-            </p>
           </div>
-        </div>
-      </Card>
+        )
+      }
 
-      {/* Instrucciones de Drag & Drop - Más sutil */}
-      <div class="bg-gradient-to-r from-blue-50/50 to-blue-50/30 dark:from-blue-900/20 dark:to-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-lg sm:rounded-xl p-3 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.02)] select-none" style="pointer-events: auto;">
-        <div class="flex items-center space-x-2 mb-1">
-          <span class="text-blue-500 dark:text-blue-400 text-xs">💡</span>
-          <span class="text-xs font-medium text-blue-700 dark:text-blue-300">Reorganiza tus tareas</span>
-        </div>
-        <p class="text-xs text-blue-600 dark:text-blue-400 opacity-80">
-          Arrastra las tareas entre secciones usando el icono de puntos
-        </p>
-      </div>
+
 
       {/* Secciones principales - Diseño mejorado */}
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+      < div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4" >
         {/* Sección: Ayer completé */}
-        <Card class="relative">
-          <SectionHeader 
-            icon="✓" 
-            title="¿Qué logré ayer?" 
-            subtitle="Reconoce tus avances"
-            color="green"
-          >
+        {/* Sección: Ayer completé */}
+        < div class="bg-white dark:bg-[#0A0A0A] border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-none transition-all duration-300" >
+          <div class="flex items-center justify-between mb-4 sm:mb-5">
+            <div class="flex items-center space-x-2 sm:space-x-3">
+              <div class="w-6 h-6 sm:w-8 sm:h-8 bg-green-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+                <Check class="text-green-500 w-3 h-3 sm:w-4 sm:h-4" />
+              </div>
+              <div>
+                <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿Qué logré ayer?</h2>
+                <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Reconoce tus avances</p>
+              </div>
+            </div>
             <div class="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md font-medium uppercase tracking-wide shadow-[0_1px_2px_rgba(0,0,0,0.05)] dark:shadow-[0_1px_2px_rgba(255,255,255,0.03)]">
               Destino
             </div>
-          </SectionHeader>
+          </div>
 
           <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={completedYesterdayContainer!}></div>
-          
+
           {/* Indicador visual de drop zone - Más sutil */}
           <div class="absolute inset-2 sm:inset-3 border border-dashed border-green-200 dark:border-green-700 rounded-lg sm:rounded-xl bg-green-50/20 dark:bg-green-900/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="yesterday-drop-indicator">
             <div class="text-green-600 dark:text-green-400 font-medium text-xs bg-white dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]">
               Suelta las tareas aquí
             </div>
           </div>
-        </Card>
+        </div >
 
         {/* Sección: Hoy trabajaré en */}
-        <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
+        < div class="bg-white dark:bg-[#0A0A0A] border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-none transition-all duration-300" >
           <div class="flex items-center justify-between mb-4 sm:mb-5">
             <div class="flex items-center space-x-2 sm:space-x-3">
               <div class="w-6 h-6 sm:w-8 sm:h-8 bg-blue-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -1134,20 +1049,20 @@ const DailyForm: Component<DailyFormProps> = (props) => {
               Destino
             </div>
           </div>
-          
+
           <div class="space-y-2 min-h-[120px] sm:min-h-[180px] p-1 sm:p-2" ref={todayTasksContainer!}></div>
-          
+
           {/* Indicador visual de drop zone - Más sutil */}
           <div class="absolute inset-2 sm:inset-3 border border-dashed border-blue-200 dark:border-blue-700 rounded-lg sm:rounded-xl bg-blue-50/20 dark:bg-blue-900/20 opacity-0 transition-all duration-300 pointer-events-none flex items-center justify-center" id="today-drop-indicator">
-            <div class="text-blue-600 dark:text-blue-400 font-medium text-xs bg-white dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]">
+            <div class="text-blue-600 dark:text-blue-400 font-medium text-xs bg-white dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-[0_2px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255](0.08)]">
               Suelta las tareas aquí
             </div>
           </div>
-        </div>
-      </div>
+        </div >
+      </div >
 
       {/* Sección: Pila (tareas para después) */}
-      <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
+      < div class="bg-white dark:bg-[#0A0A0A] border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 relative shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-none transition-all duration-300" >
         <div class="flex items-center justify-between mb-4 sm:mb-5">
           <div class="flex items-center space-x-2 sm:space-x-3">
             <div class="w-6 h-6 sm:w-8 sm:h-8 bg-orange-50 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -1171,110 +1086,81 @@ const DailyForm: Component<DailyFormProps> = (props) => {
             Suelta las tareas aquí
           </div>
         </div>
-      </div>
+      </div >
 
-      {/* Sección: Objetivos de la semana - Más uniforme */}
-      <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
-        <div class="flex items-center justify-between mb-4 sm:mb-5">
-          <div class="flex items-center space-x-2 sm:space-x-3">
-            <div class="w-6 h-6 sm:w-8 sm:h-8 bg-purple-50 dark:bg-purple-900/30 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <Zap class="text-purple-500 dark:text-purple-400 w-3 h-3 sm:w-4 sm:h-4" />
-            </div>
-            <div>
-              <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿Qué quiero lograr esta semana?</h2>
-              <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Objetivos de esta semana</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowGoalsHelp(!showGoalsHelp())}
-            class="flex items-center justify-center w-8 h-8 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 shadow-sm"
-          >
-            <HelpCircle class="w-4 h-4" />
-          </button>
-        </div>
-        
-        {/* Panel de ayuda para objetivos */}
-        {showGoalsHelp() && (
-          <div class="mb-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm">
-            <div class="flex items-center space-x-2 mb-3">
-              <div class="w-6 h-6 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                <HelpCircle class="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              </div>
-              <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Guía para redactar objetivos efectivos</span>
-            </div>
-            
-            <div class="space-y-4 text-sm text-gray-600 dark:text-gray-400">
-              <div>
-                <p class="font-medium mb-2 text-gray-700 dark:text-gray-300">🎯 Características de un buen objetivo:</p>
-                <ul class="list-disc list-inside space-y-1 ml-3 text-gray-600 dark:text-gray-400">
-                  <li><strong>Específico:</strong> Define claramente qué quieres lograr</li>
-                  <li><strong>Medible:</strong> Incluye números, fechas o métricas concretas</li>
-                  <li><strong>Alcanzable:</strong> Realista con tus recursos y tiempo</li>
-                  <li><strong>Tiempo definido:</strong> Establece cuándo completarlo</li>
-                </ul>
-              </div>
-              
-              <div>
-                <p class="font-medium mb-2 text-gray-700 dark:text-gray-300">💡 Ejemplos de objetivos bien redactados:</p>
-                <ul class="list-disc list-inside space-y-1 ml-3 text-gray-600 dark:text-gray-400">
-                  <li>"Completar 3 módulos del curso de React antes del viernes"</li>
-                  <li>"Contactar 5 clientes potenciales para presentar la propuesta"</li>
-                  <li>"Reducir en 30% el tiempo de respuesta a emails esta semana"</li>
-                </ul>
-              </div>
-              
-              <div>
-                <p class="font-medium mb-2 text-gray-700 dark:text-gray-300">⚡ Verbos que te ayudan:</p>
-                <div class="flex flex-wrap gap-2">
-                  {['Completar', 'Crear', 'Implementar', 'Contactar', 'Reducir', 'Aumentar', 'Mejorar', 'Desarrollar'].map(verb => (
-                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-600">
-                      {verb}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        <div class="space-y-2" ref={weekGoalsContainer!}></div>
-      </div>
 
-      {/* Sección: Aprendizaje - Más limpia */}
-      <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
-        <div class="flex items-center space-x-2 sm:space-x-3 mb-4 sm:mb-5">
-          <div class="w-6 h-6 sm:w-8 sm:h-8 bg-amber-50 dark:bg-amber-900/30 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-            <BookOpen class="text-amber-500 dark:text-amber-400 w-3 h-3 sm:w-4 sm:h-4" />
+
+      {/* Sección: Aprendizaje - Estilo Lista (Rediseño) */}
+      <div class="space-y-4">
+        {/* Header inspirado en la imagen */}
+        <div class="flex items-center space-x-4 mb-2 px-1">
+          <div class="w-12 h-12 bg-[#1A1A1A] border border-gray-800 rounded-2xl flex items-center justify-center shadow-lg">
+            <BookOpen class="text-amber-500 w-6 h-6" />
           </div>
           <div>
-            <h2 class="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200">¿Qué estoy aprendiendo?</h2>
-            <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Documenta tu crecimiento</p>
+            <h2 class="text-xl font-bold text-white tracking-tight">¿Qué estoy aprendiendo?</h2>
+            <p class="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase">DOCUMENTA TU CRECIMIENTO</p>
           </div>
         </div>
-        
-        <div>
-          <div>
-            <label class="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Mi aprendizaje actual
-            </label>
-            <textarea
-              class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-gray-900 dark:focus:ring-white focus:border-transparent transition-all duration-200 bg-white dark:bg-gray-800 h-20 sm:h-24 resize-none shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] focus:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:focus:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]"
-              placeholder="¿Qué nuevas habilidades, conceptos o ideas estás desarrollando? (usa - para separar varios elementos)"
-              value={learning()}
-              onInput={(e) => {
-                setLearning(e.currentTarget.value);
-                triggerAutoSave(); // Activar auto-guardado
-              }}
-              onBlur={() => {
-                triggerImmediateAutoSave(); // Guardar inmediatamente cuando sale del campo
-              }}
-            />
-          </div>
+
+        {/* Lista de items */}
+        <div class="space-y-3">
+          <Index each={learning() ? learning().split('\n') : ['']}>
+            {(item, index) => (
+              <div class="group flex items-center bg-[#0A0A0A] border border-gray-800 rounded-2xl p-4 transition-all duration-200 hover:border-gray-700 shadow-sm">
+                {/* Círculo indicador (estilo checkbox pero estático o funcional si se desea) */}
+                <div class="w-6 h-6 rounded-full border-2 border-gray-700 mr-4 flex-shrink-0 group-hover:border-gray-500 transition-colors"></div>
+
+                <input
+                  type="text"
+                  class="flex-1 bg-transparent border-none text-gray-200 placeholder-gray-600 focus:ring-0 text-base font-medium p-0"
+                  placeholder="Escribe un aprendizaje..."
+                  value={item()}
+                  onInput={(e) => {
+                    const list = learning() ? learning().split('\n') : [''];
+                    list[index] = e.currentTarget.value;
+                    setLearning(list.join('\n'));
+                    triggerAutoSave();
+                  }}
+                  onBlur={() => triggerImmediateAutoSave()}
+                />
+
+                <button
+                  onClick={() => {
+                    const list = learning() ? learning().split('\n') : [''];
+                    if (list.length > 0) {
+                      list.splice(index, 1);
+                      setLearning(list.join('\n'));
+                      triggerAutoSave();
+                    }
+                  }}
+                  class="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all duration-200 p-1"
+                  title="Eliminar"
+                >
+                  <Trash2 class="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </Index>
         </div>
+
+        {/* Botón de añadir */}
+        <button
+          onClick={() => {
+            const current = learning();
+            const newList = current ? current + '\n' : '';
+            setLearning(newList);
+            triggerAutoSave();
+          }}
+          class="w-full py-4 border border-dashed border-gray-800 rounded-2xl text-gray-500 hover:text-gray-300 hover:border-gray-600 hover:bg-white/5 transition-all duration-200 flex items-center justify-center space-x-3 group"
+        >
+          <span class="text-2xl font-light text-gray-600 group-hover:text-gray-400">+</span>
+          <span class="font-medium">Añadir nuevo aprendizaje...</span>
+        </button>
       </div>
 
       {/* Sección: Impedimentos */}
-      <div class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.05),0_4px_16px_-4px_rgba(255,255,255,0.03)] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.1),0_8px_24px_-8px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_16px_-4px_rgba(255,255,255,0.06),0_8px_24px_-8px_rgba(255,255,255,0.04)] transition-all duration-300">
+      < div class="bg-white dark:bg-[#0A0A0A] border border-gray-100 dark:border-gray-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08),0_4px_16px_-4px_rgba(0,0,0,0.05)] dark:shadow-none transition-all duration-300" >
         <div class="flex items-center space-x-2 sm:space-x-3 mb-4 sm:mb-5">
           <div class="w-6 h-6 sm:w-8 sm:h-8 bg-red-50 dark:bg-red-900/30 rounded-lg sm:rounded-xl flex items-center justify-center shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
             <AlertTriangle class="text-red-500 dark:text-red-400 w-3 h-3 sm:w-4 sm:h-4" />
@@ -1284,14 +1170,14 @@ const DailyForm: Component<DailyFormProps> = (props) => {
             <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">Identifica obstáculos y bloqueos</p>
           </div>
         </div>
-        
+
         <div>
           <div>
             <label class="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Impedimentos actuales
             </label>
             <textarea
-              class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-gray-900 dark:focus:ring-white focus:border-transparent transition-all duration-200 bg-white dark:bg-gray-800 h-20 sm:h-24 resize-none shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_3px_rgba(255,255,255,0.05)] focus:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.12)] dark:focus:shadow-[0_2px_8px_-2px_rgba(255,255,255,0.08)]"
+              class="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 dark:border-gray-800 rounded-lg text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-700 focus:border-transparent transition-all duration-200 bg-white dark:bg-[#111111] h-20 sm:h-24 resize-none shadow-sm dark:shadow-none"
               placeholder="¿Qué obstáculos, bloqueos o dificultades estás enfrentando? (usa - para separar varios elementos)"
               value={impediments()}
               onInput={(e) => {
@@ -1304,114 +1190,116 @@ const DailyForm: Component<DailyFormProps> = (props) => {
             />
           </div>
         </div>
-      </div>
+      </div >
 
       {/* Priority Modal */}
-      <Show when={activePriority() && !activePriority()?.isMinimized}>
+      < Show when={activePriority() && !activePriority()?.isMinimized}>
         <PriorityModal
           priority={activePriority()!}
           onComplete={handleCompletePriority}
           onMinimize={handleMinimizePriority}
           onUpdateTime={handleUpdatePriorityTime}
         />
-      </Show>
+      </Show >
 
       {/* Priority FAB */}
-      <Show when={activePriority()?.isMinimized}>
+      < Show when={activePriority()?.isMinimized} >
         <PriorityFAB
           priority={activePriority()!}
           onOpen={handleOpenPriority}
         />
-      </Show>
+      </Show >
 
       {/* Modal de Telegram */}
-      {showTelegramModal() && (
-        <div class="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div class="bg-white dark:bg-gray-900 rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-4xl max-h-[95vh] overflow-hidden">
-            {/* Header del Modal */}
-            <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20">
-              <div class="flex items-center space-x-3 sm:space-x-4 min-w-0">
-                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
-                  <Smartphone class="text-white w-5 h-5 sm:w-6 sm:h-6" />
-                </div>
-                <div class="min-w-0">
-                  <h3 class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">Enviar a Telegram</h3>
-                  <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hidden sm:block">Edita tu mensaje antes de copiarlo y enviarlo</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowTelegramModal(false)}
-                class="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white dark:hover:bg-gray-800 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 flex-shrink-0"
-              >
-                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Contenido del Modal */}
-            <div class="p-3 sm:p-6 bg-gray-50 dark:bg-gray-800 flex-1 min-h-0">
-              <div class="mb-4 sm:mb-6">
-                <div class="flex items-center justify-between mb-2 sm:mb-3">
-                  <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Tu mensaje para Telegram
-                  </label>
-                  <div class="hidden sm:flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span>Editable en tiempo real</span>
+      {
+        showTelegramModal() && (
+          <div class="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-2 sm:p-4">
+            <div class="bg-white dark:bg-gray-900 rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-4xl max-h-[95vh] overflow-hidden">
+              {/* Header del Modal */}
+              <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20">
+                <div class="flex items-center space-x-3 sm:space-x-4 min-w-0">
+                  <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                    <Smartphone class="text-white w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                  <div class="min-w-0">
+                    <h3 class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">Enviar a Telegram</h3>
+                    <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hidden sm:block">Edita tu mensaje antes de copiarlo y enviarlo</p>
                   </div>
                 </div>
-                <div class="relative">
-                  <textarea
-                    class="w-full h-48 sm:h-80 px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 dark:border-gray-600 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-all duration-200 bg-white dark:bg-gray-900 resize-none font-mono leading-relaxed shadow-sm"
-                    placeholder="Tu mensaje se generará aquí..."
-                    value={telegramMessage()}
-                    onInput={(e) => setTelegramMessage(e.currentTarget.value)}
-                  />
-                  <div class="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 text-xs text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
-                    {telegramMessage().length}
-                  </div>
-                </div>
+                <button
+                  onClick={() => setShowTelegramModal(false)}
+                  class="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white dark:hover:bg-gray-800 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 flex-shrink-0"
+                >
+                  <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
 
-              {/* Botones del Modal */}
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white dark:bg-gray-900 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-gray-700 shadow-sm space-y-3 sm:space-y-0">
-                <div class="hidden sm:flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                  <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+              {/* Contenido del Modal */}
+              <div class="p-3 sm:p-6 bg-gray-50 dark:bg-gray-800 flex-1 min-h-0">
+                <div class="mb-4 sm:mb-6">
+                  <div class="flex items-center justify-between mb-2 sm:mb-3">
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Tu mensaje para Telegram
+                    </label>
+                    <div class="hidden sm:flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
+                      <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                      <span>Editable en tiempo real</span>
+                    </div>
                   </div>
-                  <span class="font-medium">El mensaje se copiará al portapapeles</span>
+                  <div class="relative">
+                    <textarea
+                      class="w-full h-48 sm:h-80 px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 dark:border-gray-600 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-all duration-200 bg-white dark:bg-gray-900 resize-none font-mono leading-relaxed shadow-sm"
+                      placeholder="Tu mensaje se generará aquí..."
+                      value={telegramMessage()}
+                      onInput={(e) => setTelegramMessage(e.currentTarget.value)}
+                    />
+                    <div class="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 text-xs text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
+                      {telegramMessage().length}
+                    </div>
+                  </div>
                 </div>
-                
-                <div class="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
-                  <button
-                    onClick={() => setShowTelegramModal(false)}
-                    class="flex items-center justify-center space-x-2 px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span>Cancelar</span>
-                  </button>
-                  <button
-                    onClick={handleCopyTelegramMessage}
-                    class="flex items-center justify-center space-x-2 px-6 sm:px-8 py-3 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border border-blue-500 hover:border-blue-600 rounded-lg sm:rounded-xl transition-all duration-200 shadow-md hover:shadow-lg"
-                  >
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    <span class="hidden sm:inline">Copiar y Enviar</span>
-                    <span class="sm:hidden">Copiar</span>
-                  </button>
+
+                {/* Botones del Modal */}
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white dark:bg-gray-900 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-gray-700 shadow-sm space-y-3 sm:space-y-0">
+                  <div class="hidden sm:flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <span class="font-medium">El mensaje se copiará al portapapeles</span>
+                  </div>
+
+                  <div class="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
+                    <button
+                      onClick={() => setShowTelegramModal(false)}
+                      class="flex items-center justify-center space-x-2 px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
+                    >
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      <span>Cancelar</span>
+                    </button>
+                    <button
+                      onClick={handleCopyTelegramMessage}
+                      class="flex items-center justify-center space-x-2 px-6 sm:px-8 py-3 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border border-blue-500 hover:border-blue-600 rounded-lg sm:rounded-xl transition-all duration-200 shadow-md hover:shadow-lg"
+                    >
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <span class="hidden sm:inline">Copiar y Enviar</span>
+                      <span class="sm:hidden">Copiar</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 
