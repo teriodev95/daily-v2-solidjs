@@ -379,6 +379,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     textarea.placeholder = placeholder;
     textarea.value = value;
     textarea.rows = 1;
+    // Prevent text selection drag ghost
+    textarea.setAttribute('draggable', 'false');
 
     const adjustHeight = () => {
       textarea.style.height = 'auto';
