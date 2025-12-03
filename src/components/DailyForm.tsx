@@ -219,7 +219,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     wrapper.dataset.section = sectionType;
 
     const container = document.createElement('div');
-    container.className = 'group flex items-center bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-700 shadow-sm relative';
+    container.className = 'group flex items-center bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-700 focus-within:border-blue-400/50 dark:focus-within:border-blue-500/50 focus-within:ring-4 focus-within:ring-blue-500/5 dark:focus-within:ring-blue-400/10 shadow-sm relative';
 
     // Hacer el container draggable para yesterday, today y pila
     if (sectionType === 'yesterday' || sectionType === 'today' || sectionType === 'pila') {
@@ -375,12 +375,22 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
     // Textarea más uniforme y limpio
     const textarea = document.createElement('textarea');
-    textarea.className = 'flex-1 h-auto min-h-[24px] resize-none border-none text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-0 text-base font-medium p-0 bg-transparent overflow-hidden';
+    textarea.className = 'flex-1 h-auto min-h-[24px] resize-none border-none text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-0 focus:outline-none text-base font-medium p-0 bg-transparent overflow-hidden';
     textarea.placeholder = placeholder;
     textarea.value = value;
+    textarea.rows = 1;
+
+    const adjustHeight = () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = textarea.scrollHeight + 'px';
+    };
+
+    // Ajustar altura inicial
+    setTimeout(adjustHeight, 0);
 
     // Event listener para actualizar el valor y triggear auto-guardado
     textarea.addEventListener('input', (e) => {
+      adjustHeight();
       onUpdate(index, (e.target as HTMLTextAreaElement).value);
       triggerAutoSave(); // Activar auto-guardado cuando el usuario escriba
     });
@@ -1108,7 +1118,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         <div class="space-y-3">
           <Index each={learningData()}>
             {(item, index) => (
-              <div class="group flex items-center bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-700 shadow-sm">
+              <div class="group flex items-center bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-700 focus-within:border-blue-400/50 dark:focus-within:border-blue-500/50 focus-within:ring-4 focus-within:ring-blue-500/5 dark:focus-within:ring-blue-400/10 shadow-sm">
                 {/* Checkbox circular funcional */}
                 <div
                   onClick={(e) => {
@@ -1119,11 +1129,10 @@ const DailyForm: Component<DailyFormProps> = (props) => {
                     setLearningData(newData);
                     triggerAutoSave();
                   }}
-                  class={`w-6 h-6 rounded-full border-2 mr-4 flex-shrink-0 transition-all duration-200 flex items-center justify-center cursor-pointer ${
-                    item().completed
-                      ? 'bg-amber-500 border-amber-500'
-                      : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
-                  }`}
+                  class={`w-6 h-6 rounded-full border-2 mr-4 flex-shrink-0 transition-all duration-200 flex items-center justify-center cursor-pointer ${item().completed
+                    ? 'bg-amber-500 border-amber-500'
+                    : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
                 >
                   {item().completed && (
                     <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1134,11 +1143,10 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
                 <input
                   type="text"
-                  class={`flex-1 bg-transparent border-none placeholder-gray-400 dark:placeholder-gray-600 focus:ring-0 text-base font-medium p-0 ${
-                    item().completed
-                      ? 'text-gray-400 dark:text-gray-500 line-through'
-                      : 'text-gray-900 dark:text-gray-200'
-                  }`}
+                  class={`flex-1 bg-transparent border-none placeholder-gray-400 dark:placeholder-gray-600 focus:ring-0 focus:outline-none text-base font-medium p-0 ${item().completed
+                    ? 'text-gray-400 dark:text-gray-500 line-through'
+                    : 'text-gray-900 dark:text-gray-200'
+                    }`}
                   placeholder="Escribe un aprendizaje..."
                   value={item().text}
                   onInput={(e) => {
@@ -1202,7 +1210,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
                 <div class="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-700 mr-4 flex-shrink-0 group-hover:border-gray-400 dark:group-hover:border-gray-500 transition-colors"></div>
                 <input
                   type="text"
-                  class="flex-1 bg-transparent border-none text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-0 text-base font-medium p-0"
+                  class="flex-1 bg-transparent border-none text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-0 focus:outline-none text-base font-medium p-0"
                   placeholder="Escribe un impedimento..."
                   value={item()}
                   onInput={(e) => {
