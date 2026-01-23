@@ -178,52 +178,54 @@ const App: Component = () => {
 
 
           {/* Mobile/Tablet Layout */}
-          < div class="flex lg:hidden items-center justify-between py-4" >
-            <div class="flex items-center space-x-3 min-w-0 flex-1">
-              <div class="w-9 h-9 bg-gray-900 dark:bg-white rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-                <span class="text-white dark:text-black text-base font-bold">D</span>
+          <div class="flex lg:hidden items-center justify-between py-3">
+            {/* Logo y título */}
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 bg-gray-900 dark:bg-white rounded-xl flex items-center justify-center flex-shrink-0">
+                <span class="text-white dark:text-black text-lg font-bold">D</span>
               </div>
-              <div class="min-w-0">
-                <h1 class="text-lg font-bold text-gray-900 dark:text-white truncate">
+              <div>
+                <h1 class="text-base font-bold text-gray-900 dark:text-white">
                   Daily Check
                 </h1>
-                <p class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
-                  Tu reporte diario
-                </p>
-              </div>
-            </div>
-
-            {/* Botón de modo oscuro mobile */}
-            <button
-              onClick={toggleTheme}
-              class="relative w-12 h-7 bg-gray-200 dark:bg-gray-700 rounded-full transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-ios-blue-500 dark:focus:ring-ios-blue-400 shadow-ios-inner mr-3"
-              aria-label="Toggle dark mode"
-            >
-              <div class="absolute inset-0 flex items-center justify-between px-0.5">
-                <svg class="w-3.5 h-3.5 text-yellow-500 dark:text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path>
-                </svg>
-                <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
-                </svg>
-              </div>
-              <div class={`absolute top-0.5 left-0.5 w-6 h-6 bg-white dark:bg-gray-900 rounded-full shadow-md transition-transform duration-300 ease-in-out transform ${isDarkMode() ? 'translate-x-5' : 'translate-x-0'}`}></div>
-            </button>
-
-            <div class="text-right bg-gray-50/60 dark:bg-gray-900/60 rounded-2xl px-3 py-2 border border-gray-200/40 dark:border-gray-700/40 shadow-sm">
-              <div class="flex flex-col items-end space-y-0.5">
-                <p class="text-sm font-semibold text-gray-900 dark:text-white leading-tight">
+                <p class="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
                   {new Date().toLocaleDateString('es-ES', {
+                    weekday: 'short',
                     day: 'numeric',
                     month: 'short'
-                  })}
-                </p>
-                <p class="text-xs text-gray-500 font-medium">
-                  Sem. {Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}
+                  })} · Sem {Math.ceil((new Date().getTime() - new Date(new Date().getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}
                 </p>
               </div>
             </div>
-          </div >
+
+            {/* Acciones */}
+            <div class="flex items-center space-x-2">
+              {/* Botón de modo oscuro - Simple y circular */}
+              <button
+                onClick={toggleTheme}
+                class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 active:scale-95 transition-all"
+                aria-label="Toggle dark mode"
+              >
+                {isDarkMode() ? (
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                  </svg>
+                ) : (
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
         </div >
       </header >
 
@@ -255,6 +257,22 @@ const App: Component = () => {
         isOpen={isFormatosPDFModalOpen()}
         onClose={() => setIsFormatosPDFModalOpen(false)}
       />
+
+      {/* FAB de Compartir - Solo visible en móvil/tablet */}
+      <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 lg:hidden">
+        <button
+          onClick={() => document.dispatchEvent(new CustomEvent('open-telegram-modal'))}
+          class="group relative bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-2xl hover:shadow-3xl transform transition-all duration-200 hover:scale-105 active:scale-95"
+          aria-label="Compartir en Telegram"
+        >
+          <div class="flex items-center justify-center w-14 h-14">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </div>
+        </button>
+      </div>
     </div >
   );
 };

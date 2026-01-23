@@ -7,7 +7,7 @@ import { saveReport, loadReport } from '../utils/database';
 import { formatReportForCopy, copyToClipboard } from '../utils/formatUtils';
 import { generateDailyTemplatePDF, generateDailyObjectivesPDF } from '../utils/pdfGenerator';
 import { Button, Card, SectionHeader, StatusMessage, HelpPanel, Icon } from './ui';
-import { Trash2, Save, Smartphone, Zap, Check, ArrowRight, BookOpen, Clock, AlertTriangle, HelpCircle, Printer, Package, FileText } from 'lucide-solid';
+import { Trash2, Check, ArrowRight, BookOpen, AlertTriangle, Package } from 'lucide-solid';
 
 interface DailyFormProps {
   onSave?: (report: DailyReport) => void;
@@ -1277,86 +1277,67 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       {/* Modal de Telegram */}
       {
         showTelegramModal() && (
-          <div class="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-2 sm:p-4">
-            <div class="bg-white dark:bg-gray-900 rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-4xl max-h-[95vh] overflow-hidden">
-              {/* Header del Modal */}
-              <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20">
-                <div class="flex items-center space-x-3 sm:space-x-4 min-w-0">
-                  <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
-                    <Smartphone class="text-white w-5 h-5 sm:w-6 sm:h-6" />
+          <div class="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-end sm:items-center justify-center z-50 sm:p-4">
+            {/* Mobile: Ocupa 90% de altura | Desktop: Modal centrado */}
+            <div class="bg-white dark:bg-[#0A0A0A] w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl flex flex-col h-[90vh] sm:h-auto sm:max-h-[85vh] rounded-t-3xl sm:rounded-b-2xl">
+
+              {/* Header compacto */}
+              <div class="flex items-center justify-between px-4 pt-3 pb-2 sm:p-5 border-b border-gray-200 dark:border-gray-800 flex-shrink-0 relative">
+                {/* Indicador de arrastre solo en móvil */}
+                <div class="absolute top-1.5 left-1/2 -translate-x-1/2 w-10 h-1 bg-gray-300 dark:bg-gray-700 rounded-full sm:hidden"></div>
+
+                <div class="flex items-center space-x-3 min-w-0 mt-3 sm:mt-0">
+                  <div class="w-9 h-9 sm:w-10 sm:h-10 bg-blue-500 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="22" y1="2" x2="11" y2="13"></line>
+                      <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
                   </div>
-                  <div class="min-w-0">
-                    <h3 class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">Enviar a Telegram</h3>
-                    <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hidden sm:block">Edita tu mensaje antes de copiarlo y enviarlo</p>
-                  </div>
+                  <h3 class="text-base font-bold text-gray-900 dark:text-white">Compartir Daily</h3>
                 </div>
                 <button
                   onClick={() => setShowTelegramModal(false)}
-                  class="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white dark:hover:bg-gray-800 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 flex-shrink-0"
+                  class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors mt-3 sm:mt-0"
                 >
-                  <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
-              {/* Contenido del Modal */}
-              <div class="p-3 sm:p-6 bg-gray-50 dark:bg-gray-800 flex-1 min-h-0">
-                <div class="mb-4 sm:mb-6">
-                  <div class="flex items-center justify-between mb-2 sm:mb-3">
-                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Tu mensaje para Telegram
-                    </label>
-                    <div class="hidden sm:flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                      <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                      <span>Editable en tiempo real</span>
-                    </div>
-                  </div>
-                  <div class="relative">
-                    <textarea
-                      class="w-full h-48 sm:h-80 px-3 sm:px-4 py-3 sm:py-4 border border-gray-300 dark:border-gray-600 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-all duration-200 bg-white dark:bg-gray-900 resize-none font-mono leading-relaxed shadow-sm"
-                      placeholder="Tu mensaje se generará aquí..."
-                      value={telegramMessage()}
-                      onInput={(e) => setTelegramMessage(e.currentTarget.value)}
-                    />
-                    <div class="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 text-xs text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700">
-                      {telegramMessage().length}
-                    </div>
+              {/* Contenido - Textarea que llena el espacio */}
+              <div class="flex-1 overflow-hidden p-3 sm:p-5">
+                <div class="relative h-full">
+                  <textarea
+                    class="w-full h-full px-3 py-3 border border-gray-200 dark:border-gray-800 rounded-xl text-[13px] sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-600 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 transition-all bg-gray-50 dark:bg-[#1A1A1A] resize-none font-mono leading-relaxed"
+                    placeholder="Tu mensaje se generará aquí..."
+                    value={telegramMessage()}
+                    onInput={(e) => setTelegramMessage(e.currentTarget.value)}
+                  />
+                  <div class="absolute bottom-2 right-2 text-[10px] text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                    {telegramMessage().length}
                   </div>
                 </div>
+              </div>
 
-                {/* Botones del Modal */}
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white dark:bg-gray-900 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-gray-700 shadow-sm space-y-3 sm:space-y-0">
-                  <div class="hidden sm:flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <span class="font-medium">El mensaje se copiará al portapapeles</span>
-                  </div>
-
-                  <div class="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
-                    <button
-                      onClick={() => setShowTelegramModal(false)}
-                      class="flex items-center justify-center space-x-2 px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 rounded-lg sm:rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
-                    >
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      <span>Cancelar</span>
-                    </button>
-                    <button
-                      onClick={handleCopyTelegramMessage}
-                      class="flex items-center justify-center space-x-2 px-6 sm:px-8 py-3 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border border-blue-500 hover:border-blue-600 rounded-lg sm:rounded-xl transition-all duration-200 shadow-md hover:shadow-lg"
-                    >
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      <span class="hidden sm:inline">Copiar y Enviar</span>
-                      <span class="sm:hidden">Copiar</span>
-                    </button>
-                  </div>
+              {/* Footer con botones */}
+              <div class="flex-shrink-0 px-3 pb-4 pt-2 sm:p-5 sm:pt-0">
+                <div class="flex space-x-2 sm:space-x-3">
+                  <button
+                    onClick={() => setShowTelegramModal(false)}
+                    class="flex-1 flex items-center justify-center py-3.5 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-[#1A1A1A] active:bg-gray-200 dark:active:bg-gray-800 rounded-xl transition-all active:scale-[0.98]"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleCopyTelegramMessage}
+                    class="flex-[2] flex items-center justify-center space-x-2 py-3.5 text-sm font-semibold text-white bg-blue-500 active:bg-blue-600 rounded-xl transition-all shadow-lg shadow-blue-500/25 active:scale-[0.98]"
+                  >
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span>Copiar mensaje</span>
+                  </button>
                 </div>
               </div>
             </div>
