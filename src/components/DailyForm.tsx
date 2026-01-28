@@ -1278,8 +1278,8 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       {
         showTelegramModal() && (
           <div class="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-end sm:items-center justify-center z-50 sm:p-4">
-            {/* Mobile: Ocupa 90% de altura | Desktop: Modal centrado */}
-            <div class="bg-white dark:bg-[#0A0A0A] w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl flex flex-col h-[90vh] sm:h-auto sm:max-h-[85vh] rounded-t-3xl sm:rounded-b-2xl">
+            {/* Mobile: Ocupa 90% de altura | Desktop: Modal centrado con altura fija */}
+            <div class="bg-white dark:bg-[#0A0A0A] w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl flex flex-col h-[90vh] sm:h-[70vh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-b-2xl">
 
               {/* Header compacto */}
               <div class="flex items-center justify-between px-4 pt-3 pb-2 sm:p-5 border-b border-gray-200 dark:border-gray-800 flex-shrink-0 relative">
