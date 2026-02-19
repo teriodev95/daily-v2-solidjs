@@ -1,112 +1,245 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: ios, ios-dark;
+}
+@plugin "@tailwindcss/typography";
 
-@layer base {
-  * {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  
-  html {
-    font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Helvetica Neue', Arial, sans-serif;
-  }
-  
-  body {
-    margin: 0;
-    background-color: #fafafa;
-    color: #171717;
-    font-family: inherit;
-    line-height: 1.6;
-  }
+@theme {
+  /* iOS color palette */
+  --color-ios-gray-50: #fafafa;
+  --color-ios-gray-100: #f5f5f5;
+  --color-ios-gray-200: #e5e5e5;
+  --color-ios-gray-300: #d4d4d4;
+  --color-ios-gray-400: #a3a3a3;
+  --color-ios-gray-500: #737373;
+  --color-ios-gray-600: #525252;
+  --color-ios-gray-700: #404040;
+  --color-ios-gray-800: #262626;
+  --color-ios-gray-900: #171717;
 
-  /* Scrollbar personalizado estilo iOS */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
+  --color-ios-blue-50: #eff6ff;
+  --color-ios-blue-100: #dbeafe;
+  --color-ios-blue-200: #bfdbfe;
+  --color-ios-blue-300: #93c5fd;
+  --color-ios-blue-400: #60a5fa;
+  --color-ios-blue-500: #007AFF;
+  --color-ios-blue-600: #0051D5;
+  --color-ios-blue-700: #003A8C;
+  --color-ios-blue-800: #002E6E;
+  --color-ios-blue-900: #001E4A;
 
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
+  --color-ios-green-50: #f0fdf4;
+  --color-ios-green-100: #dcfce7;
+  --color-ios-green-200: #bbf7d0;
+  --color-ios-green-300: #86efac;
+  --color-ios-green-400: #4ade80;
+  --color-ios-green-500: #34C759;
+  --color-ios-green-600: #28A745;
+  --color-ios-green-700: #1E7E34;
+  --color-ios-green-800: #166534;
+  --color-ios-green-900: #14532d;
 
-  ::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 10px;
-  }
+  /* Font family */
+  --font-system: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Helvetica Neue', Arial, sans-serif;
 
-  ::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.3);
+  /* Custom shadows */
+  --shadow-ios: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow-ios-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-ios-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-ios-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+
+  /* Custom border radius */
+  --radius-ios: 0.75rem;
+  --radius-ios-sm: 0.5rem;
+}
+
+/* DaisyUI custom themes */
+@plugin "daisyui/theme" {
+  name: "ios";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #fafafa;
+  --color-base-300: #e5e5e5;
+  --color-base-content: #171717;
+  --color-primary: #000000;
+  --color-primary-content: #ffffff;
+  --color-secondary: #525252;
+  --color-secondary-content: #ffffff;
+  --color-accent: #404040;
+  --color-accent-content: #ffffff;
+  --color-neutral: #f5f5f5;
+  --color-neutral-content: #171717;
+  --color-info: #737373;
+  --color-info-content: #ffffff;
+  --color-success: #404040;
+  --color-success-content: #ffffff;
+  --color-warning: #525252;
+  --color-warning-content: #ffffff;
+  --color-error: #171717;
+  --color-error-content: #ffffff;
+}
+
+@plugin "daisyui/theme" {
+  name: "ios-dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+  --color-base-100: #000000;
+  --color-base-200: #171717;
+  --color-base-300: #262626;
+  --color-base-content: #e5e5e5;
+  --color-primary: #ffffff;
+  --color-primary-content: #000000;
+  --color-secondary: #e5e5e5;
+  --color-secondary-content: #171717;
+  --color-accent: #d4d4d4;
+  --color-accent-content: #171717;
+  --color-neutral: #262626;
+  --color-neutral-content: #e5e5e5;
+  --color-info: #a3a3a3;
+  --color-info-content: #171717;
+  --color-success: #34C759;
+  --color-success-content: #ffffff;
+  --color-warning: #FF9500;
+  --color-warning-content: #ffffff;
+  --color-error: #FF3B30;
+  --color-error-content: #ffffff;
+}
+
+/* Base styles */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  font-family: var(--font-system);
+}
+
+body {
+  margin: 0;
+  background-color: #fafafa;
+  color: #171717;
+  font-family: inherit;
+  line-height: 1.6;
+}
+
+/* Scrollbar estilo iOS */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Component utilities */
+@utility ios-card {
+  background-color: white;
+  border-radius: var(--radius-ios);
+  box-shadow: var(--shadow-ios);
+  border: 1px solid var(--color-ios-gray-200);
+}
+
+@utility ios-input {
+  background-color: white;
+  border: 1px solid var(--color-ios-gray-300);
+  border-radius: var(--radius-ios-sm);
+  padding: 0.75rem 1rem;
+  color: var(--color-ios-gray-900);
+  transition: all 0.2s;
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-ios-gray-400);
+    border-color: transparent;
   }
 }
 
-@layer components {
-  .ios-card {
-    @apply bg-white rounded-ios shadow-ios border border-ios-gray-200;
-  }
-  
-  .ios-input {
-    @apply bg-white border border-ios-gray-300 rounded-ios-sm px-4 py-3 text-ios-gray-900 placeholder-ios-gray-500 focus:outline-none focus:ring-2 focus:ring-ios-gray-400 focus:border-transparent transition-all duration-200;
-  }
-  
-  .ios-button {
-    @apply bg-ios-gray-900 text-white font-medium py-3 px-6 rounded-ios-sm hover:bg-ios-gray-800 focus:outline-none focus:ring-2 focus:ring-ios-gray-600 focus:ring-offset-2 transition-all duration-200;
-  }
-  
-  .ios-button-secondary {
-    @apply bg-white text-ios-gray-900 font-medium py-3 px-6 rounded-ios-sm border border-ios-gray-300 hover:bg-ios-gray-50 focus:outline-none focus:ring-2 focus:ring-ios-gray-400 focus:ring-offset-2 transition-all duration-200;
-  }
+@utility ios-button {
+  background-color: var(--color-ios-gray-900);
+  color: white;
+  font-weight: 500;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-ios-sm);
+  transition: all 0.2s;
+}
 
-  /* Colores adicionales para el botón de borrar */
-  .bg-ios-gray-150 {
-    background-color: #f1f1f1;
-  }
-  
-  .border-ios-gray-150 {
-    border-color: #f1f1f1;
-  }
+@utility ios-button-secondary {
+  background-color: white;
+  color: var(--color-ios-gray-900);
+  font-weight: 500;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-ios-sm);
+  border: 1px solid var(--color-ios-gray-300);
+  transition: all 0.2s;
+}
 
-  /* Color para drag and drop */
-  .bg-ios-gray-25 {
-    background-color: #fcfcfc;
-  }
+@utility bg-ios-gray-150 {
+  background-color: #f1f1f1;
+}
 
-  /* Estilos para drag and drop */
-  .dragging {
-    opacity: 0.5;
-  }
+@utility border-ios-gray-150 {
+  border-color: #f1f1f1;
+}
 
-  /* Indicador de drop para modo claro y oscuro */
-  .drop-indicator {
-    @apply bg-blue-500 dark:bg-blue-400;
-  }
+@utility bg-ios-gray-25 {
+  background-color: #fcfcfc;
+}
 
-  /* Highlight de contenedores durante drag */
-  .drag-highlight {
-    @apply bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600;
-  }
+/* Drag and drop */
+.dragging {
+  opacity: 0.5;
+}
 
-  /* Animación para modal slide up */
-  @keyframes slide-up {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
+.drop-indicator {
+  background-color: #3b82f6;
+}
 
-  .animate-slide-up {
-    animation: slide-up 0.3s ease-out;
-  }
+[data-theme="ios-dark"] .drop-indicator {
+  background-color: #60a5fa;
+}
 
-  /* Utilidad para limitar líneas de texto */
-  .line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+.drag-highlight {
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+}
+
+[data-theme="ios-dark"] .drag-highlight {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-color: #2563eb;
+}
+
+/* Animation */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@utility animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+@utility line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

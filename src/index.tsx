@@ -2,7 +2,8 @@
 import { render } from 'solid-js/web';
 
 import './index.css';
-import App from './App';
+// import App from './App';  // v1 - preserved
+import AppV2 from './v2/AppV2';
 
 const root = document.getElementById('root');
 
@@ -12,4 +13,4 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   );
 }
 
-render(() => <App />, root!);
+render(() => <AppV2 />, root!);
