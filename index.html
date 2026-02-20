@@ -1,11 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="ios-dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
     <link rel="shortcut icon" type="image/ico" href="/src/assets/favicon.ico" />
-    <title>Solid App</title>
+    <title>Daily Check</title>
+    <script>
+      // Apply saved theme before any render to prevent flash
+      (function() {
+        var theme = localStorage.getItem('dc-theme') || 'ios-dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+    <style>
+      /* Prevent white flash — matches ios-dark base-100 */
+      html, body { background-color: #000000; }
+      html[data-theme="ios"] body, html[data-theme="ios"] { background-color: #fafafa; }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

@@ -10,6 +10,7 @@ import StoryDetail from '../components/StoryDetail';
 interface ProjectsPageProps {
   onCreateStory?: (projectId: string) => void;
   refreshKey?: number;
+  onStoryDeleted?: () => void;
 }
 
 const priorityConfig: Record<string, { color: string; icon: any }> = {
@@ -251,7 +252,7 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
       {/* Story Detail Modal */}
       <Show when={selectedStory()}>
         {(story) => (
-          <StoryDetail story={story()} onClose={() => setSelectedStory(null)} />
+          <StoryDetail story={story()} onClose={() => setSelectedStory(null)} onDeleted={() => { setSelectedStory(null); refetch(); props.onStoryDeleted?.(); }} />
         )}
       </Show>
     </div>

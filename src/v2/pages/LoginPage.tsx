@@ -31,7 +31,7 @@ const LoginPage: Component = () => {
             D
           </div>
           <div class="text-center">
-            <h1 class="text-xl font-bold text-white">Daily Check</h1>
+            <h1 class="text-xl font-bold text-base-content">Daily Check</h1>
             <p class="text-sm text-base-content/60 mt-1">Inicia sesión para continuar</p>
           </div>
         </div>
@@ -52,7 +52,7 @@ const LoginPage: Component = () => {
               onInput={(e) => setEmail(e.currentTarget.value)}
               placeholder="tu@email.com"
               required
-              class="w-full px-4 py-3 rounded-xl bg-base-200 border border-base-content/10 text-sm text-white placeholder:text-base-content/40 focus:outline-none focus:border-ios-blue-500/50 focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
+              class="w-full px-4 py-3 rounded-xl bg-base-200 border border-base-content/10 text-sm text-base-content placeholder:text-base-content/40 focus:outline-none focus:border-ios-blue-500/50 focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
             />
           </div>
 
@@ -64,7 +64,7 @@ const LoginPage: Component = () => {
               onInput={(e) => setPassword(e.currentTarget.value)}
               placeholder="••••••••"
               required
-              class="w-full px-4 py-3 rounded-xl bg-base-200 border border-base-content/10 text-sm text-white placeholder:text-base-content/40 focus:outline-none focus:border-ios-blue-500/50 focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
+              class="w-full px-4 py-3 rounded-xl bg-base-200 border border-base-content/10 text-sm text-base-content placeholder:text-base-content/40 focus:outline-none focus:border-ios-blue-500/50 focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
             />
           </div>
 

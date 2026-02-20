@@ -120,8 +120,6 @@ html {
 
 body {
   margin: 0;
-  background-color: #fafafa;
-  color: #171717;
   font-family: inherit;
   line-height: 1.6;
 }
@@ -221,7 +219,29 @@ body {
   border-color: #2563eb;
 }
 
-/* Animation */
+/* Animations */
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes card-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-10px) scale(0.96);
+  }
+}
+
 @keyframes slide-up {
   from {
     opacity: 0;
@@ -231,6 +251,15 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@utility animate-card-enter {
+  animation: card-enter 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@utility animate-card-exit {
+  animation: card-exit 0.18s ease-in forwards;
+  pointer-events: none;
 }
 
 @utility animate-slide-up {

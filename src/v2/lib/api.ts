@@ -90,6 +90,8 @@ export const api = {
       request<{ ok: boolean }>(`/api/stories/${storyId}/assignees/${userId}`, { method: 'DELETE' }),
     addCriteria: (storyId: string, criteria: { text: string; is_met?: boolean }[]) =>
       request<{ ok: boolean; count: number }>(`/api/stories/${storyId}/criteria`, { method: 'POST', body: JSON.stringify({ criteria }) }),
+    updateCriteria: (storyId: string, criteriaId: string, data: { is_met: boolean }) =>
+      request<AcceptanceCriteria>(`/api/stories/${storyId}/criteria/${criteriaId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },
 
   reports: {

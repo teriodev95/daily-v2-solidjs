@@ -16,7 +16,8 @@ type Tab = 'dashboard' | 'report' | 'team' | 'projects' | 'assignments';
 const AppShell: Component = () => {
   const auth = useAuth();
   const [activeTab, setActiveTab] = createSignal<Tab>('dashboard');
-  const [isDark, setIsDark] = createSignal(true);
+  const savedTheme = localStorage.getItem('dc-theme') || 'ios-dark';
+  const [isDark, setIsDark] = createSignal(savedTheme === 'ios-dark');
   const [showCreateModal, setShowCreateModal] = createSignal(false);
   const [createCategory, setCreateCategory] = createSignal<ReportCategory | undefined>();
   const [createProjectId, setCreateProjectId] = createSignal<string | undefined>();
@@ -32,12 +33,12 @@ const AppShell: Component = () => {
     setRefreshKey(k => k + 1);
   };
 
-  document.documentElement.setAttribute('data-theme', 'ios-dark');
-
   const toggleTheme = () => {
     const next = !isDark();
     setIsDark(next);
-    document.documentElement.setAttribute('data-theme', next ? 'ios-dark' : 'ios');
+    const theme = next ? 'ios-dark' : 'ios';
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('dc-theme', theme);
   };
 
   const tabs: { id: Tab; label: string; icon: any }[] = [
@@ -52,35 +53,32 @@ const AppShell: Component = () => {
   return (
     <div class="min-h-screen bg-base-100 text-base-content font-system">
 
-      {/* Top Bar */}
-      <header class="sticky top-0 z-50 bg-base-100/80 backdrop-blur-xl border-b border-base-300">
-        <div class="max-w-6xl mx-auto px-4 lg:px-6">
-          <div class="h-12 flex items-center justify-between">
-            <div class="flex items-center gap-6">
+      {/* Floating Top Bar */}
+      <header class="sticky top-0 z-50 px-3 pt-3 hidden md:block">
+        <div class="max-w-5xl mx-auto bg-base-200/60 backdrop-blur-2xl rounded-2xl border border-base-content/[0.06] shadow-lg shadow-black/10">
+          <div class="h-12 px-4 flex items-center justify-between">
+            <div class="flex items-center gap-5">
               <div class="flex items-center gap-2.5">
                 <div class="w-7 h-7 rounded-lg bg-ios-blue-500 flex items-center justify-center text-white font-bold text-xs">
                   D
                 </div>
-                <div>
-                  <span class="font-semibold text-sm leading-none block">Daily Check</span>
-                  <span class="text-[10px] text-base-content/35 leading-none">
-                    {new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                  </span>
-                </div>
+                <span class="font-semibold text-sm">Daily Check</span>
               </div>
 
-              <nav class="hidden md:flex items-center gap-1">
+              <div class="w-px h-5 bg-base-content/10" />
+
+              <nav class="flex items-center gap-0.5">
                 <For each={tabs}>
                   {(tab) => (
                     <button
                       onClick={() => setActiveTab(tab.id)}
-                      class={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      class={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
                         activeTab() === tab.id
                           ? 'bg-base-content/10 text-base-content'
-                          : 'text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5'
+                          : 'text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5'
                       }`}
                     >
-                      <tab.icon size={14} />
+                      <tab.icon size={14} strokeWidth={activeTab() === tab.id ? 2.2 : 1.8} />
                       {tab.label}
                     </button>
                   )}
@@ -88,30 +86,29 @@ const AppShell: Component = () => {
               </nav>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1">
               <button
                 onClick={toggleTheme}
-                class="p-1.5 rounded-lg text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5 transition-all"
+                class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
               >
-                <Show when={isDark()} fallback={<Sun size={16} />}>
-                  <Moon size={16} />
+                <Show when={isDark()} fallback={<Sun size={15} />}>
+                  <Moon size={15} />
                 </Show>
               </button>
               <button
                 onClick={() => auth.logout()}
-                class="p-1.5 rounded-lg text-base-content/40 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                class="p-2 rounded-xl text-base-content/35 hover:text-red-500 hover:bg-red-500/10 transition-all"
                 title="Cerrar sesión"
               >
-                <LogOut size={16} />
+                <LogOut size={15} />
               </button>
               <Show when={user()}>
-                <div class="flex items-center gap-2 pl-2 border-l border-base-300">
+                <div class="ml-1 pl-2 border-l border-base-content/[0.06]">
                   <img
                     src={user()!.avatar_url!}
                     alt={user()!.name}
-                    class="w-6 h-6 rounded-full"
+                    class="w-7 h-7 rounded-full ring-2 ring-base-content/[0.06]"
                   />
-                  <span class="text-xs font-medium hidden sm:inline text-base-content/70">{user()!.name}</span>
                 </div>
               </Show>
             </div>
@@ -119,19 +116,50 @@ const AppShell: Component = () => {
         </div>
       </header>
 
+      {/* Mobile Top Bar — minimal */}
+      <header class="md:hidden sticky top-0 z-50 px-3 pt-2">
+        <div class="bg-base-200/60 backdrop-blur-2xl rounded-2xl border border-base-content/[0.06] shadow-lg shadow-black/10">
+          <div class="h-11 px-4 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <div class="w-6 h-6 rounded-md bg-ios-blue-500 flex items-center justify-center text-white font-bold text-[10px]">
+                D
+              </div>
+              <span class="font-semibold text-sm">Daily Check</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button
+                onClick={toggleTheme}
+                class="p-1.5 rounded-xl text-base-content/35 hover:text-base-content/60 transition-all"
+              >
+                <Show when={isDark()} fallback={<Sun size={15} />}>
+                  <Moon size={15} />
+                </Show>
+              </button>
+              <Show when={user()}>
+                <img
+                  src={user()!.avatar_url!}
+                  alt={user()!.name}
+                  class="w-6 h-6 rounded-full ring-2 ring-base-content/[0.06]"
+                />
+              </Show>
+            </div>
+          </div>
+        </div>
+      </header>
+
       {/* Content — all pages mounted, toggle visibility to avoid refetch flicker */}
-      <main class="max-w-6xl mx-auto px-4 lg:px-6 py-5 pb-24 md:pb-5">
+      <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-24 md:pb-5">
         <div style={{ display: activeTab() === 'dashboard' ? undefined : 'none' }}>
-          <DashboardPage refreshKey={refreshKey()} />
+          <DashboardPage refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} />
         </div>
         <div style={{ display: activeTab() === 'report' ? undefined : 'none' }}>
-          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} />
+          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} />
         </div>
         <div style={{ display: activeTab() === 'team' ? undefined : 'none' }}>
           <TeamPage />
         </div>
         <div style={{ display: activeTab() === 'projects' ? undefined : 'none' }}>
-          <ProjectsPage onCreateStory={(projId) => openCreateModal(undefined, projId)} refreshKey={refreshKey()} />
+          <ProjectsPage onCreateStory={(projId) => openCreateModal(undefined, projId)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} />
         </div>
       </main>
 

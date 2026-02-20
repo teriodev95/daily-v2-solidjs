@@ -194,6 +194,27 @@ stories.post('/:id/criteria', async (c) => {
   return c.json({ ok: true, count: rows.length }, 201);
 });
 
+// Toggle acceptance criterion is_met
+stories.patch('/:id/criteria/:criteriaId', async (c) => {
+  const db = c.get('db');
+  const criteriaId = c.req.param('criteriaId');
+  const body = await c.req.json<{ is_met: boolean }>();
+
+  await db
+    .update(schema.acceptanceCriteria)
+    .set({ is_met: body.is_met })
+    .where(eq(schema.acceptanceCriteria.id, criteriaId));
+
+  const [updated] = await db
+    .select()
+    .from(schema.acceptanceCriteria)
+    .where(eq(schema.acceptanceCriteria.id, criteriaId))
+    .limit(1);
+
+  if (!updated) return c.json({ error: 'Not found' }, 404);
+  return c.json(updated);
+});
+
 stories.post('/:id/assignees', async (c) => {
   const db = c.get('db');
   const storyId = c.req.param('id');

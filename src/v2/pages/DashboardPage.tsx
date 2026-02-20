@@ -27,6 +27,7 @@ const priorityColor: Record<string, string> = {
 
 interface DashboardPageProps {
   refreshKey?: number;
+  onStoryDeleted?: () => void;
 }
 
 const DashboardPage: Component<DashboardPageProps> = (props) => {
@@ -265,7 +266,7 @@ const DashboardPage: Component<DashboardPageProps> = (props) => {
       {/* Story Detail Modal */}
       <Show when={selectedStory()}>
         {(story) => (
-          <StoryDetail story={story()} onClose={() => setSelectedStory(null)} />
+          <StoryDetail story={story()} onClose={() => setSelectedStory(null)} onDeleted={() => { setSelectedStory(null); props.onStoryDeleted?.(); }} />
         )}
       </Show>
 

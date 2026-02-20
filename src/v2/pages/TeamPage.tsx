@@ -2,7 +2,7 @@ import { createSignal, createResource, For, Show, type Component } from 'solid-j
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
-import { CheckCircle, Circle, Share2, ChevronRight } from 'lucide-solid';
+import { CheckCircle, Circle, Share2, Target, ClipboardList } from 'lucide-solid';
 
 const TeamPage: Component = () => {
   const auth = useAuth();
@@ -43,42 +43,39 @@ const TeamPage: Component = () => {
 
   return (
     <Show when={!goalsList.loading} fallback={<TeamSkeleton />}>
-    <div class="space-y-5">
-      <h1 class="text-lg font-bold">Equipo</h1>
+    <div class="space-y-4">
 
-      {/* Team Members */}
-      <section class="space-y-2">
-        <h3 class="text-xs font-semibold uppercase text-base-content/40 tracking-wider">Miembros</h3>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <For each={activeMembers()}>
-            {(member) => (
+      {/* Members — horizontal strip */}
+      <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <For each={activeMembers()}>
+          {(member) => {
+            const isMe = () => member.id === currentUser()?.id;
+            const active = () => selectedMember() === member.id;
+            return (
               <button
                 onClick={() => handleMemberClick(member.id)}
-                class={`flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all ${
-                  selectedMember() === member.id
-                    ? 'bg-ios-blue-500/10 border-ios-blue-500/30'
-                    : 'bg-base-200/50 border-transparent hover:bg-base-200'
+                class={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
+                  active()
+                    ? 'bg-base-content/10 text-base-content ring-1 ring-base-content/[0.06]'
+                    : 'text-base-content/40 hover:bg-base-content/5'
                 }`}
               >
                 <img
                   src={member.avatar_url!}
                   alt={member.name}
-                  class="w-10 h-10 rounded-full"
+                  class={`w-6 h-6 rounded-full ${active() ? 'ring-2 ring-ios-blue-500/40' : ''}`}
                 />
-                <div class="text-center">
-                  <p class="text-xs font-medium truncate w-full">{member.name.split(' ')[0]}</p>
-                  <p class="text-[10px] text-base-content/40">{member.role === 'admin' ? 'Admin' : 'Colaborador'}</p>
-                </div>
-                <Show when={member.id === currentUser()?.id}>
-                  <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-ios-blue-500/10 text-ios-blue-500">Tú</span>
+                <span>{member.name.split(' ')[0]}</span>
+                <Show when={isMe()}>
+                  <span class="text-[9px] px-1 py-px rounded bg-ios-blue-500/15 text-ios-blue-500">tú</span>
                 </Show>
               </button>
-            )}
-          </For>
-        </div>
-      </section>
+            );
+          }}
+        </For>
+      </div>
 
-      {/* Selected Member Quick View */}
+      {/* Selected Member Detail */}
       <Show when={selectedMember()}>
         {(memberId) => {
           const member = data.getUserById(memberId());
@@ -86,116 +83,141 @@ const TeamPage: Component = () => {
           const memberTasks = () => memberStoriesMap()[memberId()] ?? [];
 
           return (
-            <section class="space-y-3 p-4 rounded-2xl bg-base-200/50 border border-base-300">
-              <div class="flex items-center gap-3">
-                <img src={member?.avatar_url!} alt="" class="w-8 h-8 rounded-full" />
-                <div>
-                  <p class="text-sm font-semibold">{member?.name}</p>
-                  <p class="text-xs text-base-content/50">Hoy · {memberTasks().length} tareas</p>
+            <div class="rounded-2xl bg-base-content/[0.03] border border-base-content/[0.04] overflow-hidden">
+              <div class="flex items-center gap-3 px-4 py-3 border-b border-base-content/[0.04]">
+                <img src={member?.avatar_url!} alt="" class="w-7 h-7 rounded-full" />
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold truncate">{member?.name}</p>
+                  <p class="text-[10px] text-base-content/35">{member?.role === 'admin' ? 'Admin' : 'Colaborador'} · {memberTasks().length} tareas hoy</p>
                 </div>
               </div>
 
-              <Show when={mGoals().length > 0}>
-                <div class="space-y-1">
-                  <p class="text-[10px] font-semibold uppercase text-base-content/30">Objetivos compartidos</p>
-                  <For each={mGoals()}>
-                    {(goal) => (
-                      <div class="flex items-center gap-2 text-xs">
-                        <Show when={goal.is_completed} fallback={<Circle size={12} class="text-base-content/20 shrink-0" />}>
-                          <CheckCircle size={12} class="text-ios-green-500 shrink-0" />
-                        </Show>
-                        <span class={goal.is_completed ? 'line-through text-base-content/40' : ''}>{goal.text}</span>
-                      </div>
-                    )}
-                  </For>
+              <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-base-content/[0.04]">
+                {/* Goals column */}
+                <div class="px-4 py-3 space-y-1.5">
+                  <p class="text-[10px] font-semibold uppercase text-base-content/25 tracking-wider">Objetivos</p>
+                  <Show when={mGoals().length > 0} fallback={<p class="text-[11px] text-base-content/20">Sin objetivos compartidos</p>}>
+                    <For each={mGoals()}>
+                      {(goal) => (
+                        <div class="flex items-start gap-2 text-xs leading-snug">
+                          <Show when={goal.is_completed} fallback={<Circle size={12} class="text-base-content/15 shrink-0 mt-0.5" />}>
+                            <CheckCircle size={12} class="text-ios-green-500 shrink-0 mt-0.5" />
+                          </Show>
+                          <span class={goal.is_completed ? 'line-through text-base-content/30' : 'text-base-content/70'}>{goal.text}</span>
+                        </div>
+                      )}
+                    </For>
+                  </Show>
                 </div>
-              </Show>
 
-              <Show when={memberTasks().length > 0}>
-                <div class="space-y-1">
-                  <p class="text-[10px] font-semibold uppercase text-base-content/30">Tareas de hoy</p>
-                  <For each={memberTasks()}>
-                    {(task: any) => (
-                      <div class="flex items-center gap-2 text-xs">
-                        <Show
-                          when={task.status === 'done'}
-                          fallback={<Circle size={12} class="text-base-content/20 shrink-0" />}
-                        >
-                          <CheckCircle size={12} class="text-ios-green-500 shrink-0" />
-                        </Show>
-                        <span>{task.title}</span>
-                      </div>
-                    )}
-                  </For>
+                {/* Tasks column */}
+                <div class="px-4 py-3 space-y-1.5">
+                  <p class="text-[10px] font-semibold uppercase text-base-content/25 tracking-wider">Tareas de hoy</p>
+                  <Show when={memberTasks().length > 0} fallback={<p class="text-[11px] text-base-content/20">Sin tareas asignadas</p>}>
+                    <For each={memberTasks()}>
+                      {(task: any) => (
+                        <div class="flex items-start gap-2 text-xs leading-snug">
+                          <Show when={task.status === 'done'} fallback={<Circle size={12} class="text-base-content/15 shrink-0 mt-0.5" />}>
+                            <CheckCircle size={12} class="text-ios-green-500 shrink-0 mt-0.5" />
+                          </Show>
+                          <span class={task.status === 'done' ? 'line-through text-base-content/30' : 'text-base-content/70'}>{task.title}</span>
+                        </div>
+                      )}
+                    </For>
+                  </Show>
                 </div>
-              </Show>
-            </section>
+              </div>
+            </div>
           );
         }}
       </Show>
 
-      {/* Shared Goals */}
-      <section class="space-y-2">
-        <h3 class="text-xs font-semibold uppercase text-base-content/40 tracking-wider">Objetivos compartidos esta semana</h3>
-        <div class="space-y-1.5">
-          <For each={sharedGoals()}>
-            {(goal) => {
-              const owner = data.getUserById(goal.user_id);
-              return (
-                <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-base-200/50">
-                  <Show when={goal.is_completed} fallback={<Circle size={14} class="text-base-content/20 shrink-0" />}>
-                    <CheckCircle size={14} class="text-ios-green-500 shrink-0" />
-                  </Show>
-                  <div class="flex-1 min-w-0">
-                    <span class={`text-sm ${goal.is_completed ? 'line-through text-base-content/40' : ''}`}>
+      {/* Shared Goals & Stories — two-column on desktop */}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* Shared Goals */}
+        <section class="space-y-2">
+          <div class="flex items-center gap-2">
+            <Target size={13} class="text-base-content/30" />
+            <h3 class="text-[11px] font-semibold uppercase text-base-content/35 tracking-wider">Objetivos de la semana</h3>
+            <span class="text-[10px] text-base-content/20 ml-auto">{sharedGoals().length}</span>
+          </div>
+          <div class="space-y-px rounded-xl overflow-hidden">
+            <For each={sharedGoals()}>
+              {(goal) => {
+                const owner = data.getUserById(goal.user_id);
+                return (
+                  <div class="flex items-center gap-2.5 px-3 py-2 bg-base-content/[0.03] hover:bg-base-content/[0.05] transition-colors">
+                    <Show when={goal.is_completed} fallback={<Circle size={13} class="text-base-content/15 shrink-0" />}>
+                      <CheckCircle size={13} class="text-ios-green-500 shrink-0" />
+                    </Show>
+                    <span class={`text-xs flex-1 min-w-0 truncate ${goal.is_completed ? 'line-through text-base-content/30' : 'text-base-content/70'}`}>
                       {goal.text}
                     </span>
+                    <img src={owner?.avatar_url!} alt="" class="w-4 h-4 rounded-full shrink-0 opacity-50" />
                   </div>
-                  <img src={owner?.avatar_url!} alt="" class="w-5 h-5 rounded-full shrink-0" />
-                </div>
-              );
-            }}
-          </For>
-        </div>
-      </section>
+                );
+              }}
+            </For>
+            <Show when={sharedGoals().length === 0}>
+              <div class="px-3 py-6 text-center text-[11px] text-base-content/20 bg-base-content/[0.02]">Sin objetivos compartidos</div>
+            </Show>
+          </div>
+        </section>
 
-      {/* Shared Stories */}
-      <Show when={sharedStories().length > 0}>
+        {/* Shared Stories */}
         <section class="space-y-2">
-          <h3 class="text-xs font-semibold uppercase text-base-content/40 tracking-wider">HUs compartidas</h3>
-          <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <ClipboardList size={13} class="text-base-content/30" />
+            <h3 class="text-[11px] font-semibold uppercase text-base-content/35 tracking-wider">HUs compartidas</h3>
+            <span class="text-[10px] text-base-content/20 ml-auto">{sharedStories().length}</span>
+          </div>
+          <div class="space-y-px rounded-xl overflow-hidden">
             <For each={sharedStories()}>
               {(story) => {
                 const owner = story.assignee_id ? data.getUserById(story.assignee_id) : null;
                 return (
-                  <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-base-200/50">
-                    <Share2 size={14} class="text-ios-blue-500 shrink-0" />
-                    <div class="flex-1 min-w-0">
-                      <span class="text-sm">{story.title}</span>
-                    </div>
+                  <div class="flex items-center gap-2.5 px-3 py-2 bg-base-content/[0.03] hover:bg-base-content/[0.05] transition-colors">
+                    <Share2 size={12} class="text-ios-blue-500/60 shrink-0" />
+                    <span class="text-xs flex-1 min-w-0 truncate text-base-content/70">{story.title}</span>
                     <Show when={owner}>
-                      <img src={owner!.avatar_url!} alt="" class="w-5 h-5 rounded-full shrink-0" />
+                      <img src={owner!.avatar_url!} alt="" class="w-4 h-4 rounded-full shrink-0 opacity-50" />
                     </Show>
                   </div>
                 );
               }}
             </For>
+            <Show when={sharedStories().length === 0}>
+              <div class="px-3 py-6 text-center text-[11px] text-base-content/20 bg-base-content/[0.02]">Sin HUs compartidas</div>
+            </Show>
           </div>
         </section>
-      </Show>
+      </div>
+
     </div>
     </Show>
   );
 };
 
 const TeamSkeleton: Component = () => (
-  <div class="space-y-5 animate-pulse">
-    <div class="h-7 w-24 rounded bg-base-200/60" />
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-      <div class="h-24 rounded-2xl bg-base-200/50" />
-      <div class="h-24 rounded-2xl bg-base-200/50" />
-      <div class="h-24 rounded-2xl bg-base-200/50" />
-      <div class="h-24 rounded-2xl bg-base-200/50" />
+  <div class="space-y-4 animate-pulse">
+    <div class="flex gap-2">
+      <div class="h-9 w-28 rounded-xl bg-base-200/40" />
+      <div class="h-9 w-24 rounded-xl bg-base-200/40" />
+      <div class="h-9 w-24 rounded-xl bg-base-200/40" />
+      <div class="h-9 w-24 rounded-xl bg-base-200/40" />
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="space-y-px rounded-xl overflow-hidden">
+        <div class="h-9 bg-base-200/30" />
+        <div class="h-9 bg-base-200/30" />
+        <div class="h-9 bg-base-200/30" />
+      </div>
+      <div class="space-y-px rounded-xl overflow-hidden">
+        <div class="h-9 bg-base-200/30" />
+        <div class="h-9 bg-base-200/30" />
+        <div class="h-9 bg-base-200/30" />
+      </div>
     </div>
   </div>
 );

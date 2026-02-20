@@ -32,7 +32,7 @@ export const DataProvider: ParentComponent = (props) => {
   return (
     <DataContext.Provider value={value}>
       <Suspense fallback={
-        <div class="min-h-screen flex items-center justify-center">
+        <div class="min-h-screen flex items-center justify-center bg-base-100">
           <div class="flex flex-col items-center gap-3">
             <span class="loading loading-spinner loading-md text-ios-blue-500" />
             <span class="text-sm text-base-content/40">Cargando datos...</span>
