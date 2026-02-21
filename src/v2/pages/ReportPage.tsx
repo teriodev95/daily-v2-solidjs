@@ -301,66 +301,68 @@ const ReportPage: Component<ReportPageProps> = (props) => {
         <div class="space-y-6">
 
           {/* Unified Goals & Assignments bar (sticky) */}
-          <div class="sticky top-14 md:top-16 z-30 -mx-4 lg:-mx-6 px-4 lg:px-6 py-2.5 bg-base-100/90 backdrop-blur-2xl border-b border-base-content/[0.04] shadow-sm shadow-base-content/[0.01]">
-            <div class="flex items-center gap-3 overflow-x-auto pb-1.5 pt-0.5 scrollbar-none">
+          <div class="sticky top-14 md:top-16 z-30 -mx-4 lg:-mx-6 px-4 lg:px-6 py-2 bg-base-100/90 backdrop-blur-2xl border-b border-base-content/[0.04] shadow-sm shadow-base-content/[0.01]">
+            <div class="flex flex-col gap-1.5">
 
               {/* Goals */}
-              <div class="flex items-center gap-2 shrink-0">
-                <div class="w-7 h-7 rounded-full bg-base-content/10 flex items-center justify-center shrink-0 mr-1" title="Tus objetivos">
-                  <Target size={14} class="text-base-content/50" />
+              <div class="flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-none">
+                <div class="flex items-center gap-2 shrink-0">
+                  <div class="w-7 h-7 rounded-full bg-base-content/10 flex items-center justify-center shrink-0 mr-1" title="Tus objetivos">
+                    <Target size={14} class="text-base-content/50" />
+                  </div>
+                  <For each={myGoals()}>
+                    {(goal) => (
+                      <div
+                        onContextMenu={(e) => openGoalCtxMenu(e, goal)}
+                        class={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap border transition-all shrink-0 cursor-pointer shadow-sm ${goal.is_completed
+                          ? 'bg-base-content/5 text-base-content/30 line-through border-transparent hover:bg-base-content/10 shadow-none'
+                          : 'bg-base-200/90 border-base-300/60 hover:bg-base-200'
+                          }`}
+                      >
+                        <Show when={goal.is_completed} fallback={<Circle size={13} class="text-base-content/20 shrink-0" />}>
+                          <CheckCircle size={13} class="text-ios-green-500 shrink-0" />
+                        </Show>
+                        {goal.text}
+                      </div>
+                    )}
+                  </For>
+                  <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-base-content/25 border border-dashed border-base-300/50 whitespace-nowrap hover:bg-base-content/5 transition-all shrink-0 shadow-sm">
+                    <Plus size={13} />
+                  </button>
                 </div>
-                <For each={myGoals()}>
-                  {(goal) => (
-                    <div
-                      onContextMenu={(e) => openGoalCtxMenu(e, goal)}
-                      class={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap border transition-all shrink-0 cursor-pointer shadow-sm ${goal.is_completed
-                        ? 'bg-base-content/5 text-base-content/30 line-through border-transparent hover:bg-base-content/10 shadow-none'
-                        : 'bg-base-200/90 border-base-300/60 hover:bg-base-200'
-                        }`}
-                    >
-                      <Show when={goal.is_completed} fallback={<Circle size={13} class="text-base-content/20 shrink-0" />}>
-                        <CheckCircle size={13} class="text-ios-green-500 shrink-0" />
-                      </Show>
-                      {goal.text}
-                    </div>
-                  )}
-                </For>
-                <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-base-content/25 border border-dashed border-base-300/50 whitespace-nowrap hover:bg-base-content/5 transition-all shrink-0 shadow-sm">
-                  <Plus size={13} />
-                </button>
               </div>
 
-              {/* Divider & Encomiendas */}
+              {/* Encomiendas */}
               <Show when={myAssignments().length > 0}>
-                <div class="w-px h-5 bg-base-content/10 shrink-0 rounded-full mx-1" />
-
-                <div class="flex items-center gap-2 shrink-0">
-                  <div class="w-7 h-7 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0 mr-1" title="Encomiendas (Asignadas por el equipo)">
-                    <Flag size={14} class="text-purple-500" />
+                <div class="flex items-center gap-2 overflow-x-auto pb-0.5 pt-1.5 border-t border-base-content/[0.06] scrollbar-none">
+                  <div class="flex items-center gap-2 shrink-0">
+                    <div class="w-7 h-7 rounded-full bg-purple-500/10 flex items-center justify-center shrink-0 mr-1" title="Encomiendas (Asignadas por el equipo)">
+                      <Flag size={14} class="text-purple-500" />
+                    </div>
+                    <For each={myAssignments()}>
+                      {(assignment) => {
+                        const assigner = data.getUserById(assignment.assigned_by);
+                        const dueDays = () => {
+                          if (!assignment.due_date) return null;
+                          const diff = Math.ceil((new Date(assignment.due_date).getTime() - Date.now()) / 86400000);
+                          return diff;
+                        };
+                        return (
+                          <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap border border-purple-500/20 bg-purple-500/[0.04] text-purple-600 dark:text-purple-300 shrink-0 shadow-sm">
+                            {assignment.title}
+                            <Show when={assignment.due_date}>
+                              <span class={`text-[10px] ml-0.5 uppercase tracking-wider font-bold shrink-0 ${dueDays()! < 0 ? 'text-red-500' : dueDays()! <= 2 ? 'text-amber-500' : 'text-purple-500/50'}`}>
+                                {dueDays()! < 0 ? 'Vencida' : dueDays() === 0 ? 'Hoy' : dueDays() === 1 ? 'Mañana' : `${dueDays()}d`}
+                              </span>
+                            </Show>
+                            <Show when={assigner}>
+                              <img src={assigner!.avatar_url!} alt="" class="w-4 h-4 rounded-full ring-1 ring-base-100 shrink-0 ml-1 shadow-sm" title={`De ${assigner!.name}`} />
+                            </Show>
+                          </div>
+                        );
+                      }}
+                    </For>
                   </div>
-                  <For each={myAssignments()}>
-                    {(assignment) => {
-                      const assigner = data.getUserById(assignment.assigned_by);
-                      const dueDays = () => {
-                        if (!assignment.due_date) return null;
-                        const diff = Math.ceil((new Date(assignment.due_date).getTime() - Date.now()) / 86400000);
-                        return diff;
-                      };
-                      return (
-                        <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap border border-purple-500/20 bg-purple-500/[0.04] text-purple-600 dark:text-purple-300 shrink-0 shadow-sm">
-                          {assignment.title}
-                          <Show when={assignment.due_date}>
-                            <span class={`text-[10px] ml-0.5 uppercase tracking-wider font-bold shrink-0 ${dueDays()! < 0 ? 'text-red-500' : dueDays()! <= 2 ? 'text-amber-500' : 'text-purple-500/50'}`}>
-                              {dueDays()! < 0 ? 'Vencida' : dueDays() === 0 ? 'Hoy' : dueDays() === 1 ? 'Mañana' : `${dueDays()}d`}
-                            </span>
-                          </Show>
-                          <Show when={assigner}>
-                            <img src={assigner!.avatar_url!} alt="" class="w-4 h-4 rounded-full ring-1 ring-base-100 shrink-0 ml-1 shadow-sm" title={`De ${assigner!.name}`} />
-                          </Show>
-                        </div>
-                      );
-                    }}
-                  </For>
                 </div>
               </Show>
 
