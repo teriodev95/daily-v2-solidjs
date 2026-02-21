@@ -79,6 +79,8 @@ export const api = {
       request<UserSafe>('/api/team/members', { method: 'POST', body: JSON.stringify(data) }),
     updateMember: (id: string, data: Record<string, unknown>) =>
       request<UserSafe>(`/api/team/members/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    uploadAvatar: (userId: string, file: File) =>
+      uploadFile<UserSafe>(`/api/team/members/${userId}/avatar`, file),
   },
 
   projects: {
@@ -88,6 +90,8 @@ export const api = {
       request<Project>('/api/projects', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Record<string, unknown>) =>
       request<Project>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<{ ok: boolean; archived?: boolean }>(`/api/projects/${id}`, { method: 'DELETE' }),
   },
 
   stories: {
@@ -136,6 +140,8 @@ export const api = {
       request<WeekGoal>('/api/goals', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Record<string, unknown>) =>
       request<WeekGoal>(`/api/goals/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<{ ok: boolean }>(`/api/goals/${id}`, { method: 'DELETE' }),
   },
 
   assignments: {

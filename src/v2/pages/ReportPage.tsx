@@ -35,7 +35,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     ({ uid }) => uid ? api.stories.list({ assignee_id: uid }) : Promise.resolve([]),
   );
 
-  const [goalsList] = createResource(userId, (uid) =>
+  const [goalsList, { mutate: mutateGoals, refetch: refetchGoals }] = createResource(userId, (uid) =>
     api.goals.list({ user_id: uid })
   );
 
@@ -145,7 +145,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       enteringIds().has(storyId) ? 'animate-card-enter' : '';
 
   // ─── Context menu ───
-  const [ctxMenu, setCtxMenu] = createSignal<{ story: Story; x: number; y: number } | null>(null);
+  const [ctxMenu, setCtxMenu] = createSignal<{ story?: Story; goal?: { id: string, text: string }; x: number; y: number } | null>(null);
 
   const openCtxMenu = (e: MouseEvent, story: Story) => {
     e.preventDefault();
@@ -154,6 +154,15 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     const x = Math.max(8, Math.min(e.clientX, window.innerWidth - menuW - 8));
     const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuH - 8));
     setCtxMenu({ story, x, y });
+  };
+
+  const openGoalCtxMenu = (e: MouseEvent, goal: { id: string, text: string }) => {
+    e.preventDefault();
+    const menuW = 200;
+    const menuH = 120; // smaller menu for goals
+    const x = Math.max(8, Math.min(e.clientX, window.innerWidth - menuW - 8));
+    const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuH - 8));
+    setCtxMenu({ goal, x, y });
   };
 
   const closeCtxMenu = () => setCtxMenu(null);
@@ -165,7 +174,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   // ─── Delete with undo toast ───
   let deleteTimer: ReturnType<typeof setTimeout> | null = null;
-  const [deletePending, setDeletePending] = createSignal<{ story: Story } | null>(null);
+  const [deletePending, setDeletePending] = createSignal<{ story?: Story, goalId?: string, goalText?: string } | null>(null);
   const [toastExiting, setToastExiting] = createSignal(false);
 
   const dismissToast = (then: () => void) => {
@@ -196,9 +205,36 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     deleteTimer = setTimeout(() => {
       dismissToast(() => {
         api.stories.delete(story.id).catch(() => { });
+        refetchStories();
       });
       deleteTimer = null;
     }, 4000);
+  };
+
+  const ctxDeleteGoal = (id: string, text: string) => {
+    closeCtxMenu();
+    // optimistic
+    if (mutateGoals) {
+      mutateGoals(prev => prev?.filter(g => g.id !== id) ?? []);
+    }
+
+    setToastExiting(false);
+    setDeletePending({ goalId: id, goalText: text });
+
+    if (deleteTimer) clearTimeout(deleteTimer);
+    deleteTimer = setTimeout(() => {
+      dismissToast(() => {
+        api.goals.delete(id).catch(() => { });
+      });
+      deleteTimer = null;
+    }, 4000);
+  };
+
+  const ctxToggleGoalComplete = (id: string, currentStatus: boolean | undefined) => {
+    closeCtxMenu();
+    api.goals.update(id, { is_completed: !currentStatus }).then(() => {
+      refetchGoals();
+    }).catch(() => { });
   };
 
   const undoDelete = () => {
@@ -207,12 +243,16 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     if (deleteTimer) { clearTimeout(deleteTimer); deleteTimer = null; }
 
     dismissToast(() => {
-      // Restore story with enter animation
-      setEnteringIds(prev => new Set([...prev, pending.story.id]));
-      setLocalStories(prev => [...prev, pending.story]);
-      setTimeout(() => {
-        setEnteringIds(prev => { const n = new Set(prev); n.delete(pending.story.id); return n; });
-      }, 260);
+      if (pending.story) {
+        // Restore story with enter animation
+        setEnteringIds(prev => new Set([...prev, pending.story!.id]));
+        setLocalStories(prev => [...prev, pending.story!]);
+        setTimeout(() => {
+          setEnteringIds(prev => { const n = new Set(prev); n.delete(pending.story!.id); return n; });
+        }, 260);
+      } else if (pending.goalId) {
+        refetchGoals();
+      }
     });
   };
 
@@ -268,10 +308,13 @@ const ReportPage: Component<ReportPageProps> = (props) => {
               </div>
               <For each={myGoals()}>
                 {(goal) => (
-                  <div class={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm whitespace-nowrap border transition-all shrink-0 ${goal.is_completed
-                      ? 'bg-base-content/5 text-base-content/30 line-through border-transparent'
-                      : 'bg-base-200/80 border-base-300/50'
-                    }`}>
+                  <div
+                    onContextMenu={(e) => openGoalCtxMenu(e, goal)}
+                    class={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm whitespace-nowrap border transition-all shrink-0 cursor-pointer ${goal.is_completed
+                      ? 'bg-base-content/5 text-base-content/30 line-through border-transparent hover:bg-base-content/10'
+                      : 'bg-base-200/80 border-base-300/50 hover:bg-base-200'
+                      }`}
+                  >
                     <Show when={goal.is_completed} fallback={<Circle size={14} class="text-base-content/20" />}>
                       <CheckCircle size={14} class="text-ios-green-500" />
                     </Show>
@@ -540,63 +583,105 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       {/* Context menu */}
       <Show when={ctxMenu()}>
         {(menu) => {
-          const s = menu().story;
-          const moves = statusOptions(s.status as StoryStatus);
-          return (
-            <div
-              class="fixed z-[100] min-w-[180px] py-1.5 rounded-xl bg-base-100 border border-base-content/[0.08] shadow-xl shadow-black/20 animate-ctx-menu"
-              style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Title */}
-              <div class="px-3 py-1.5 text-[10px] font-semibold text-base-content/30 uppercase tracking-wider truncate">
-                {s.code || s.title.slice(0, 24)}
-              </div>
-
-              {/* Open */}
-              <button
-                onClick={() => { closeCtxMenu(); setSelectedStory(s); }}
-                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/70 hover:bg-base-content/5 transition-colors"
+          if (menu().story) {
+            const s = menu().story!;
+            const moves = statusOptions(s.status as StoryStatus);
+            return (
+              <div
+                class="fixed z-[100] min-w-[180px] py-1.5 rounded-xl bg-base-100 border border-base-content/[0.08] shadow-xl shadow-black/20 animate-ctx-menu"
+                style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
+                onClick={(e) => e.stopPropagation()}
               >
-                <Eye size={14} class="shrink-0" />
-                Abrir detalle
-              </button>
+                {/* Title */}
+                <div class="px-3 py-1.5 text-[10px] font-semibold text-base-content/30 uppercase tracking-wider truncate">
+                  {s.code || s.title.slice(0, 24)}
+                </div>
 
-              {/* Separator */}
-              <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
+                {/* Open */}
+                <button
+                  onClick={() => { closeCtxMenu(); setSelectedStory(s); }}
+                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/70 hover:bg-base-content/5 transition-colors"
+                >
+                  <Eye size={14} class="shrink-0" />
+                  Abrir detalle
+                </button>
 
-              {/* Move options */}
-              <div class="px-2 py-1">
-                <span class="px-1 text-[9px] font-semibold text-base-content/20 uppercase tracking-wider">Mover a</span>
+                {/* Separator */}
+                <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
+
+                {/* Move options */}
+                <div class="px-2 py-1">
+                  <span class="px-1 text-[9px] font-semibold text-base-content/20 uppercase tracking-wider">Mover a</span>
+                </div>
+                <For each={moves}>
+                  {(opt) => {
+                    const Icon = opt.icon;
+                    return (
+                      <button
+                        onClick={() => ctxMoveAndClose(s.id, opt.status)}
+                        class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm hover:bg-base-content/5 transition-colors"
+                      >
+                        <Icon size={14} class={`shrink-0 ${opt.color}`} />
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  }}
+                </For>
+
+                {/* Separator */}
+                <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
+
+                {/* Delete (undo via toast) */}
+                <button
+                  onClick={() => ctxDelete(s)}
+                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-red-500/60 hover:text-red-500 hover:bg-red-500/5 transition-colors"
+                >
+                  <Trash2 size={14} class="shrink-0" />
+                  Eliminar
+                </button>
               </div>
-              <For each={moves}>
-                {(opt) => {
-                  const Icon = opt.icon;
-                  return (
-                    <button
-                      onClick={() => ctxMoveAndClose(s.id, opt.status)}
-                      class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm hover:bg-base-content/5 transition-colors"
-                    >
-                      <Icon size={14} class={`shrink-0 ${opt.color}`} />
-                      <span>{opt.label}</span>
-                    </button>
-                  );
-                }}
-              </For>
+            );
+          } else if (menu().goal) {
+            const g = menu().goal!;
+            const fullGoal = myGoals().find(goal => goal.id === g.id);
+            const isCompleted = fullGoal?.is_completed;
 
-              {/* Separator */}
-              <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
-
-              {/* Delete (undo via toast) */}
-              <button
-                onClick={() => ctxDelete(s)}
-                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-red-500/60 hover:text-red-500 hover:bg-red-500/5 transition-colors"
+            return (
+              <div
+                class="fixed z-[100] min-w-[180px] py-1.5 rounded-xl bg-base-100 border border-base-content/[0.08] shadow-xl shadow-black/20 animate-ctx-menu"
+                style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
+                onClick={(e) => e.stopPropagation()}
               >
-                <Trash2 size={14} class="shrink-0" />
-                Eliminar
-              </button>
-            </div>
-          );
+                {/* Title */}
+                <div class="px-3 py-1.5 text-[10px] font-semibold text-base-content/30 uppercase tracking-wider truncate">
+                  OBJETIVO
+                </div>
+
+                <button
+                  onClick={() => ctxToggleGoalComplete(g.id, isCompleted)}
+                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/70 hover:bg-base-content/5 transition-colors"
+                >
+                  <Show when={isCompleted} fallback={<CheckCircle size={14} class="shrink-0 text-ios-green-500" />}>
+                    <RotateCcw size={14} class="shrink-0 text-ios-blue-500" />
+                  </Show>
+                  <span class={isCompleted ? "" : "text-ios-green-500"}>{isCompleted ? "Reabrir" : "Marcar completado"}</span>
+                </button>
+
+                {/* Separator */}
+                <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
+
+                {/* Delete */}
+                <button
+                  onClick={() => ctxDeleteGoal(g.id, g.text)}
+                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-red-500/60 hover:text-red-500 hover:bg-red-500/5 transition-colors"
+                >
+                  <Trash2 size={14} class="shrink-0" />
+                  Eliminar
+                </button>
+              </div>
+            );
+          }
+          return null;
         }}
       </Show>
 
@@ -606,7 +691,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
           <div class={`fixed bottom-[6rem] md:bottom-24 left-1/2 -translate-x-1/2 z-[110] max-w-sm w-[calc(100%-2rem)] sm:w-auto ${toastExiting() ? 'animate-toast-out' : 'animate-toast-in'}`}>
             <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-base-300 border border-base-content/[0.08] shadow-xl shadow-black/20 backdrop-blur-xl">
               <Trash2 size={14} class="text-red-500/60 shrink-0" />
-              <span class="text-sm text-base-content/70 whitespace-nowrap">Tarea eliminada</span>
+              <span class="text-sm text-base-content/70 whitespace-nowrap">{pending().goalId ? "Objetivo eliminado" : "Tarea eliminada"}</span>
               <button
                 onClick={undoDelete}
                 class="text-sm font-semibold text-ios-blue-500 hover:text-ios-blue-400 transition-colors whitespace-nowrap"
