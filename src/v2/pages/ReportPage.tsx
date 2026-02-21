@@ -1,12 +1,12 @@
 import { createSignal, createResource, createEffect, onCleanup, For, Show, type Component } from 'solid-js';
-import type { Story, StoryStatus } from '../types';
+import type { Story, StoryStatus, Assignment } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import {
   CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle,
   Plus, Package, Target, Play, RotateCcw, Check,
-  Eye, Trash2, ArrowRightCircle,
+  Eye, Trash2, ArrowRightCircle, Flag,
 } from 'lucide-solid';
 import StoryDetail from '../components/StoryDetail';
 import type { ReportCategory } from '../types';
@@ -37,6 +37,11 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   const [goalsList] = createResource(userId, (uid) =>
     api.goals.list({ user_id: uid })
+  );
+
+  const [assignmentsList] = createResource(
+    () => ({ uid: userId(), _r: props.refreshKey }),
+    ({ uid }) => uid ? api.assignments.list({ assigned_to: uid, status: 'open' }) : Promise.resolve([]),
   );
 
   // Local state for optimistic updates
@@ -89,9 +94,10 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     });
   };
 
-  const todayStories = () => localStories().filter(s => s.status === 'in_progress');
-  const backlogStories = () => localStories().filter(s => s.status === 'todo' || s.status === 'backlog');
+  const activeStories = () => localStories().filter(s => s.status === 'in_progress' || s.status === 'todo');
+  const backlogStories = () => localStories().filter(s => s.status === 'backlog');
   const myGoals = () => goalsList() ?? [];
+  const myAssignments = () => (assignmentsList() ?? []) as Assignment[];
 
   const getProject = (projectId: string | null) => {
     if (!projectId) return null;
@@ -136,7 +142,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   const cardClass = (storyId: string) =>
     exitingIds().has(storyId) ? 'animate-card-exit' :
-    enteringIds().has(storyId) ? 'animate-card-enter' : '';
+      enteringIds().has(storyId) ? 'animate-card-enter' : '';
 
   // ─── Context menu ───
   const [ctxMenu, setCtxMenu] = createSignal<{ story: Story; x: number; y: number } | null>(null);
@@ -189,7 +195,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     if (deleteTimer) clearTimeout(deleteTimer);
     deleteTimer = setTimeout(() => {
       dismissToast(() => {
-        api.stories.delete(story.id).catch(() => {});
+        api.stories.delete(story.id).catch(() => { });
       });
       deleteTimer = null;
     }, 4000);
@@ -251,330 +257,381 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   return (
     <>
-    <Show when={!reportData.loading && !userStories.loading} fallback={<ReportSkeleton />}>
-    <div class="space-y-6">
+      <Show when={!reportData.loading && !userStories.loading} fallback={<ReportSkeleton />}>
+        <div class="space-y-6">
 
-      {/* Goals bar (sticky) */}
-      <div class="sticky top-14 md:top-16 z-30 -mx-4 lg:-mx-6 px-4 lg:px-6 py-3 bg-base-100/80 backdrop-blur-xl">
-        <div class="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
-          <div class="w-8 h-8 rounded-full bg-base-content/10 flex items-center justify-center shrink-0">
-            <Target size={16} class="text-base-content/50" />
-          </div>
-          <For each={myGoals()}>
-            {(goal) => (
-              <div class={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm whitespace-nowrap border transition-all shrink-0 ${
-                goal.is_completed
-                  ? 'bg-base-content/5 text-base-content/30 line-through border-transparent'
-                  : 'bg-base-200/80 border-base-300/50'
-              }`}>
-                <Show when={goal.is_completed} fallback={<Circle size={14} class="text-base-content/20" />}>
-                  <CheckCircle size={14} class="text-ios-green-500" />
-                </Show>
-                {goal.text}
+          {/* Goals bar (sticky) */}
+          <div class="sticky top-14 md:top-16 z-30 -mx-4 lg:-mx-6 px-4 lg:px-6 py-3 bg-base-100/80 backdrop-blur-xl">
+            <div class="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
+              <div class="w-8 h-8 rounded-full bg-base-content/10 flex items-center justify-center shrink-0">
+                <Target size={16} class="text-base-content/50" />
               </div>
-            )}
-          </For>
-          <button class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm text-base-content/25 border border-dashed border-base-300/50 whitespace-nowrap hover:bg-base-content/5 transition-all shrink-0">
-            <Plus size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* Two columns: Completado + Hoy */}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* Completed */}
-        <section>
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-9 h-9 rounded-full bg-ios-green-500/10 flex items-center justify-center">
-              <CheckCircle size={18} class="text-ios-green-500" />
-            </div>
-            <div>
-              <h2 class="text-sm font-bold">Trabajo completado</h2>
-              <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Tareas finalizadas</p>
+              <For each={myGoals()}>
+                {(goal) => (
+                  <div class={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm whitespace-nowrap border transition-all shrink-0 ${goal.is_completed
+                      ? 'bg-base-content/5 text-base-content/30 line-through border-transparent'
+                      : 'bg-base-200/80 border-base-300/50'
+                    }`}>
+                    <Show when={goal.is_completed} fallback={<Circle size={14} class="text-base-content/20" />}>
+                      <CheckCircle size={14} class="text-ios-green-500" />
+                    </Show>
+                    {goal.text}
+                  </div>
+                )}
+              </For>
+              <button class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm text-base-content/25 border border-dashed border-base-300/50 whitespace-nowrap hover:bg-base-content/5 transition-all shrink-0">
+                <Plus size={14} />
+              </button>
             </div>
           </div>
-          <div class="space-y-2">
-            {/* Today's completions */}
-            <For each={completedToday()}>
-              {(story) => (
-                <div onContextMenu={(e) => openCtxMenu(e, story)} class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 group ${cardClass(story.id)}`}>
-                  <button
-                    onClick={() => moveStory(story.id, 'in_progress')}
-                    class="p-1.5 rounded-md text-base-content/15 sm:text-base-content/0 group-hover:text-base-content/20 hover:!text-amber-500 hover:!bg-amber-500/10 transition-all shrink-0"
-                    title="Reabrir"
-                  >
-                    <RotateCcw size={14} />
-                  </button>
-                  <button onClick={() => setSelectedStory(story)} class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                    <span class="text-sm text-base-content/40 line-through flex-1 truncate">{story.title}</span>
-                    <ProjectBadge story={story} />
-                  </button>
-                  <span class="text-[9px] text-base-content/15 shrink-0">hoy</span>
+
+          {/* Two columns: Completado + Hoy */}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            {/* Completed */}
+            <section>
+              <div class="flex items-center gap-3 mb-4">
+                <div class="w-9 h-9 rounded-full bg-ios-green-500/10 flex items-center justify-center">
+                  <CheckCircle size={18} class="text-ios-green-500" />
                 </div>
-              )}
-            </For>
-            {/* Yesterday's completions */}
-            <Show when={completedYesterday().length > 0}>
-              <Show when={completedToday().length > 0}>
-                <div class="flex items-center gap-2 py-1">
-                  <div class="flex-1 h-px bg-base-content/5" />
-                  <span class="text-[9px] text-base-content/15 uppercase">
-                    {yesterdayRange().isWeekend ? 'fin de semana' : 'ayer'}
-                  </span>
-                  <div class="flex-1 h-px bg-base-content/5" />
+                <div>
+                  <h2 class="text-sm font-bold">Trabajo completado</h2>
+                  <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Tareas finalizadas</p>
+                </div>
+              </div>
+              <div class="space-y-2">
+                {/* Today's completions */}
+                <For each={completedToday()}>
+                  {(story) => (
+                    <div onContextMenu={(e) => openCtxMenu(e, story)} class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 group ${cardClass(story.id)}`}>
+                      <button
+                        onClick={() => moveStory(story.id, 'in_progress')}
+                        class="p-1.5 rounded-md text-base-content/15 sm:text-base-content/0 group-hover:text-base-content/20 hover:!text-amber-500 hover:!bg-amber-500/10 transition-all shrink-0"
+                        title="Reabrir"
+                      >
+                        <RotateCcw size={14} />
+                      </button>
+                      <button onClick={() => setSelectedStory(story)} class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                        <span class="text-sm text-base-content/40 line-through flex-1 truncate">{story.title}</span>
+                        <ProjectBadge story={story} />
+                      </button>
+                      <span class="text-[9px] text-base-content/15 shrink-0">hoy</span>
+                    </div>
+                  )}
+                </For>
+                {/* Yesterday's completions */}
+                <Show when={completedYesterday().length > 0}>
+                  <Show when={completedToday().length > 0}>
+                    <div class="flex items-center gap-2 py-1">
+                      <div class="flex-1 h-px bg-base-content/5" />
+                      <span class="text-[9px] text-base-content/15 uppercase">
+                        {yesterdayRange().isWeekend ? 'fin de semana' : 'ayer'}
+                      </span>
+                      <div class="flex-1 h-px bg-base-content/5" />
+                    </div>
+                  </Show>
+                  <For each={completedYesterday()}>
+                    {(story) => {
+                      const proj = getProject(story.project_id);
+                      return (
+                        <button onContextMenu={(e) => openCtxMenu(e, story)} onClick={() => setSelectedStory(story)} class="w-full text-left flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 hover:bg-base-200/60 transition-all cursor-pointer">
+                          <CheckCircle size={13} class="text-ios-green-500/30 shrink-0" />
+                          <span class="text-sm text-base-content/30 flex-1 truncate">{story.title}</span>
+                          <Show when={yesterdayRange().isWeekend && story.completed_at}>
+                            <span class="text-[9px] text-base-content/15 capitalize">{formatCompletedDay(story.completed_at!)}</span>
+                          </Show>
+                          <Show when={story.code}>
+                            <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0" style={{ "background-color": `${proj?.color ?? '#525252'}10`, color: `${proj?.color ?? '#525252'}80` }}>{story.code}</span>
+                          </Show>
+                        </button>
+                      );
+                    }}
+                  </For>
+                </Show>
+                <Show when={completedToday().length === 0 && completedYesterday().length === 0}>
+                  <div class="px-3 py-4 rounded-xl bg-base-200/30 text-center">
+                    <span class="text-sm text-base-content/20">Sin tareas completadas</span>
+                  </div>
+                </Show>
+              </div>
+            </section>
+
+            {/* Active work — todo + in_progress */}
+            <section>
+              <div class="flex items-center gap-3 mb-4">
+                <div class="w-9 h-9 rounded-full bg-ios-blue-500/10 flex items-center justify-center">
+                  <ArrowRight size={18} class="text-ios-blue-500" />
+                </div>
+                <div>
+                  <h2 class="text-sm font-bold">Trabajo activo</h2>
+                  <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Por hacer y en progreso</p>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <For each={activeStories()}>
+                  {(story) => (
+                    <div onContextMenu={(e) => openCtxMenu(e, story)} class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 group ${cardClass(story.id)}`}>
+                      <button
+                        onClick={() => moveStory(story.id, 'done')}
+                        class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 transition-all shrink-0"
+                        title="Marcar completada"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button onClick={() => setSelectedStory(story)} class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                        <span class="text-sm flex-1 truncate">{story.title}</span>
+                        <ProjectBadge story={story} />
+                      </button>
+                      <Show when={story.status === 'in_progress'}>
+                        <span class="relative flex h-2 w-2 shrink-0" title="En progreso">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-ios-blue-500 opacity-50" />
+                          <span class="relative inline-flex rounded-full h-2 w-2 bg-ios-blue-500" />
+                        </span>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+                <Show when={activeStories().length === 0}>
+                  <div class="px-3 py-4 rounded-xl bg-base-200/30 text-center">
+                    <span class="text-sm text-base-content/20">Mueve tareas aquí desde el backlog</span>
+                  </div>
+                </Show>
+              </div>
+            </section>
+          </div>
+
+          {/* Backlog */}
+          <section>
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-9 h-9 rounded-full bg-base-content/[0.06] flex items-center justify-center">
+                <Package size={18} class="text-base-content/40" />
+              </div>
+              <div>
+                <h2 class="text-sm font-bold">Backlog</h2>
+                <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Pendiente de priorizar</p>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <For each={backlogStories()}>
+                {(story) => (
+                  <div onContextMenu={(e) => openCtxMenu(e, story)} class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 group ${cardClass(story.id)}`}>
+                    <button
+                      onClick={() => moveStory(story.id, 'todo')}
+                      class="p-1.5 rounded-md text-base-content/15 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all shrink-0"
+                      title="Mover a trabajo activo"
+                    >
+                      <Play size={14} />
+                    </button>
+                    <button onClick={() => setSelectedStory(story)} class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                      <span class="text-sm text-base-content/35 flex-1 truncate">{story.title}</span>
+                      <ProjectBadge story={story} />
+                    </button>
+                  </div>
+                )}
+              </For>
+              <button
+                onClick={() => props.onCreateStory?.('backlog')}
+                class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all"
+              >
+                <Plus size={14} />
+                Agregar al backlog...
+              </button>
+            </div>
+          </section>
+
+          {/* Encomiendas */}
+          <Show when={myAssignments().length > 0}>
+            <section>
+              <div class="flex items-center gap-3 mb-4">
+                <div class="w-9 h-9 rounded-full bg-purple-500/10 flex items-center justify-center">
+                  <Flag size={18} class="text-purple-500" />
+                </div>
+                <div>
+                  <h2 class="text-sm font-bold">Encomiendas</h2>
+                  <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Tareas asignadas por el equipo</p>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <For each={myAssignments()}>
+                  {(assignment) => {
+                    const assigner = data.getUserById(assignment.assigned_by);
+                    const proj = getProject(assignment.project_id);
+                    const dueDays = () => {
+                      if (!assignment.due_date) return null;
+                      const diff = Math.ceil((new Date(assignment.due_date).getTime() - Date.now()) / 86400000);
+                      return diff;
+                    };
+                    return (
+                      <div class="flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
+                        <Circle size={14} class="text-purple-500/30 shrink-0" />
+                        <span class="text-sm flex-1 truncate">{assignment.title}</span>
+                        <Show when={proj}>
+                          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ "background-color": `${proj!.color}15`, color: proj!.color }}>{proj!.prefix}</span>
+                        </Show>
+                        <Show when={assigner}>
+                          <img src={assigner!.avatar_url!} alt="" class="w-5 h-5 rounded-full shrink-0" title={`De ${assigner!.name}`} />
+                        </Show>
+                        <Show when={assignment.due_date}>
+                          <span class={`text-[10px] font-semibold shrink-0 ${dueDays()! < 0 ? 'text-red-500' : dueDays()! <= 2 ? 'text-amber-500' : 'text-base-content/30'
+                            }`}>
+                            {dueDays()! < 0 ? 'Vencida' : dueDays() === 0 ? 'Hoy' : dueDays() === 1 ? 'Mañana' : `${dueDays()}d`}
+                          </span>
+                        </Show>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </section>
+          </Show>
+
+          {/* Learning */}
+          <section>
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-9 h-9 rounded-full bg-amber-500/10 flex items-center justify-center">
+                <BookOpen size={18} class="text-amber-500" />
+              </div>
+              <div>
+                <h2 class="text-sm font-bold">¿Qué estoy aprendiendo?</h2>
+                <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Documenta tu crecimiento</p>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <Show when={report()?.learning}>
+                <div class="flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
+                  <Circle size={14} class="text-base-content/15 shrink-0" />
+                  <span class="text-sm">{report()!.learning}</span>
                 </div>
               </Show>
-              <For each={completedYesterday()}>
-                {(story) => {
-                  const proj = getProject(story.project_id);
+              <button class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all">
+                <Plus size={14} />
+                Añadir nuevo aprendizaje...
+              </button>
+            </div>
+          </section>
+
+          {/* Impediments */}
+          <section>
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-9 h-9 rounded-full bg-red-500/10 flex items-center justify-center">
+                <AlertTriangle size={18} class="text-red-500" />
+              </div>
+              <div>
+                <h2 class="text-sm font-bold">¿Qué impedimentos tengo?</h2>
+                <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Identifica obstáculos</p>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <Show when={report()?.impediments}>
+                <div class="flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
+                  <Circle size={14} class="text-base-content/15 shrink-0" />
+                  <span class="text-sm">{report()!.impediments}</span>
+                </div>
+              </Show>
+              <button class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all">
+                <Plus size={14} />
+                Añadir nuevo impedimento...
+              </button>
+            </div>
+          </section>
+        </div>
+      </Show>
+
+      {/* Context menu */}
+      <Show when={ctxMenu()}>
+        {(menu) => {
+          const s = menu().story;
+          const moves = statusOptions(s.status as StoryStatus);
+          return (
+            <div
+              class="fixed z-[100] min-w-[180px] py-1.5 rounded-xl bg-base-100 border border-base-content/[0.08] shadow-xl shadow-black/20 animate-ctx-menu"
+              style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Title */}
+              <div class="px-3 py-1.5 text-[10px] font-semibold text-base-content/30 uppercase tracking-wider truncate">
+                {s.code || s.title.slice(0, 24)}
+              </div>
+
+              {/* Open */}
+              <button
+                onClick={() => { closeCtxMenu(); setSelectedStory(s); }}
+                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/70 hover:bg-base-content/5 transition-colors"
+              >
+                <Eye size={14} class="shrink-0" />
+                Abrir detalle
+              </button>
+
+              {/* Separator */}
+              <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
+
+              {/* Move options */}
+              <div class="px-2 py-1">
+                <span class="px-1 text-[9px] font-semibold text-base-content/20 uppercase tracking-wider">Mover a</span>
+              </div>
+              <For each={moves}>
+                {(opt) => {
+                  const Icon = opt.icon;
                   return (
-                    <button onContextMenu={(e) => openCtxMenu(e, story)} onClick={() => setSelectedStory(story)} class="w-full text-left flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 hover:bg-base-200/60 transition-all cursor-pointer">
-                      <CheckCircle size={13} class="text-ios-green-500/30 shrink-0" />
-                      <span class="text-sm text-base-content/30 flex-1 truncate">{story.title}</span>
-                      <Show when={yesterdayRange().isWeekend && story.completed_at}>
-                        <span class="text-[9px] text-base-content/15 capitalize">{formatCompletedDay(story.completed_at!)}</span>
-                      </Show>
-                      <Show when={story.code}>
-                        <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0" style={{ "background-color": `${proj?.color ?? '#525252'}10`, color: `${proj?.color ?? '#525252'}80` }}>{story.code}</span>
-                      </Show>
+                    <button
+                      onClick={() => ctxMoveAndClose(s.id, opt.status)}
+                      class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm hover:bg-base-content/5 transition-colors"
+                    >
+                      <Icon size={14} class={`shrink-0 ${opt.color}`} />
+                      <span>{opt.label}</span>
                     </button>
                   );
                 }}
               </For>
-            </Show>
-            <Show when={completedToday().length === 0 && completedYesterday().length === 0}>
-              <div class="px-3 py-4 rounded-xl bg-base-200/30 text-center">
-                <span class="text-sm text-base-content/20">Sin tareas completadas</span>
-              </div>
-            </Show>
-          </div>
-        </section>
 
-        {/* Today - in progress */}
-        <section>
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-9 h-9 rounded-full bg-ios-blue-500/10 flex items-center justify-center">
-              <ArrowRight size={18} class="text-ios-blue-500" />
+              {/* Separator */}
+              <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
+
+              {/* Delete (undo via toast) */}
+              <button
+                onClick={() => ctxDelete(s)}
+                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-red-500/60 hover:text-red-500 hover:bg-red-500/5 transition-colors"
+              >
+                <Trash2 size={14} class="shrink-0" />
+                Eliminar
+              </button>
             </div>
-            <div>
-              <h2 class="text-sm font-bold">¿En qué me enfocaré hoy?</h2>
-              <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">En progreso</p>
+          );
+        }}
+      </Show>
+
+      {/* Undo delete toast */}
+      <Show when={deletePending()}>
+        {(pending) => (
+          <div class={`fixed bottom-[6rem] md:bottom-24 left-1/2 -translate-x-1/2 z-[110] max-w-sm w-[calc(100%-2rem)] sm:w-auto ${toastExiting() ? 'animate-toast-out' : 'animate-toast-in'}`}>
+            <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-base-300 border border-base-content/[0.08] shadow-xl shadow-black/20 backdrop-blur-xl">
+              <Trash2 size={14} class="text-red-500/60 shrink-0" />
+              <span class="text-sm text-base-content/70 whitespace-nowrap">Tarea eliminada</span>
+              <button
+                onClick={undoDelete}
+                class="text-sm font-semibold text-ios-blue-500 hover:text-ios-blue-400 transition-colors whitespace-nowrap"
+              >
+                Deshacer
+              </button>
             </div>
           </div>
-          <div class="space-y-2">
-            <For each={todayStories()}>
-              {(story) => (
-                <div onContextMenu={(e) => openCtxMenu(e, story)} class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 group ${cardClass(story.id)}`}>
-                  <button
-                    onClick={() => moveStory(story.id, 'done')}
-                    class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 transition-all shrink-0"
-                    title="Marcar completada"
-                  >
-                    <Check size={14} />
-                  </button>
-                  <button onClick={() => setSelectedStory(story)} class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                    <span class="text-sm flex-1 truncate">{story.title}</span>
-                    <ProjectBadge story={story} />
-                  </button>
-                </div>
-              )}
-            </For>
-            <Show when={todayStories().length === 0}>
-              <div class="px-3 py-4 rounded-xl bg-base-200/30 text-center">
-                <span class="text-sm text-base-content/20">Mueve tareas aquí desde la pila</span>
-              </div>
-            </Show>
-          </div>
-        </section>
-      </div>
+        )}
+      </Show>
 
-      {/* Pila de tareas - todo + backlog */}
-      <section>
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center">
-            <Package size={18} class="text-orange-500" />
-          </div>
-          <div>
-            <h2 class="text-sm font-bold">Pila de tareas</h2>
-            <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Por hacer</p>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <For each={backlogStories()}>
-            {(story) => (
-              <div onContextMenu={(e) => openCtxMenu(e, story)} class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 group ${cardClass(story.id)}`}>
-                <button
-                  onClick={() => moveStory(story.id, 'in_progress')}
-                  class="p-1.5 rounded-md text-base-content/15 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all shrink-0"
-                  title="Empezar a trabajar"
-                >
-                  <Play size={14} />
-                </button>
-                <button onClick={() => setSelectedStory(story)} class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                  <span class="text-sm text-base-content/50 flex-1 truncate">{story.title}</span>
-                  <ProjectBadge story={story} />
-                </button>
-              </div>
-            )}
-          </For>
-          <button
-            onClick={() => props.onCreateStory?.('backlog')}
-            class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all"
-          >
-            <Plus size={14} />
-            Agregar a la pila...
-          </button>
-        </div>
-      </section>
-
-      {/* Learning */}
-      <section>
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-9 h-9 rounded-full bg-amber-500/10 flex items-center justify-center">
-            <BookOpen size={18} class="text-amber-500" />
-          </div>
-          <div>
-            <h2 class="text-sm font-bold">¿Qué estoy aprendiendo?</h2>
-            <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Documenta tu crecimiento</p>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <Show when={report()?.learning}>
-            <div class="flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
-              <Circle size={14} class="text-base-content/15 shrink-0" />
-              <span class="text-sm">{report()!.learning}</span>
-            </div>
-          </Show>
-          <button class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all">
-            <Plus size={14} />
-            Añadir nuevo aprendizaje...
-          </button>
-        </div>
-      </section>
-
-      {/* Impediments */}
-      <section>
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-9 h-9 rounded-full bg-red-500/10 flex items-center justify-center">
-            <AlertTriangle size={18} class="text-red-500" />
-          </div>
-          <div>
-            <h2 class="text-sm font-bold">¿Qué impedimentos tengo?</h2>
-            <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Identifica obstáculos</p>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <Show when={report()?.impediments}>
-            <div class="flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
-              <Circle size={14} class="text-base-content/15 shrink-0" />
-              <span class="text-sm">{report()!.impediments}</span>
-            </div>
-          </Show>
-          <button class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all">
-            <Plus size={14} />
-            Añadir nuevo impedimento...
-          </button>
-        </div>
-      </section>
-    </div>
-    </Show>
-
-    {/* Context menu */}
-    <Show when={ctxMenu()}>
-      {(menu) => {
-        const s = menu().story;
-        const moves = statusOptions(s.status as StoryStatus);
-        return (
-          <div
-            class="fixed z-[100] min-w-[180px] py-1.5 rounded-xl bg-base-100 border border-base-content/[0.08] shadow-xl shadow-black/20 animate-ctx-menu"
-            style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Title */}
-            <div class="px-3 py-1.5 text-[10px] font-semibold text-base-content/30 uppercase tracking-wider truncate">
-              {s.code || s.title.slice(0, 24)}
-            </div>
-
-            {/* Open */}
-            <button
-              onClick={() => { closeCtxMenu(); setSelectedStory(s); }}
-              class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/70 hover:bg-base-content/5 transition-colors"
-            >
-              <Eye size={14} class="shrink-0" />
-              Abrir detalle
-            </button>
-
-            {/* Separator */}
-            <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
-
-            {/* Move options */}
-            <div class="px-2 py-1">
-              <span class="px-1 text-[9px] font-semibold text-base-content/20 uppercase tracking-wider">Mover a</span>
-            </div>
-            <For each={moves}>
-              {(opt) => {
-                const Icon = opt.icon;
-                return (
-                  <button
-                    onClick={() => ctxMoveAndClose(s.id, opt.status)}
-                    class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm hover:bg-base-content/5 transition-colors"
-                  >
-                    <Icon size={14} class={`shrink-0 ${opt.color}`} />
-                    <span>{opt.label}</span>
-                  </button>
-                );
-              }}
-            </For>
-
-            {/* Separator */}
-            <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
-
-            {/* Delete (undo via toast) */}
-            <button
-              onClick={() => ctxDelete(s)}
-              class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-red-500/60 hover:text-red-500 hover:bg-red-500/5 transition-colors"
-            >
-              <Trash2 size={14} class="shrink-0" />
-              Eliminar
-            </button>
-          </div>
-        );
-      }}
-    </Show>
-
-    {/* Undo delete toast */}
-    <Show when={deletePending()}>
-      {() => (
-        <div class={`fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[110] max-w-sm w-[calc(100%-2rem)] sm:w-auto ${toastExiting() ? 'animate-toast-out' : 'animate-toast-in'}`}>
-          <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-base-300 border border-base-content/[0.08] shadow-xl shadow-black/20 backdrop-blur-xl">
-            <Trash2 size={14} class="text-red-500/60 shrink-0" />
-            <span class="text-sm text-base-content/70 whitespace-nowrap">HU eliminada</span>
-            <button
-              onClick={undoDelete}
-              class="text-sm font-semibold text-ios-blue-500 hover:text-ios-blue-400 transition-colors whitespace-nowrap"
-            >
-              Deshacer
-            </button>
-          </div>
-        </div>
-      )}
-    </Show>
-
-    {/* Story Detail Modal */}
-    <Show when={selectedStory()}>
-      {(story) => (
-        <StoryDetail
-          story={story()}
-          onClose={() => setSelectedStory(null)}
-          onDeleted={() => { setSelectedStory(null); props.onStoryDeleted?.(); }}
-          onUpdated={(id, fields) => {
-            setLocalStories(prev => prev.map(s => s.id === id ? { ...s, ...fields } as Story : s));
-          }}
-        />
-      )}
-    </Show>
-  </>
+      {/* Story Detail Modal */}
+      <Show when={selectedStory()}>
+        {(story) => (
+          <StoryDetail
+            story={story()}
+            onClose={() => setSelectedStory(null)}
+            onDeleted={() => { setSelectedStory(null); props.onStoryDeleted?.(); }}
+            onUpdated={(id, fields) => {
+              setLocalStories(prev => prev.map(s => s.id === id ? { ...s, ...fields } as Story : s));
+            }}
+          />
+        )}
+      </Show>
+    </>
   );
 };
 

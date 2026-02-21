@@ -1,23 +1,21 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import { LayoutDashboard, ClipboardList, Users, FolderKanban, Sun, Moon, LogOut, Plus, Search } from 'lucide-solid';
+import { ClipboardList, Users, FolderKanban, Sun, Moon, LogOut, Plus, Search } from 'lucide-solid';
 import type { ReportCategory, Story } from './types';
 import { AuthProvider, useAuth } from './lib/auth';
 import { DataProvider, useData } from './lib/data';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
 import ReportPage from './pages/ReportPage';
 import TeamPage from './pages/TeamPage';
 import ProjectsPage from './pages/ProjectsPage';
-import AssignmentsPage from './pages/AssignmentsPage';
 import CreateStoryModal from './components/CreateStoryModal';
 import SearchModal from './components/SearchModal';
 import StoryDetail from './components/StoryDetail';
 
-type Tab = 'dashboard' | 'report' | 'team' | 'projects' | 'assignments';
+type Tab = 'report' | 'team' | 'projects';
 
 const AppShell: Component = () => {
   const auth = useAuth();
-  const [activeTab, setActiveTab] = createSignal<Tab>('dashboard');
+  const [activeTab, setActiveTab] = createSignal<Tab>('report');
   const savedTheme = localStorage.getItem('dc-theme') || 'ios-dark';
   const [isDark, setIsDark] = createSignal(savedTheme === 'ios-dark');
   const [showCreateModal, setShowCreateModal] = createSignal(false);
@@ -46,7 +44,6 @@ const AppShell: Component = () => {
   };
 
   const tabs: { id: Tab; label: string; icon: any; key: string }[] = [
-    { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard, key: 'I' },
     { id: 'report', label: 'Reporte', icon: ClipboardList, key: 'R' },
     { id: 'team', label: 'Equipo', icon: Users, key: 'E' },
     { id: 'projects', label: 'Proyectos', icon: FolderKanban, key: 'P' },
@@ -71,7 +68,6 @@ const AppShell: Component = () => {
 
       switch (e.key.toLowerCase()) {
         case 'n': e.preventDefault(); openCreateModal(); break;
-        case 'i': e.preventDefault(); setActiveTab('dashboard'); break;
         case 'r': e.preventDefault(); setActiveTab('report'); break;
         case 'e': e.preventDefault(); setActiveTab('team'); break;
         case 'p': e.preventDefault(); setActiveTab('projects'); break;
@@ -96,26 +92,6 @@ const AppShell: Component = () => {
                 <span class="font-semibold text-sm">Daily Check</span>
               </div>
 
-              <div class="w-px h-5 bg-base-content/10" />
-
-              <nav class="flex items-center gap-0.5">
-                <For each={tabs}>
-                  {(tab) => (
-                    <button
-                      onClick={() => setActiveTab(tab.id)}
-                      class={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                        activeTab() === tab.id
-                          ? 'bg-base-content/10 text-base-content'
-                          : 'text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5'
-                      }`}
-                    >
-                      <tab.icon size={14} strokeWidth={activeTab() === tab.id ? 2.2 : 1.8} />
-                      {tab.label}
-                      <kbd class="hidden lg:inline text-[9px] text-base-content/15 border border-base-content/[0.06] rounded px-1 py-px ml-0.5">{tab.key}</kbd>
-                    </button>
-                  )}
-                </For>
-              </nav>
             </div>
 
             <div class="flex items-center gap-1">
@@ -196,10 +172,7 @@ const AppShell: Component = () => {
       </header>
 
       {/* Content — all pages mounted, toggle visibility to avoid refetch flicker */}
-      <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-5">
-        <div class={activeTab() === 'dashboard' ? 'stagger-in' : ''} style={{ display: activeTab() === 'dashboard' ? undefined : 'none' }}>
-          <DashboardPage refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} />
-        </div>
+      <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-[calc(7rem+env(safe-area-inset-bottom))]">
         <div class={activeTab() === 'report' ? 'stagger-in' : ''} style={{ display: activeTab() === 'report' ? undefined : 'none' }}>
           <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} />
         </div>
@@ -211,41 +184,68 @@ const AppShell: Component = () => {
         </div>
       </main>
 
-      {/* FAB - Create Story */}
-      <div class="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-6 right-4 z-40 group">
-        <button
-          onClick={() => openCreateModal()}
-          class="w-12 h-12 rounded-full bg-ios-blue-500 text-white shadow-lg shadow-ios-blue-500/30 flex items-center justify-center active:scale-95 transition-all hover:bg-ios-blue-600 hover:shadow-xl hover:shadow-ios-blue-500/40"
-        >
-          <Plus size={22} />
-        </button>
-        <kbd class="hidden md:flex absolute -top-1 -right-1 w-5 h-5 rounded-md bg-base-200 border border-base-content/10 text-[10px] font-mono font-bold text-base-content/40 items-center justify-center shadow-sm">
-          N
-        </kbd>
-      </div>
+      {/* universal macOS Style Dock */}
+      <div class="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 flex justify-center pointer-events-none">
+        <nav class="bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-[2rem] border border-base-content/[0.08] shadow-[0_16px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.4)] pointer-events-auto p-2 flex items-center gap-1.5 sm:gap-2">
+          <For each={tabs}>
+            {(tab) => (
+              <button
+                onClick={() => setActiveTab(tab.id)}
+                class="relative flex flex-col items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-[1.25rem] transition-all duration-300 active:scale-95 group"
+                style={{
+                  "-webkit-tap-highlight-color": "transparent"
+                }}
+                title={tab.label}
+              >
+                {/* hover/active background */}
+                <div class={`absolute inset-0 rounded-[1.25rem] transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
 
-      {/* Mobile Bottom Nav — Floating island */}
-      <nav class="md:hidden fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-50">
-        <div class="bg-base-200/80 backdrop-blur-2xl rounded-2xl border border-base-content/[0.06] shadow-lg shadow-black/20">
-          <div class="flex items-center justify-around h-14">
-            <For each={tabs}>
-              {(tab) => (
-                <button
-                  onClick={() => setActiveTab(tab.id)}
-                  class={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all ${
-                    activeTab() === tab.id
-                      ? 'text-ios-blue-500'
-                      : 'text-base-content/30 active:text-base-content/50'
-                  }`}
-                >
-                  <tab.icon size={20} strokeWidth={activeTab() === tab.id ? 2.2 : 1.8} />
-                  <span class={`text-[10px] font-medium ${activeTab() === tab.id ? 'text-ios-blue-500' : ''}`}>{tab.label}</span>
-                </button>
-              )}
-            </For>
-          </div>
-        </div>
-      </nav>
+                {/* icon container with bounce */}
+                <div class={`relative z-10 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center ${activeTab() === tab.id ? '-translate-y-2 text-base-content scale-110' : 'translate-y-0 text-base-content/50 group-hover:text-base-content/80 group-hover:-translate-y-1.5 group-hover:scale-110'
+                  }`}>
+                  <tab.icon size={26} strokeWidth={activeTab() === tab.id ? 2.5 : 2} class="hidden sm:block" />
+                  <tab.icon size={24} strokeWidth={activeTab() === tab.id ? 2.5 : 2} class="sm:hidden" />
+                </div>
+
+                {/* Active indicator dot */}
+                <div class={`absolute bottom-1.5 w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full transition-all duration-300 ease-out ${activeTab() === tab.id ? 'bg-ios-blue-500 scale-100 opacity-100' : 'bg-base-content/30 scale-50 opacity-0 group-hover:opacity-40'
+                  }`} />
+
+                {/* macOS style tooltip label (desktop only) */}
+                <div class="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none hidden sm:flex px-3 py-1.5 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-xs font-medium rounded-lg shadow-xl translate-y-2 group-hover:translate-y-0 whitespace-nowrap">
+                  {tab.label}
+                  <kbd class="ml-2 opacity-60 font-mono text-[10px]">{tab.key}</kbd>
+                  <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
+                </div>
+              </button>
+            )}
+          </For>
+
+          {/* Separator */}
+          <div class="w-px h-10 bg-base-content/[0.1] mx-1 rounded-full" />
+
+          {/* Create Task Button (macOS Dock Style) */}
+          <button
+            onClick={() => openCreateModal()}
+            class="relative flex flex-col items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-[1.25rem] transition-all duration-300 active:scale-95 group"
+            style={{
+              "-webkit-tap-highlight-color": "transparent"
+            }}
+          >
+            <div class="absolute inset-0 rounded-[1.25rem] bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20 transition-all duration-300" />
+            <div class="relative z-10 text-ios-blue-500 transition-transform duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:-translate-y-1.5 group-hover:scale-110 flex items-center justify-center">
+              <Plus size={26} strokeWidth={2.5} class="hidden sm:block" />
+              <Plus size={24} strokeWidth={2.5} class="sm:hidden" />
+            </div>
+
+            <div class="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none hidden sm:flex px-3 py-1.5 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-xs font-medium rounded-lg shadow-xl translate-y-2 group-hover:translate-y-0 whitespace-nowrap">
+              Crear nuevo
+              <kbd class="ml-2 opacity-60 font-mono text-[10px]">N</kbd>
+              <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
+            </div>
+          </button>
+        </nav>
+      </div>
 
       {/* Create Story Modal */}
       <Show when={showCreateModal()}>
