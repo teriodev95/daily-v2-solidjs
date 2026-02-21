@@ -172,7 +172,7 @@ const AppShell: Component = () => {
       </header>
 
       {/* Content — all pages mounted, toggle visibility to avoid refetch flicker */}
-      <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-[calc(7rem+env(safe-area-inset-bottom))]">
+      <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
         <div class={activeTab() === 'report' ? 'stagger-in' : ''} style={{ display: activeTab() === 'report' ? undefined : 'none' }}>
           <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} />
         </div>
@@ -185,36 +185,36 @@ const AppShell: Component = () => {
       </main>
 
       {/* universal macOS Style Dock */}
-      <div class="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 flex justify-center pointer-events-none">
-        <nav class="bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-[2rem] border border-base-content/[0.08] shadow-[0_16px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.4)] pointer-events-auto p-2 flex items-center gap-1.5 sm:gap-2">
+      <div class="fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 flex justify-center pointer-events-none">
+        <nav class="bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-3xl border border-base-content/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)] pointer-events-auto p-1.5 flex items-center gap-1 sm:gap-1.5">
           <For each={tabs}>
             {(tab) => (
               <button
                 onClick={() => setActiveTab(tab.id)}
-                class="relative flex flex-col items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-[1.25rem] transition-all duration-300 active:scale-95 group"
+                class="relative flex flex-col items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl transition-all duration-300 active:scale-95 group"
                 style={{
                   "-webkit-tap-highlight-color": "transparent"
                 }}
                 title={tab.label}
               >
                 {/* hover/active background */}
-                <div class={`absolute inset-0 rounded-[1.25rem] transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
+                <div class={`absolute inset-0 rounded-xl transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
 
                 {/* icon container with bounce */}
-                <div class={`relative z-10 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center ${activeTab() === tab.id ? '-translate-y-2 text-base-content scale-110' : 'translate-y-0 text-base-content/50 group-hover:text-base-content/80 group-hover:-translate-y-1.5 group-hover:scale-110'
+                <div class={`relative z-10 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center ${activeTab() === tab.id ? '-translate-y-1.5 text-base-content scale-110' : 'translate-y-0 text-base-content/50 group-hover:text-base-content/80 group-hover:-translate-y-1 group-hover:scale-110'
                   }`}>
-                  <tab.icon size={26} strokeWidth={activeTab() === tab.id ? 2.5 : 2} class="hidden sm:block" />
-                  <tab.icon size={24} strokeWidth={activeTab() === tab.id ? 2.5 : 2} class="sm:hidden" />
+                  <tab.icon size={22} strokeWidth={activeTab() === tab.id ? 2.5 : 2} class="hidden sm:block" />
+                  <tab.icon size={20} strokeWidth={activeTab() === tab.id ? 2.5 : 2} class="sm:hidden" />
                 </div>
 
                 {/* Active indicator dot */}
-                <div class={`absolute bottom-1.5 w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full transition-all duration-300 ease-out ${activeTab() === tab.id ? 'bg-ios-blue-500 scale-100 opacity-100' : 'bg-base-content/30 scale-50 opacity-0 group-hover:opacity-40'
+                <div class={`absolute bottom-1 w-1 h-1 sm:w-1 sm:h-1 rounded-full transition-all duration-300 ease-out ${activeTab() === tab.id ? 'bg-ios-blue-500 scale-100 opacity-100' : 'bg-base-content/30 scale-50 opacity-0 group-hover:opacity-40'
                   }`} />
 
                 {/* macOS style tooltip label (desktop only) */}
-                <div class="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none hidden sm:flex px-3 py-1.5 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-xs font-medium rounded-lg shadow-xl translate-y-2 group-hover:translate-y-0 whitespace-nowrap">
+                <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none hidden sm:flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap">
                   {tab.label}
-                  <kbd class="ml-2 opacity-60 font-mono text-[10px]">{tab.key}</kbd>
+                  <kbd class="ml-2 opacity-60 font-mono text-[9px]">{tab.key}</kbd>
                   <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
                 </div>
               </button>
@@ -222,25 +222,25 @@ const AppShell: Component = () => {
           </For>
 
           {/* Separator */}
-          <div class="w-px h-10 bg-base-content/[0.1] mx-1 rounded-full" />
+          <div class="w-px h-6 bg-base-content/[0.1] mx-0.5 rounded-full" />
 
           {/* Create Task Button (macOS Dock Style) */}
           <button
             onClick={() => openCreateModal()}
-            class="relative flex flex-col items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-[1.25rem] transition-all duration-300 active:scale-95 group"
+            class="relative flex flex-col items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl transition-all duration-300 active:scale-95 group"
             style={{
               "-webkit-tap-highlight-color": "transparent"
             }}
           >
-            <div class="absolute inset-0 rounded-[1.25rem] bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20 transition-all duration-300" />
-            <div class="relative z-10 text-ios-blue-500 transition-transform duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:-translate-y-1.5 group-hover:scale-110 flex items-center justify-center">
-              <Plus size={26} strokeWidth={2.5} class="hidden sm:block" />
-              <Plus size={24} strokeWidth={2.5} class="sm:hidden" />
+            <div class="absolute inset-0 rounded-xl bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20 transition-all duration-300" />
+            <div class="relative z-10 text-ios-blue-500 transition-transform duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:-translate-y-1 group-hover:scale-110 flex items-center justify-center">
+              <Plus size={22} strokeWidth={2.5} class="hidden sm:block" />
+              <Plus size={20} strokeWidth={2.5} class="sm:hidden" />
             </div>
 
-            <div class="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none hidden sm:flex px-3 py-1.5 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-xs font-medium rounded-lg shadow-xl translate-y-2 group-hover:translate-y-0 whitespace-nowrap">
+            <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none hidden sm:flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap">
               Crear nuevo
-              <kbd class="ml-2 opacity-60 font-mono text-[10px]">N</kbd>
+              <kbd class="ml-2 opacity-60 font-mono text-[9px]">N</kbd>
               <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
             </div>
           </button>
