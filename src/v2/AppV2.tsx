@@ -1,5 +1,5 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import { ClipboardList, Users, FolderKanban, Sun, Moon, LogOut, Plus, Search } from 'lucide-solid';
+import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, FileText, Send } from 'lucide-solid';
 import type { ReportCategory, Story } from './types';
 import { AuthProvider, useAuth } from './lib/auth';
 import { DataProvider, useData } from './lib/data';
@@ -7,11 +7,13 @@ import LoginPage from './pages/LoginPage';
 import ReportPage from './pages/ReportPage';
 import TeamPage from './pages/TeamPage';
 import ProjectsPage from './pages/ProjectsPage';
+import AdminPage from './pages/AdminPage';
 import CreateStoryModal from './components/CreateStoryModal';
+import CreateAssignmentModal from './components/CreateAssignmentModal';
 import SearchModal from './components/SearchModal';
 import StoryDetail from './components/StoryDetail';
 
-type Tab = 'report' | 'team' | 'projects';
+type Tab = 'report' | 'team' | 'projects' | 'admin';
 
 const AppShell: Component = () => {
   const auth = useAuth();
@@ -24,6 +26,8 @@ const AppShell: Component = () => {
   const [refreshKey, setRefreshKey] = createSignal(0);
   const [showSearch, setShowSearch] = createSignal(false);
   const [searchSelectedStory, setSearchSelectedStory] = createSignal<Story | null>(null);
+  const [showAssignmentModal, setShowAssignmentModal] = createSignal(false);
+  const [fabOpen, setFabOpen] = createSignal(false);
 
   const openCreateModal = (category?: ReportCategory, projectId?: string) => {
     setCreateCategory(category);
@@ -43,11 +47,19 @@ const AppShell: Component = () => {
     localStorage.setItem('dc-theme', theme);
   };
 
-  const tabs: { id: Tab; label: string; icon: any; key: string }[] = [
+  const baseTabs: { id: Tab; label: string; icon: any; key: string }[] = [
     { id: 'report', label: 'Reporte', icon: ClipboardList, key: 'R' },
     { id: 'team', label: 'Equipo', icon: Users, key: 'E' },
     { id: 'projects', label: 'Proyectos', icon: FolderKanban, key: 'P' },
   ];
+
+  const tabs = () => {
+    const t = [...baseTabs];
+    if (user()?.role === 'admin') {
+      t.push({ id: 'admin', label: 'Admin', icon: Settings, key: 'A' });
+    }
+    return t;
+  };
 
   const user = () => auth.user();
 
@@ -71,10 +83,21 @@ const AppShell: Component = () => {
         case 'r': e.preventDefault(); setActiveTab('report'); break;
         case 'e': e.preventDefault(); setActiveTab('team'); break;
         case 'p': e.preventDefault(); setActiveTab('projects'); break;
+        case 'a': if (user()?.role === 'admin') { e.preventDefault(); setActiveTab('admin'); } break;
       }
     };
     document.addEventListener('keydown', handleKey);
-    onCleanup(() => document.removeEventListener('keydown', handleKey));
+    // Close FAB popover on outside click (mobile)
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (fabOpen() && !(e.target as HTMLElement).closest('[data-fab-menu]')) {
+        setFabOpen(false);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    onCleanup(() => {
+      document.removeEventListener('keydown', handleKey);
+      document.removeEventListener('click', handleOutsideClick);
+    });
   });
 
   return (
@@ -183,26 +206,31 @@ const AppShell: Component = () => {
         <div class={activeTab() === 'projects' ? 'stagger-in' : ''} style={{ display: activeTab() === 'projects' ? undefined : 'none' }}>
           <ProjectsPage onCreateStory={(projId) => openCreateModal(undefined, projId)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} />
         </div>
+        <Show when={user()?.role === 'admin'}>
+          <div class={activeTab() === 'admin' ? 'stagger-in' : ''} style={{ display: activeTab() === 'admin' ? undefined : 'none' }}>
+            <AdminPage />
+          </div>
+        </Show>
       </main>
 
       {/* universal macOS Style Dock */}
-      <div class="fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 flex justify-center pointer-events-none">
-        <nav class="bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-3xl border border-base-content/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)] pointer-events-auto p-1.5 flex items-center gap-1 sm:gap-1.5">
-          <For each={tabs}>
+      <div class="fixed bottom-[calc(0.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(1rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 flex justify-center pointer-events-none px-2 sm:px-0">
+        <nav class="bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-[24px] sm:rounded-[32px] border border-base-content/[0.08] shadow-lg sm:shadow-[0_12px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)] pointer-events-auto p-1 sm:p-1.5 flex items-center gap-0.5 sm:gap-1.5 max-w-full overflow-x-auto scrollbar-none">
+          <For each={tabs()}>
             {(tab) => (
               <button
                 onClick={() => setActiveTab(tab.id)}
-                class="relative flex flex-col items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl transition-all duration-300 active:scale-95 group"
+                class="relative flex flex-col items-center justify-center w-[44px] h-[44px] sm:w-12 sm:h-12 shrink-0 rounded-2xl sm:rounded-xl transition-all duration-300 active:scale-95 group"
                 style={{
                   "-webkit-tap-highlight-color": "transparent"
                 }}
                 title={tab.label}
               >
                 {/* hover/active background */}
-                <div class={`absolute inset-0 rounded-xl transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
+                <div class={`absolute inset-0 rounded-2xl sm:rounded-xl transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
 
                 {/* icon container with bounce */}
-                <div class={`relative z-10 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center ${activeTab() === tab.id ? '-translate-y-1.5 text-base-content scale-110' : 'translate-y-0 text-base-content/50 group-hover:text-base-content/80 group-hover:-translate-y-1 group-hover:scale-110'
+                <div class={`relative z-10 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center ${activeTab() === tab.id ? '-translate-y-[5px] sm:-translate-y-1.5 text-base-content scale-110' : 'translate-y-0 text-base-content/50 group-hover:text-base-content/80 group-hover:-translate-y-1 group-hover:scale-110'
                   }`}>
                   <tab.icon size={22} strokeWidth={activeTab() === tab.id ? 2.5 : 2} class="hidden sm:block" />
                   <tab.icon size={20} strokeWidth={activeTab() === tab.id ? 2.5 : 2} class="sm:hidden" />
@@ -223,28 +251,64 @@ const AppShell: Component = () => {
           </For>
 
           {/* Separator */}
-          <div class="w-px h-6 bg-base-content/[0.1] mx-0.5 rounded-full" />
+          <div class="w-px h-5 sm:h-6 bg-base-content/[0.1] mx-0.5 sm:mx-1 shrink-0 rounded-full" />
 
-          {/* Create Task Button (macOS Dock Style) */}
-          <button
-            onClick={() => openCreateModal()}
-            class="relative flex flex-col items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-xl transition-all duration-300 active:scale-95 group"
-            style={{
-              "-webkit-tap-highlight-color": "transparent"
-            }}
+          {/* Create FAB with popover menu */}
+          <div
+            class="relative shrink-0"
+            data-fab-menu
           >
-            <div class="absolute inset-0 rounded-xl bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20 transition-all duration-300" />
-            <div class="relative z-10 text-ios-blue-500 transition-transform duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:-translate-y-1 group-hover:scale-110 flex items-center justify-center">
-              <Plus size={22} strokeWidth={2.5} class="hidden sm:block" />
-              <Plus size={20} strokeWidth={2.5} class="sm:hidden" />
+            {/* Popover — click-based, stays open until outside click */}
+            <div
+              class={`absolute bottom-full mb-2.5 right-0 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${fabOpen()
+                  ? 'opacity-100 translate-y-0 pointer-events-auto'
+                  : 'opacity-0 translate-y-2 pointer-events-none'
+                }`}
+            >
+              <div class="relative bg-base-200/90 backdrop-blur-2xl rounded-2xl border border-base-content/[0.08] shadow-[0_12px_40px_rgba(0,0,0,0.25)] p-1.5 min-w-[160px]">
+                <button
+                  onClick={() => { setFabOpen(false); openCreateModal(); }}
+                  class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium text-base-content/70 hover:bg-base-content/[0.06] hover:text-base-content transition-all group/item"
+                >
+                  <div class="w-7 h-7 rounded-lg bg-ios-blue-500/12 flex items-center justify-center group-hover/item:bg-ios-blue-500/20 transition-colors">
+                    <FileText size={14} class="text-ios-blue-500" />
+                  </div>
+                  <div class="text-left">
+                    <span class="block leading-tight">Historia de usuario</span>
+                    <span class="block text-[9px] text-base-content/25 font-normal">Tarea de desarrollo</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setFabOpen(false); setShowAssignmentModal(true); }}
+                  class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium text-base-content/70 hover:bg-base-content/[0.06] hover:text-base-content transition-all group/item"
+                >
+                  <div class="w-7 h-7 rounded-lg bg-purple-500/12 flex items-center justify-center group-hover/item:bg-purple-500/20 transition-colors">
+                    <Send size={14} class="text-purple-500" />
+                  </div>
+                  <div class="text-left">
+                    <span class="block leading-tight">Encomienda</span>
+                    <span class="block text-[9px] text-base-content/25 font-normal">Encomienda al equipo</span>
+                  </div>
+                </button>
+                {/* Arrow */}
+                <div class="absolute -bottom-1 right-5 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto w-2.5 h-2.5 bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
+              </div>
             </div>
 
-            <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none hidden sm:flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap">
-              Crear nuevo
-              <kbd class="ml-2 opacity-60 font-mono text-[9px]">N</kbd>
-              <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
-            </div>
-          </button>
+            {/* FAB Button */}
+            <button
+              onClick={() => setFabOpen(!fabOpen())}
+              class="relative flex flex-col items-center justify-center w-[44px] h-[44px] sm:w-12 sm:h-12 rounded-2xl sm:rounded-xl transition-all duration-300 active:scale-95 group"
+              style={{ "-webkit-tap-highlight-color": "transparent" }}
+            >
+              <div class={`absolute inset-0 rounded-2xl sm:rounded-xl transition-all duration-300 ${fabOpen() ? 'bg-ios-blue-500/20' : 'bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20'}`} />
+              <div class={`relative z-10 text-ios-blue-500 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center ${fabOpen() ? 'rotate-45 scale-110' : 'group-hover:-translate-y-1 group-hover:scale-110'
+                }`}>
+                <Plus size={22} strokeWidth={2.5} class="hidden sm:block" />
+                <Plus size={20} strokeWidth={2.5} class="sm:hidden" />
+              </div>
+            </button>
+          </div>
         </nav>
       </div>
 
@@ -255,6 +319,14 @@ const AppShell: Component = () => {
           onCreated={handleStoryCreated}
           defaultCategory={createCategory()}
           defaultProjectId={createProjectId()}
+        />
+      </Show>
+
+      {/* Create Assignment Modal */}
+      <Show when={showAssignmentModal()}>
+        <CreateAssignmentModal
+          onClose={() => setShowAssignmentModal(false)}
+          onCreated={handleStoryCreated}
         />
       </Show>
 

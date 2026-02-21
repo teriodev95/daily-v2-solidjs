@@ -225,7 +225,7 @@ const StoryDetail: Component<Props> = (props) => {
         setAssigneeId(newPrimary);
         setAssigneeIds(newExtras);
         await saveImmediate({ assignee_id: newPrimary });
-        try { await api.stories.removeAssignee(props.story.id, userId); } catch {}
+        try { await api.stories.removeAssignee(props.story.id, userId); } catch { }
       } else {
         setAssigneeId('');
         await saveImmediate({ assignee_id: null });
@@ -235,10 +235,10 @@ const StoryDetail: Component<Props> = (props) => {
 
     if (assigned.has(userId)) {
       setAssigneeIds(prev => prev.filter(id => id !== userId));
-      try { await api.stories.removeAssignee(props.story.id, userId); } catch {}
+      try { await api.stories.removeAssignee(props.story.id, userId); } catch { }
     } else {
       setAssigneeIds(prev => [...prev, userId]);
-      try { await api.stories.addAssignee(props.story.id, userId); } catch {}
+      try { await api.stories.addAssignee(props.story.id, userId); } catch { }
     }
   };
 
@@ -255,23 +255,23 @@ const StoryDetail: Component<Props> = (props) => {
 
   return (
     <div
-      class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center"
+      class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center animate-in fade-in duration-200"
       onClick={() => props.onClose()}
     >
       <div
-        class="bg-base-100 w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto"
+        class="bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl shadow-black w-full sm:max-w-3xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[92vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 scrollbar-none hover:scrollbar-thin hover:scrollbar-thumb-base-content/10 relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header bar */}
-        <div class="sticky top-0 bg-base-100 z-10 px-4 sm:px-5 pt-3.5 pb-2.5 border-b border-base-content/[0.06]">
+        <div class="sticky top-0 bg-base-100/80 backdrop-blur-xl z-20 px-5 sm:px-8 pt-4 pb-3 sm:pt-5 sm:pb-4 border-b border-base-content/[0.04]">
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+            <div class="flex items-center gap-3 min-w-0 flex-1 flex-wrap">
               <Show when={props.story.code}>
-                <span class="text-xs font-mono font-bold text-base-content/30">{props.story.code}</span>
+                <span class="text-[13px] font-mono font-bold text-base-content/50">{props.story.code}</span>
               </Show>
               <Show when={project()}>
                 <span
-                  class="text-[10px] font-medium px-2 py-0.5 rounded-md"
+                  class="text-[11px] font-bold px-2.5 py-1 rounded-md"
                   style={{
                     "background-color": `${project()!.color}15`,
                     color: project()!.color,
@@ -284,65 +284,68 @@ const StoryDetail: Component<Props> = (props) => {
                 {(() => {
                   const PIcon = prio().icon;
                   return (
-                    <span class={`flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md ${prio().bg} ${prio().color}`}>
-                      <PIcon size={10} />
+                    <span class={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md ${prio().bg} ${prio().color}`}>
+                      <PIcon size={12} strokeWidth={2.5} />
                       {prio().label}
                     </span>
                   );
                 })()}
               </Show>
-              <span class="flex items-center gap-1.5">
-                <span class={`w-1.5 h-1.5 rounded-full ${stat().color}`} />
-                <span class="text-[10px] text-base-content/40">{stat().label}</span>
+              <span class="flex items-center gap-2 px-2.5 py-1 rounded-md bg-base-content/[0.03]">
+                <span class={`w-2 h-2 rounded-full ${stat().color}`} />
+                <span class="text-[11px] font-semibold text-base-content/60">{stat().label}</span>
               </span>
 
               {/* Save indicator */}
               <Show when={saveStatus() !== 'idle'}>
-                <span class="flex items-center gap-1 ml-auto mr-2">
+                <span class="flex items-center gap-1.5 ml-auto mr-2">
                   <Show when={saveStatus() === 'saving'}>
-                    <Loader2 size={11} class="text-base-content/30 animate-spin" />
+                    <Loader2 size={12} class="text-base-content/40 animate-spin" />
                   </Show>
                   <Show when={saveStatus() === 'saved'}>
-                    <Check size={11} class="text-ios-green-500" />
+                    <Check size={12} class="text-ios-green-500" />
                   </Show>
                 </span>
               </Show>
             </div>
-            <button onClick={() => props.onClose()} class="p-2 rounded-lg hover:bg-base-content/10 transition-colors shrink-0 ml-2">
-              <X size={18} class="text-base-content/40" />
+            <button onClick={() => props.onClose()} class="p-2 -mr-3 rounded-full hover:bg-base-content/10 transition-colors shrink-0 ml-4 group">
+              <X size={20} class="text-base-content/40 group-hover:text-base-content/80 transition-colors" />
             </button>
           </div>
         </div>
 
-        <div class="px-4 sm:px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4 space-y-3">
+        <div class="px-5 sm:px-8 py-5 sm:py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-8 space-y-6 sm:space-y-8">
 
           {/* Title — editable */}
-          <textarea
-            value={title()}
-            rows={1}
-            class="w-full text-lg font-bold leading-snug bg-transparent resize-none outline-none rounded-lg px-1.5 py-1 -mx-1.5 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.02] transition-colors placeholder:text-base-content/20"
-            placeholder="Título de la historia"
-            ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
-            onInput={(e) => {
-              const val = e.currentTarget.value;
-              setTitle(val);
-              autoResize(e.currentTarget);
-              if (val.trim()) scheduleSave({ title: val });
-            }}
-          />
+          <div class="relative group">
+            <textarea
+              value={title()}
+              rows={1}
+              class="w-full text-xl sm:text-[26px] font-extrabold leading-tight text-base-content bg-transparent resize-none outline-none rounded-xl px-3 py-2 -mx-3 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.03] transition-colors placeholder:text-base-content/20"
+              placeholder="Título de la historia"
+              ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
+              onInput={(e) => {
+                const val = e.currentTarget.value;
+                setTitle(val);
+                autoResize(e.currentTarget);
+                if (val.trim()) scheduleSave({ title: val });
+              }}
+            />
+            <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
+          </div>
 
           {/* Meta row: date + estimate + assignees — all inline */}
-          <div class="flex items-center gap-2 flex-wrap">
+          <div class="flex items-center gap-3 sm:gap-4 flex-wrap pb-2 border-b border-base-content/[0.03]">
             {/* Due date */}
-            <label class="flex items-center gap-1.5 text-[11px] sm:text-[10px] px-2.5 py-1.5 rounded-lg bg-base-content/5 text-base-content/40 hover:bg-base-content/8 transition-colors cursor-pointer relative">
-              <Calendar size={11} />
-              <Show when={dueDate()} fallback={<span class="text-base-content/20">Fecha</span>}>
+            <label class="flex items-center gap-2 text-[12px] sm:text-[13px] px-3.5 py-2 rounded-xl bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/[0.08] hover:text-base-content/80 transition-all cursor-pointer relative font-medium">
+              <Calendar size={14} class="opacity-60" />
+              <Show when={dueDate()} fallback={<span class="text-base-content/30 tracking-wide">Fecha</span>}>
                 <span>{formatDateDisplay(dueDate())}</span>
                 <button
                   onClick={(e) => { e.preventDefault(); setDueDate(''); saveImmediate({ due_date: null }); }}
-                  class="ml-0.5 p-0.5 rounded hover:bg-base-content/10 text-base-content/25 hover:text-base-content/50"
+                  class="ml-1 p-0.5 rounded-md hover:bg-base-content/20 text-base-content/40 hover:text-base-content transition-colors"
                 >
-                  <X size={8} />
+                  <X size={12} />
                 </button>
               </Show>
               <input type="date" value={dueDate()} class="absolute inset-0 opacity-0 cursor-pointer"
@@ -353,25 +356,24 @@ const StoryDetail: Component<Props> = (props) => {
             <div class="relative">
               <button
                 onClick={() => setShowEstimatePicker(!showEstimatePicker())}
-                class="flex items-center gap-1.5 text-[11px] sm:text-[10px] px-2.5 py-1.5 rounded-lg bg-base-content/5 text-base-content/40 hover:bg-base-content/8 transition-colors"
+                class={`flex items-center gap-2 text-[12px] sm:text-[13px] px-3.5 py-2 rounded-xl transition-all font-medium ${estimate() > 0 ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20' : 'bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/[0.08] hover:text-base-content/80'
+                  }`}
               >
-                <Show when={estimate() > 0 && getEstimate(estimate())} fallback={<span class="text-base-content/20">Estimar</span>}>
+                <Show when={estimate() > 0 && getEstimate(estimate())} fallback={<span class="text-base-content/30 tracking-wide">Estimar</span>}>
                   {(() => { const e = getEstimate(estimate())!; return <><span>{e.emoji}</span><span>{e.value}</span></>; })()}
                 </Show>
               </button>
               <Show when={showEstimatePicker()}>
-                <div class="absolute top-full left-0 mt-1 z-20 bg-base-100 rounded-xl border border-base-content/[0.06] shadow-lg shadow-black/20 p-1 min-w-[150px]">
+                <div class="absolute top-[calc(100%+8px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-2 w-[180px] grid grid-cols-2 gap-1 backdrop-blur-md">
                   <For each={estimates}>
                     {(e) => (
                       <button
                         onClick={() => { setEstimate(e.value); setShowEstimatePicker(false); saveImmediate({ estimate: e.value }); }}
-                        class={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                          estimate() === e.value ? 'bg-ios-blue-500/10 text-ios-blue-500' : 'hover:bg-base-content/5 text-base-content/60'
-                        }`}
+                        class={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium transition-all ${estimate() === e.value ? 'bg-amber-500/20 text-amber-500 shadow-sm' : 'hover:bg-base-content/5 text-base-content/70 hover:text-base-content'
+                          }`}
                       >
-                        <span>{e.emoji}</span>
-                        <span class="text-[10px] font-mono text-base-content/30">{e.value}</span>
-                        <span>{e.label}</span>
+                        <span class="text-base">{e.emoji}</span>
+                        <span class="font-mono">{e.value}</span>
                       </button>
                     )}
                   </For>
@@ -380,24 +382,26 @@ const StoryDetail: Component<Props> = (props) => {
             </div>
 
             {/* Divider */}
-            <div class="w-px h-4 bg-base-content/[0.06]" />
+            <div class="hidden sm:block w-px h-6 bg-base-content/[0.08]" />
 
             {/* Inline assignees */}
-            <div class="flex items-center gap-1.5">
-              <Show when={currentAssignee()}>
-                <img src={currentAssignee()!.avatar_url!} alt="" class="w-5 h-5 rounded-full ring-1 ring-base-content/[0.06]" title={currentAssignee()!.name} />
-              </Show>
-              <For each={extraAssigneeUsers()}>
-                {(u) => (
-                  <img src={u.avatar_url!} alt="" class="w-5 h-5 rounded-full ring-1 ring-base-content/[0.06] -ml-1" title={u.name} />
-                )}
-              </For>
+            <div class="flex items-center pl-1">
+              <div class="flex items-center -space-x-2">
+                <Show when={currentAssignee()}>
+                  <img src={currentAssignee()!.avatar_url!} alt="" class="w-8 h-8 rounded-full ring-2 ring-base-100 object-cover shadow-sm z-[3]" title={currentAssignee()!.name} />
+                </Show>
+                <For each={extraAssigneeUsers()}>
+                  {(u, i) => (
+                    <img src={u.avatar_url!} alt="" class="w-8 h-8 rounded-full ring-2 ring-base-100 object-cover shadow-sm" style={{ 'z-index': 2 - (i() as number) }} title={u.name} />
+                  )}
+                </For>
+              </div>
               <button
                 onClick={() => setShowAssigneePicker(!showAssigneePicker())}
-                class="w-5 h-5 rounded-full flex items-center justify-center text-base-content/20 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 transition-colors border border-dashed border-base-content/10"
+                class="w-8 h-8 rounded-full flex items-center justify-center text-base-content/40 hover:text-ios-blue-500 bg-base-content/[0.02] hover:bg-ios-blue-500/10 transition-all border border-dashed border-base-content/20 hover:border-ios-blue-500/30 shadow-sm z-0 ml-1.5"
                 title="Asignar"
               >
-                <UserPlus size={10} />
+                <UserPlus size={14} />
               </button>
             </div>
           </div>
@@ -411,9 +415,8 @@ const StoryDetail: Component<Props> = (props) => {
                   return (
                     <button
                       onClick={() => toggleAssignee(member.id)}
-                      class={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors ${
-                        isAssigned() ? 'bg-ios-blue-500/10 text-ios-blue-500' : 'hover:bg-base-content/5 text-base-content/50'
-                      }`}
+                      class={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors ${isAssigned() ? 'bg-ios-blue-500/10 text-ios-blue-500' : 'hover:bg-base-content/5 text-base-content/50'
+                        }`}
                     >
                       <img src={member.avatar_url!} alt="" class="w-5 h-5 rounded-full" />
                       <span class="font-medium">{member.name.split(' ')[0]}</span>
@@ -428,90 +431,103 @@ const StoryDetail: Component<Props> = (props) => {
           </Show>
 
           {/* Purpose + Description — 2-col on desktop */}
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <section class="space-y-1">
-              <div class="flex items-center gap-1.5">
-                <HelpCircle size={11} class="text-base-content/20" />
-                <h3 class="text-[9px] font-bold uppercase tracking-wider text-base-content/20">¿Para qué?</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 pt-2">
+            <section class="space-y-3">
+              <div class="flex items-center gap-2 text-base-content/40">
+                <HelpCircle size={14} />
+                <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">¿Para qué?</h3>
               </div>
-              <textarea
-                value={purpose()}
-                rows={1}
-                class="w-full text-[16px] sm:text-[13px] text-base-content/70 leading-relaxed bg-transparent resize-none outline-none rounded-lg px-2 py-1 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.02] transition-colors placeholder:text-base-content/15"
-                placeholder="Propósito..."
-                ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
-                onInput={(e) => { const val = e.currentTarget.value; setPurpose(val); autoResize(e.currentTarget); scheduleSave({ purpose: val }); }}
-              />
+              <div class="relative group">
+                <textarea
+                  value={purpose()}
+                  rows={1}
+                  class="w-full text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed bg-transparent resize-none outline-none rounded-xl px-4 py-3 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.02] hover:bg-base-content/[0.015] transition-all placeholder:text-base-content/20"
+                  placeholder="Propósito de la historia..."
+                  ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
+                  onInput={(e) => { const val = e.currentTarget.value; setPurpose(val); autoResize(e.currentTarget); scheduleSave({ purpose: val }); }}
+                />
+                <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
+              </div>
             </section>
 
-            <section class="space-y-1">
-              <div class="flex items-center gap-1.5">
-                <FileText size={11} class="text-base-content/20" />
-                <h3 class="text-[9px] font-bold uppercase tracking-wider text-base-content/20">Descripción</h3>
+            <section class="space-y-3">
+              <div class="flex items-center gap-2 text-base-content/40">
+                <FileText size={14} />
+                <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">Descripción</h3>
               </div>
               <Show
                 when={editingDesc()}
                 fallback={
-                  <div
-                    onClick={() => setEditingDesc(true)}
-                    class="w-full text-[16px] sm:text-[13px] text-base-content/70 leading-relaxed rounded-lg px-2 py-1 border border-transparent hover:border-base-content/10 hover:bg-base-content/[0.02] transition-colors whitespace-pre-wrap cursor-text min-h-[28px]"
-                  >
-                    <Show when={description()} fallback={<span class="text-base-content/15">Descripción...</span>}>
-                      <Linkify text={description()} />
-                    </Show>
+                  <div class="relative group cursor-text">
+                    <div
+                      onClick={() => setEditingDesc(true)}
+                      class="w-full text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed rounded-xl px-4 py-3 border border-transparent group-hover:bg-base-content/[0.015] transition-all whitespace-pre-wrap min-h-[48px]"
+                    >
+                      <Show when={description()} fallback={<span class="text-base-content/20">Descripción extendida...</span>}>
+                        <Linkify text={description()} />
+                      </Show>
+                    </div>
+                    <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                   </div>
                 }
               >
-                <textarea
-                  value={description()}
-                  rows={1}
-                  class="w-full text-[16px] sm:text-[13px] text-base-content/70 leading-relaxed bg-transparent resize-none outline-none rounded-lg px-2 py-1 border border-base-content/10 bg-base-content/[0.02] transition-colors whitespace-pre-wrap placeholder:text-base-content/15"
-                  placeholder="Descripción..."
-                  ref={(el) => { requestAnimationFrame(() => { autoResize(el); el.focus(); }); }}
-                  onInput={(e) => { const val = e.currentTarget.value; setDescription(val); autoResize(e.currentTarget); scheduleSave({ description: val }); }}
-                  onBlur={() => setEditingDesc(false)}
-                />
+                <div class="relative group">
+                  <textarea
+                    value={description()}
+                    rows={1}
+                    class="w-full text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed bg-base-content/[0.02] resize-none outline-none rounded-xl px-4 py-3 border border-base-content/10 transition-all whitespace-pre-wrap placeholder:text-base-content/20 shadow-inner shadow-black/5"
+                    placeholder="Descripción extendida..."
+                    ref={(el) => { requestAnimationFrame(() => { autoResize(el); el.focus(); }); }}
+                    onInput={(e) => { const val = e.currentTarget.value; setDescription(val); autoResize(e.currentTarget); scheduleSave({ description: val }); }}
+                    onBlur={() => setEditingDesc(false)}
+                  />
+                  <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
+                </div>
               </Show>
             </section>
           </div>
 
           {/* Objective */}
-          <section class="space-y-1">
-            <div class="flex items-center gap-1.5">
-              <Target size={11} class="text-base-content/20" />
-              <h3 class="text-[9px] font-bold uppercase tracking-wider text-base-content/20">Objetivo</h3>
+          <section class="space-y-3 pt-2">
+            <div class="flex items-center gap-2 text-base-content/40">
+              <Target size={14} />
+              <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">Objetivo</h3>
             </div>
-            <textarea
-              value={objective()}
-              rows={1}
-              class="w-full text-[16px] sm:text-[13px] font-medium bg-transparent resize-none outline-none rounded-lg px-2 py-1 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.02] transition-colors placeholder:text-base-content/15"
-              placeholder="Objetivo..."
-              ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
-              onInput={(e) => { const val = e.currentTarget.value; setObjective(val); autoResize(e.currentTarget); scheduleSave({ objective: val }); }}
-            />
+            <div class="relative group">
+              <textarea
+                value={objective()}
+                rows={1}
+                class="w-full text-[16px] sm:text-[15px] font-medium text-base-content/90 leading-relaxed bg-transparent resize-none outline-none rounded-xl px-4 py-3 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.02] hover:bg-base-content/[0.015] transition-all placeholder:text-base-content/20"
+                placeholder="Objetivo principal..."
+                ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
+                onInput={(e) => { const val = e.currentTarget.value; setObjective(val); autoResize(e.currentTarget); scheduleSave({ objective: val }); }}
+              />
+              <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
+            </div>
           </section>
 
           {/* Acceptance Criteria */}
           <Show when={criteria().length > 0}>
-            <section class="space-y-2">
-              <div class="flex items-center gap-1.5">
-                <ClipboardCheck size={11} class="text-base-content/20" />
-                <h3 class="text-[9px] font-bold uppercase tracking-wider text-base-content/20">
-                  Criterios
-                </h3>
-                <span class="text-[9px] text-base-content/15">{metCount()}/{criteria().length}</span>
-                <div class="flex-1 h-1 bg-base-content/5 rounded-full overflow-hidden ml-1">
+            <section class="space-y-4 pt-2">
+              <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2 text-base-content/40">
+                  <ClipboardCheck size={14} />
+                  <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">
+                    Criterios <span class="text-base-content/30 ml-1">{metCount()}/{criteria().length}</span>
+                  </h3>
+                </div>
+                <div class="flex-1 h-1.5 bg-base-content/[0.04] rounded-full overflow-hidden ml-2 relative">
                   <div
-                    class="h-full bg-ios-green-500 rounded-full transition-all duration-300"
+                    class="absolute left-0 top-0 h-full bg-ios-green-500 rounded-full transition-all duration-500 ease-out"
                     style={{ width: `${(metCount() / criteria().length) * 100}%` }}
                   />
                 </div>
               </div>
-              <div class="space-y-0.5">
+              <div class="space-y-1.5">
                 <For each={criteria()}>
                   {(c) => (
                     <button
-                      class="flex items-start gap-2 py-1.5 sm:py-1 px-2 -ml-2 rounded-lg w-full text-left hover:bg-base-content/5 active:bg-base-content/10 transition-colors group"
+                      class="flex items-start gap-3 py-2 px-3 -ml-3 rounded-xl w-full text-left hover:bg-base-content/[0.03] active:bg-base-content/[0.05] transition-all group"
                       onClick={async () => {
                         const newVal = !c.is_met;
                         setCriteriaList(prev => prev.map(item => item.id === c.id ? { ...item, is_met: newVal } : item));
@@ -521,11 +537,11 @@ const StoryDetail: Component<Props> = (props) => {
                     >
                       <Show
                         when={c.is_met}
-                        fallback={<Circle size={14} class="text-base-content/15 mt-px shrink-0 group-hover:text-base-content/30 transition-colors" />}
+                        fallback={<Circle size={18} class="text-base-content/15 mt-0.5 shrink-0 group-hover:text-base-content/40 transition-colors" strokeWidth={2} />}
                       >
-                        <CheckCircle size={14} class="text-ios-green-500 mt-px shrink-0" />
+                        <CheckCircle size={18} class="text-ios-green-500 mt-0.5 shrink-0" strokeWidth={2.5} />
                       </Show>
-                      <span class={`text-[13px] leading-snug transition-colors ${c.is_met ? 'text-base-content/30 line-through' : 'text-base-content/70'}`}>
+                      <span class={`text-[15px] sm:text-[14px] leading-relaxed transition-colors duration-300 font-medium ${c.is_met ? 'text-base-content/40 line-through decoration-base-content/30' : 'text-base-content/80 group-hover:text-base-content'}`}>
                         {c.text}
                       </span>
                     </button>
@@ -537,37 +553,39 @@ const StoryDetail: Component<Props> = (props) => {
 
           {/* Attachments — only load after detail fetch to prevent flicker */}
           <Show when={detailLoaded()}>
-            <AttachmentSection
-              storyId={props.story.id}
-              onReady={(fn) => { attachmentUploadRef = fn; }}
-            />
+            <div class="pt-2">
+              <AttachmentSection
+                storyId={props.story.id}
+                onReady={(fn) => { attachmentUploadRef = fn; }}
+              />
+            </div>
           </Show>
 
           {/* Delete */}
-          <div class="pt-2 mt-1 border-t border-base-content/[0.04]">
+          <div class="pt-6 mt-4 border-t border-base-content/[0.04]">
             <Show when={deleteError()}>
-              <p class="text-xs text-red-500 mb-2">{deleteError()}</p>
+              <p class="text-[13px] text-red-500 font-medium mb-3">{deleteError()}</p>
             </Show>
             <Show
               when={confirming()}
               fallback={
                 <button
                   onClick={() => setConfirming(true)}
-                  class="flex items-center gap-1.5 text-[11px] text-base-content/20 hover:text-red-500 transition-colors py-1"
+                  class="flex items-center gap-2 text-[12px] font-semibold text-base-content/30 hover:text-red-500 hover:bg-red-500/10 px-3 py-1.5 -ml-3 rounded-lg transition-all"
                 >
-                  <Trash2 size={12} />
+                  <Trash2 size={14} />
                   Eliminar
                 </button>
               }
             >
-              <div class="flex items-center gap-2">
-                <span class="text-[11px] text-red-500">¿Eliminar?</span>
+              <div class="flex items-center gap-3">
+                <span class="text-[12px] font-medium text-red-500">¿Estás seguro de eliminar?</span>
                 <button onClick={() => setConfirming(false)} disabled={deleting()}
-                  class="text-[11px] px-3 py-1.5 rounded-lg bg-base-content/5 text-base-content/50 hover:bg-base-content/10 transition-colors">
-                  No
+                  class="text-[12px] font-medium px-4 py-2 rounded-xl bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/10 hover:text-base-content transition-all">
+                  Cancelar
                 </button>
                 <button onClick={handleDelete} disabled={deleting()}
-                  class="text-[11px] px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50">
+                  class="text-[12px] font-medium px-4 py-2 rounded-xl bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-all disabled:opacity-50">
                   {deleting() ? 'Eliminando...' : 'Sí, eliminar'}
                 </button>
               </div>
