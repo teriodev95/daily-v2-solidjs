@@ -3,7 +3,7 @@ import {
   type ParentComponent, type Accessor,
 } from 'solid-js';
 import type { User } from '../types';
-import { api, ApiError } from './api';
+import { api, ApiError, API_BASE } from './api';
 
 interface AuthContextValue {
   user: Accessor<User | undefined>;
@@ -19,9 +19,15 @@ const AuthContext = createContext<AuthContextValue>();
 export const AuthProvider: ParentComponent = (props) => {
   const [loginError, setLoginError] = createSignal<string | null>(null);
 
+  const resolveAvatar = (u: User | undefined) => {
+    if (!u?.avatar_url) return u;
+    if (u.avatar_url.startsWith('/api/')) return { ...u, avatar_url: `${API_BASE}${u.avatar_url}` };
+    return u;
+  };
+
   const [user, { refetch, mutate }] = createResource(async () => {
     try {
-      return await api.auth.me();
+      return resolveAvatar(await api.auth.me() as User);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) return undefined;
       throw e;
@@ -30,7 +36,7 @@ export const AuthProvider: ParentComponent = (props) => {
 
   const login = async (email: string, password: string) => {
     const u = await api.auth.login(email, password);
-    mutate(u as User);
+    mutate(resolveAvatar(u as User));
   };
 
   const logout = async () => {

@@ -91,6 +91,7 @@ export const weekGoals = sqliteTable('week_goals', {
   year: integer('year').notNull(),
   text: text('text').notNull(),
   is_completed: integer('is_completed', { mode: 'boolean' }).notNull().default(false),
+  is_closed: integer('is_closed', { mode: 'boolean' }).notNull().default(false),
   is_shared: integer('is_shared', { mode: 'boolean' }).notNull().default(false),
   created_at: text('created_at').notNull(),
 });

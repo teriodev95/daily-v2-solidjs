@@ -1,5 +1,5 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search } from 'lucide-solid';
+import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send } from 'lucide-solid';
 import type { ReportCategory, Story } from './types';
 import { AuthProvider, useAuth } from './lib/auth';
 import { DataProvider, useData } from './lib/data';
@@ -25,6 +25,12 @@ const AppShell: Component = () => {
   const [refreshKey, setRefreshKey] = createSignal(0);
   const [showSearch, setShowSearch] = createSignal(false);
   const [searchSelectedStory, setSearchSelectedStory] = createSignal<Story | null>(null);
+  const [shareRequested, setShareRequested] = createSignal(0);
+
+  const triggerShare = () => {
+    if (activeTab() !== 'report') switchTab('report');
+    setShareRequested(k => k + 1);
+  };
 
   const openCreateModal = (category?: ReportCategory, projectId?: string) => {
     setCreateCategory(category);
@@ -89,6 +95,7 @@ const AppShell: Component = () => {
         case 'e': e.preventDefault(); switchTab('team'); break;
         case 'p': e.preventDefault(); switchTab('projects'); break;
         case 'a': if (user()?.role === 'admin') { e.preventDefault(); switchTab('admin'); } break;
+        case 't': e.preventDefault(); triggerShare(); break;
       }
     };
     document.addEventListener('keydown', handleKey);
@@ -123,6 +130,13 @@ const AppShell: Component = () => {
               <kbd class="hidden lg:flex text-[9px] text-base-content/15 border border-base-content/[0.08] rounded px-1 py-px font-mono">⌘K</kbd>
             </button>
             <div class="w-px h-4 bg-base-content/[0.08] mx-0.5" />
+            <button
+              onClick={triggerShare}
+              class="p-2 rounded-xl text-[#0088cc]/50 hover:text-[#0088cc] hover:bg-[#0088cc]/10 transition-all"
+              title="Compartir Daily (T)"
+            >
+              <Send size={15} />
+            </button>
             <button
               onClick={toggleTheme}
               class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
@@ -172,6 +186,13 @@ const AppShell: Component = () => {
               <Search size={16} />
             </button>
             <button
+              onClick={triggerShare}
+              class="p-2 rounded-xl text-[#0088cc]/50 hover:text-[#0088cc] hover:bg-[#0088cc]/10 transition-all"
+              title="Compartir Daily"
+            >
+              <Send size={15} />
+            </button>
+            <button
               onClick={toggleTheme}
               class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
             >
@@ -195,7 +216,7 @@ const AppShell: Component = () => {
       {/* Content — all pages mounted, toggle visibility to avoid refetch flicker */}
       <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
         <div class={activeTab() === 'report' ? 'stagger-in' : ''} style={{ display: activeTab() === 'report' ? undefined : 'none' }}>
-          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} />
+          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} shareRequested={shareRequested()} />
         </div>
         <div class={activeTab() === 'team' ? 'stagger-in' : ''} style={{ display: activeTab() === 'team' ? undefined : 'none' }}>
           <TeamPage />

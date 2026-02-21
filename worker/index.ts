@@ -35,6 +35,20 @@ app.use('/api/*', async (c, next) => {
 app.route('/api/auth', authRoutes);
 app.route('/api/admin', seedRoutes);
 
+// Public avatar serve (img tags can't send cookies cross-origin)
+app.get('/api/avatars/:key{.+}', async (c) => {
+  const r2Key = decodeURIComponent(c.req.param('key'));
+  const obj = await c.env.BUCKET.get(r2Key);
+  if (!obj) return c.json({ error: 'Not found' }, 404);
+
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+      'Cache-Control': 'public, max-age=86400',
+    },
+  });
+});
+
 // Auth middleware for protected routes
 app.use('/api/team/*', authMiddleware);
 app.use('/api/projects/*', authMiddleware);

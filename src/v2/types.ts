@@ -95,6 +95,7 @@ export interface WeekGoal {
   year: number;
   text: string;
   is_completed: boolean;
+  is_closed: boolean;
   is_shared: boolean;
   created_at: string;
 }

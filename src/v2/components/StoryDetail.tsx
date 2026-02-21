@@ -5,9 +5,10 @@ import { api } from '../lib/api';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
   Calendar, Target, FileText, HelpCircle, ClipboardCheck, Trash2,
-  Check, Loader2, UserPlus,
+  Check, Loader2, UserPlus, CalendarDays,
 } from 'lucide-solid';
 import AttachmentSection from './AttachmentSection';
+import DatePickerPopover from './DatePickerPopover';
 
 const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   critical: { label: 'Crítica', color: 'text-red-500', bg: 'bg-red-500/10', icon: Flame },
@@ -28,6 +29,48 @@ const estimates = [
 ];
 
 const getEstimate = (value: number) => estimates.find(e => e.value === value);
+
+const diasCortos = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+const getWeekNumber = (d: Date) => {
+  const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
+  const week1 = new Date(tmp.getFullYear(), 0, 4);
+  return 1 + Math.round(((tmp.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+};
+
+const getRelativeDateInfo = (type: 'hoy' | 'manana' | 'pasado' | 'semana') => {
+  const today = new Date();
+  const todayWeek = getWeekNumber(today);
+
+  if (type === 'hoy') {
+    const sub = `${diasCortos[today.getDay()]} ${today.getDate()}`;
+    return { dateStr: today.toISOString().split('T')[0], label: 'Hoy', sub };
+  }
+
+  if (type === 'semana') {
+    let d = new Date();
+    d.setDate(d.getDate() + 7);
+    if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+    const sub = `${diasCortos[d.getDay()]} ${d.getDate()}`;
+    return { dateStr: d.toISOString().split('T')[0], label: '+1 sem', sub };
+  }
+
+  let targetDate = new Date();
+  let daysToAdd = type === 'manana' ? 1 : 2;
+
+  while (daysToAdd > 0) {
+    targetDate.setDate(targetDate.getDate() + 1);
+    if (targetDate.getDay() !== 0) daysToAdd--;
+  }
+
+  const dayName = diasSemana[targetDate.getDay()];
+  const isNextWeek = getWeekNumber(targetDate) !== todayWeek;
+  const sub = isNextWeek ? 'próx.' : 'esta sem';
+
+  return { dateStr: targetDate.toISOString().split('T')[0], label: dayName, sub };
+};
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   backlog: { label: 'Backlog', color: 'bg-base-content/20' },
@@ -89,6 +132,8 @@ const StoryDetail: Component<Props> = (props) => {
   const [showAssigneePicker, setShowAssigneePicker] = createSignal(false);
   const [estimate, setEstimate] = createSignal(props.story.estimate || 0);
   const [showEstimatePicker, setShowEstimatePicker] = createSignal(false);
+  const [showDatePicker, setShowDatePicker] = createSignal(false);
+  let dateTriggerRef!: HTMLButtonElement;
   const [editingDesc, setEditingDesc] = createSignal(false);
 
   // Save state
@@ -188,6 +233,11 @@ const StoryDetail: Component<Props> = (props) => {
     for (const id of assigneeIds()) ids.add(id);
     return ids;
   };
+
+  const btnHoy = () => getRelativeDateInfo('hoy');
+  const btnManana = () => getRelativeDateInfo('manana');
+  const btnPasado = () => getRelativeDateInfo('pasado');
+  const btnSemana = () => getRelativeDateInfo('semana');
 
   const prio = () => priorityConfig[props.story.priority];
   const stat = () => statusConfig[props.story.status];
@@ -334,101 +384,159 @@ const StoryDetail: Component<Props> = (props) => {
             <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
           </div>
 
-          {/* Meta row: date + estimate + assignees — all inline */}
-          <div class="flex items-center gap-3 sm:gap-4 flex-wrap pb-2 border-b border-base-content/[0.03]">
-            {/* Due date */}
-            <label class="flex items-center gap-2 text-[12px] sm:text-[13px] px-3.5 py-2 rounded-xl bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/[0.08] hover:text-base-content/80 transition-all cursor-pointer relative font-medium">
-              <Calendar size={14} class="opacity-60" />
-              <Show when={dueDate()} fallback={<span class="text-base-content/30 tracking-wide">Fecha</span>}>
-                <span>{formatDateDisplay(dueDate())}</span>
-                <button
-                  onClick={(e) => { e.preventDefault(); setDueDate(''); saveImmediate({ due_date: null }); }}
-                  class="ml-1 p-0.5 rounded-md hover:bg-base-content/20 text-base-content/40 hover:text-base-content transition-colors"
-                >
-                  <X size={12} />
-                </button>
-              </Show>
-              <input type="date" value={dueDate()} class="absolute inset-0 opacity-0 cursor-pointer"
-                onChange={(e) => { const val = e.currentTarget.value; setDueDate(val); saveImmediate({ due_date: val || null }); }} />
-            </label>
+          {/* Meta section: date + estimate + assignees */}
+          <div class="space-y-5 pb-2 border-b border-base-content/[0.03]">
 
-            {/* Estimate */}
-            <div class="relative">
-              <button
-                onClick={() => setShowEstimatePicker(!showEstimatePicker())}
-                class={`flex items-center gap-2 text-[12px] sm:text-[13px] px-3.5 py-2 rounded-xl transition-all font-medium ${estimate() > 0 ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20' : 'bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/[0.08] hover:text-base-content/80'
-                  }`}
-              >
-                <Show when={estimate() > 0 && getEstimate(estimate())} fallback={<span class="text-base-content/30 tracking-wide">Estimar</span>}>
-                  {(() => { const e = getEstimate(estimate())!; return <><span>{e.emoji}</span><span>{e.value}</span></>; })()}
-                </Show>
-              </button>
-              <Show when={showEstimatePicker()}>
-                <div class="absolute top-[calc(100%+8px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-2 w-[180px] grid grid-cols-2 gap-1 backdrop-blur-md">
-                  <For each={estimates}>
-                    {(e) => (
+            {/* Row 1: Quick date buttons + calendar */}
+            <div>
+              <div class="flex items-center gap-2 text-base-content/40 mb-3">
+                <CalendarDays size={14} />
+                <span class="text-[10px] font-bold uppercase tracking-[0.1em]">Fecha límite</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <For each={[btnHoy(), btnManana(), btnPasado(), btnSemana()]}>
+                  {(btn) => {
+                    const selected = () => dueDate() === btn.dateStr;
+                    return (
                       <button
-                        onClick={() => { setEstimate(e.value); setShowEstimatePicker(false); saveImmediate({ estimate: e.value }); }}
-                        class={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium transition-all ${estimate() === e.value ? 'bg-amber-500/20 text-amber-500 shadow-sm' : 'hover:bg-base-content/5 text-base-content/70 hover:text-base-content'
+                        type="button"
+                        onClick={() => { setDueDate(btn.dateStr); saveImmediate({ due_date: btn.dateStr }); }}
+                        class={`flex flex-col items-center px-3.5 py-2 rounded-xl transition-all duration-200 min-w-[72px] ${selected()
+                          ? 'bg-base-content/[0.06] text-base-content shadow-sm border border-base-content/[0.08]'
+                          : 'bg-transparent text-base-content/40 hover:bg-base-content/[0.04] border border-transparent'
                           }`}
                       >
-                        <span class="text-base">{e.emoji}</span>
-                        <span class="font-mono">{e.value}</span>
+                        <span class="text-[12px] font-bold leading-tight">{btn.label}</span>
+                        <span class={`text-[9px] font-semibold leading-tight mt-0.5 ${selected() ? 'text-base-content/50' : 'text-base-content/25'}`}>{btn.sub}</span>
                       </button>
-                    )}
-                  </For>
+                    );
+                  }}
+                </For>
+
+                <div class="flex items-center ml-auto relative">
+                  <button
+                    ref={dateTriggerRef}
+                    type="button"
+                    onClick={() => setShowDatePicker(!showDatePicker())}
+                    class={`relative bg-base-content/[0.03] rounded-xl pl-9 pr-4 py-2 text-[12px] font-bold outline-none text-base-content/60 focus:ring-2 focus:ring-ios-blue-500/20 hover:bg-base-content/[0.05] transition-all flex items-center min-w-[130px] justify-start ${showDatePicker() ? 'ring-2 ring-ios-blue-500/50 bg-base-content/[0.05]' : ''}`}
+                  >
+                    <Calendar size={14} strokeWidth={2.5} class={`absolute left-3.5 z-10 transition-colors ${showDatePicker() || dueDate() ? 'text-ios-blue-500' : 'text-base-content/30'}`} />
+                    {dueDate() ? formatDateDisplay(dueDate()) : "Calendario"}
+                  </button>
+                  <Show when={showDatePicker()}>
+                    <DatePickerPopover
+                      value={dueDate()}
+                      onSelect={(val) => { setDueDate(val); setShowDatePicker(false); saveImmediate({ due_date: val }); }}
+                      onClear={() => { setDueDate(''); setShowDatePicker(false); saveImmediate({ due_date: null }); }}
+                      onClose={() => setShowDatePicker(false)}
+                      triggerEl={dateTriggerRef}
+                    />
+                  </Show>
                 </div>
+              </div>
+              <Show when={dueDate()}>
+                <button
+                  onClick={() => { setDueDate(''); saveImmediate({ due_date: null }); }}
+                  class="px-2 mt-2 text-[10px] font-bold text-base-content/25 hover:text-base-content/50 transition-colors uppercase tracking-wider"
+                >
+                  Quitar fecha
+                </button>
               </Show>
             </div>
 
-            {/* Divider */}
-            <div class="hidden sm:block w-px h-6 bg-base-content/[0.08]" />
+            {/* Row 2: Estimate + Assignees */}
+            <div class="flex items-start gap-6 sm:gap-8 flex-wrap">
 
-            {/* Inline assignees */}
-            <div class="flex items-center pl-1">
-              <div class="flex items-center -space-x-2">
-                <Show when={currentAssignee()}>
-                  <img src={currentAssignee()!.avatar_url!} alt="" class="w-8 h-8 rounded-full ring-2 ring-base-100 object-cover shadow-sm z-[3]" title={currentAssignee()!.name} />
+              {/* Estimate */}
+              <div class="relative">
+                <button
+                  onClick={() => setShowEstimatePicker(!showEstimatePicker())}
+                  class={`flex items-center gap-2 text-[12px] sm:text-[13px] px-3.5 py-2 rounded-xl transition-all font-medium ${estimate() > 0 ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20' : 'bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/[0.08] hover:text-base-content/80'
+                    }`}
+                >
+                  <Show when={estimate() > 0 && getEstimate(estimate())} fallback={<span class="text-base-content/30 tracking-wide">Estimar</span>}>
+                    {(() => { const e = getEstimate(estimate())!; return <><span>{e.emoji}</span><span>{e.value}</span></>; })()}
+                  </Show>
+                </button>
+                <Show when={showEstimatePicker()}>
+                  <div class="absolute top-[calc(100%+8px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-2 w-[180px] grid grid-cols-2 gap-1 backdrop-blur-md">
+                    <For each={estimates}>
+                      {(e) => (
+                        <button
+                          onClick={() => { setEstimate(e.value); setShowEstimatePicker(false); saveImmediate({ estimate: e.value }); }}
+                          class={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium transition-all ${estimate() === e.value ? 'bg-amber-500/20 text-amber-500 shadow-sm' : 'hover:bg-base-content/5 text-base-content/70 hover:text-base-content'
+                            }`}
+                        >
+                          <span class="text-base">{e.emoji}</span>
+                          <span class="font-mono">{e.value}</span>
+                        </button>
+                      )}
+                    </For>
+                  </div>
                 </Show>
-                <For each={extraAssigneeUsers()}>
-                  {(u, i) => (
-                    <img src={u.avatar_url!} alt="" class="w-8 h-8 rounded-full ring-2 ring-base-100 object-cover shadow-sm" style={{ 'z-index': 2 - (i() as number) }} title={u.name} />
-                  )}
-                </For>
               </div>
-              <button
-                onClick={() => setShowAssigneePicker(!showAssigneePicker())}
-                class="w-8 h-8 rounded-full flex items-center justify-center text-base-content/40 hover:text-ios-blue-500 bg-base-content/[0.02] hover:bg-ios-blue-500/10 transition-all border border-dashed border-base-content/20 hover:border-ios-blue-500/30 shadow-sm z-0 ml-1.5"
-                title="Asignar"
-              >
-                <UserPlus size={14} />
-              </button>
+
+              {/* Assignees */}
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-3">
+                  {/* Encargado */}
+                  <Show when={currentAssignee()}>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30">Encargado</span>
+                      <img src={currentAssignee()!.avatar_url!} alt="" class="w-7 h-7 rounded-full ring-2 ring-base-100 object-cover shadow-sm" title={currentAssignee()!.name} />
+                      <span class="text-[12px] font-medium text-base-content/60">{currentAssignee()!.name.split(' ')[0]}</span>
+                    </div>
+                  </Show>
+
+                  {/* Involucrados */}
+                  <Show when={extraAssigneeUsers().length > 0}>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30">Involucrados</span>
+                      <div class="flex items-center -space-x-1.5">
+                        <For each={extraAssigneeUsers()}>
+                          {(u) => (
+                            <img src={u.avatar_url!} alt="" class="w-6 h-6 rounded-full ring-2 ring-base-100 object-cover shadow-sm" title={u.name} />
+                          )}
+                        </For>
+                      </div>
+                    </div>
+                  </Show>
+
+                  <button
+                    onClick={() => setShowAssigneePicker(!showAssigneePicker())}
+                    class="w-8 h-8 rounded-full flex items-center justify-center text-base-content/40 hover:text-ios-blue-500 bg-base-content/[0.02] hover:bg-ios-blue-500/10 transition-all border border-dashed border-base-content/20 hover:border-ios-blue-500/30 shadow-sm ml-1"
+                    title="Asignar"
+                  >
+                    <UserPlus size={14} />
+                  </button>
+                </div>
+
+                {/* Assignee picker — collapsible */}
+                <Show when={showAssigneePicker()}>
+                  <div class="mt-3 rounded-xl border border-base-content/[0.06] bg-base-content/[0.02] p-1 flex flex-wrap gap-0.5">
+                    <For each={activeMembers()}>
+                      {(member) => {
+                        const isAssigned = () => allAssignedIds().has(member.id);
+                        return (
+                          <button
+                            onClick={() => toggleAssignee(member.id)}
+                            class={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors ${isAssigned() ? 'bg-ios-blue-500/10 text-ios-blue-500' : 'hover:bg-base-content/5 text-base-content/50'
+                              }`}
+                          >
+                            <img src={member.avatar_url!} alt="" class="w-5 h-5 rounded-full" />
+                            <span class="font-medium">{member.name.split(' ')[0]}</span>
+                            <Show when={isAssigned()}>
+                              <Check size={11} class="text-ios-blue-500" />
+                            </Show>
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </Show>
+              </div>
             </div>
           </div>
-
-          {/* Assignee picker — collapsible */}
-          <Show when={showAssigneePicker()}>
-            <div class="rounded-xl border border-base-content/[0.06] bg-base-content/[0.02] p-1 flex flex-wrap gap-0.5">
-              <For each={activeMembers()}>
-                {(member) => {
-                  const isAssigned = () => allAssignedIds().has(member.id);
-                  return (
-                    <button
-                      onClick={() => toggleAssignee(member.id)}
-                      class={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors ${isAssigned() ? 'bg-ios-blue-500/10 text-ios-blue-500' : 'hover:bg-base-content/5 text-base-content/50'
-                        }`}
-                    >
-                      <img src={member.avatar_url!} alt="" class="w-5 h-5 rounded-full" />
-                      <span class="font-medium">{member.name.split(' ')[0]}</span>
-                      <Show when={isAssigned()}>
-                        <Check size={11} class="text-ios-blue-500" />
-                      </Show>
-                    </button>
-                  );
-                }}
-              </For>
-            </div>
-          </Show>
 
           {/* Purpose + Description — 2-col on desktop */}
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 pt-2">

@@ -123,24 +123,23 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
   return (
     <div class="space-y-4">
       {/* Project tabs */}
-      <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div class="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
         <For each={activeProjects()}>
           {(project) => {
             const active = () => selectedProjectId() === project.id;
             return (
               <button
                 onClick={() => setSelectedProjectId(project.id)}
-                class={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
-                  active()
-                    ? 'bg-base-content/10 text-base-content ring-1 ring-base-content/[0.06]'
-                    : 'text-base-content/40 hover:bg-base-content/5'
-                }`}
+                class={`group flex items-center gap-2 px-3.5 py-2 rounded-[14px] text-xs font-semibold whitespace-nowrap transition-all duration-300 shrink-0 ${active()
+                    ? 'bg-base-content text-base-100 shadow-md shadow-base-content/10 scale-[1.02]'
+                    : 'bg-base-200/50 text-base-content/60 hover:bg-base-200 hover:text-base-content/90 border border-base-content/[0.04]'
+                  }`}
               >
                 <Show when={project.icon_url}>
-                  <img src={project.icon_url!} alt="" class="w-5 h-5 rounded-md" />
+                  <img src={project.icon_url!} alt="" class="w-4 h-4 rounded-md object-cover shadow-sm" />
                 </Show>
                 <span>{project.name}</span>
-                <div class="w-1.5 h-1.5 rounded-full shrink-0" style={{ "background-color": project.color }} />
+                <div class={`w-1.5 h-1.5 rounded-full shrink-0 transition-opacity ${active() ? 'opacity-100 ring-2 ring-base-100/30' : 'opacity-60 group-hover:opacity-100'}`} style={{ "background-color": project.color }} />
               </button>
             );
           }}
@@ -148,9 +147,9 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
         <Show when={selectedProject()}>
           <button
             onClick={() => props.onCreateStory?.(selectedProjectId()!)}
-            class="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all shrink-0"
+            class="flex items-center gap-1.5 px-4 py-2 ml-1 rounded-[14px] text-xs font-semibold text-ios-blue-500 bg-ios-blue-500/10 hover:bg-ios-blue-500/15 transition-all shrink-0 shadow-sm shadow-ios-blue-500/5 hover:scale-[1.02]"
           >
-            <Plus size={14} />
+            <Plus size={14} strokeWidth={2.5} />
             Nueva HU
           </button>
         </Show>
@@ -166,28 +165,29 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
         }
       >
         <Show when={!projectStories.loading} fallback={<KanbanSkeleton />}>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start h-full">
             <For each={columns}>
               {(col) => (
                 <div
-                  class={`rounded-2xl transition-all min-h-[120px] sm:min-h-[200px] border ${
-                    dragOverCol() === col.id
-                      ? 'bg-ios-blue-500/[0.06] ring-2 ring-ios-blue-500/20 ring-dashed border-ios-blue-500/10'
-                      : 'bg-base-content/[0.03] border-base-content/[0.04]'
-                  }`}
+                  class={`flex flex-col rounded-2xl transition-all min-h-[120px] sm:min-h-[400px] border ${dragOverCol() === col.id
+                      ? 'bg-ios-blue-500/[0.08] ring-2 ring-ios-blue-500/30 ring-dashed border-ios-blue-500/20'
+                      : 'bg-base-200/30 border-base-content/[0.05]'
+                    }`}
                   onDragOver={(e) => handleDragOver(e, col.id)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, col.id)}
                 >
                   {/* Column header */}
-                  <div class="flex items-center gap-2 px-3 pt-3 pb-2">
-                    <div class={`w-2 h-2 rounded-full ${col.dot}`} />
-                    <span class="text-[11px] font-semibold text-base-content/60">{col.label}</span>
-                    <span class="text-[10px] text-base-content/25 ml-auto font-medium">{columnCount(col.id)}</span>
+                  <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-base-content/[0.04]">
+                    <div class="flex items-center gap-2">
+                      <div class={`w-2 h-2 rounded-full ${col.dot} shadow-sm`} />
+                      <span class="text-[11px] font-bold text-base-content/70 tracking-wide uppercase">{col.label}</span>
+                    </div>
+                    <span class="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-base-content/[0.06] text-[10px] text-base-content/50 font-bold">{columnCount(col.id)}</span>
                   </div>
 
                   {/* Cards */}
-                  <div class="px-2 pb-2 space-y-1.5">
+                  <div class="flex-1 p-2 space-y-2 overflow-y-auto scrollbar-none hover:scrollbar-thin hover:scrollbar-thumb-base-content/10">
                     <For each={storiesByStatus(col.id)}>
                       {(story) => {
                         const prio = priorityConfig[story.priority];
@@ -200,36 +200,60 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
                             onDragStart={(e) => handleDragStart(e, story.id)}
                             onDragEnd={handleDragEnd}
                             onClick={() => setSelectedStory(story)}
-                            class={`p-3 sm:p-2.5 rounded-xl bg-base-200/50 border border-base-content/[0.06] hover:border-base-content/[0.12] cursor-pointer transition-all group shadow-sm shadow-black/[0.04] ${
-                              draggingId() === story.id ? 'opacity-40 scale-95' : 'hover:shadow-md hover:shadow-black/[0.06]'
-                            }`}
+                            class={`group relative p-3.5 rounded-[14px] bg-base-100/90 hover:bg-base-100 border border-base-content/[0.06] hover:border-base-content/[0.15] cursor-pointer transition-all duration-200 shadow-sm ${draggingId() === story.id
+                                ? 'opacity-40 scale-95 shadow-none'
+                                : 'hover:-translate-y-0.5 hover:shadow-lg hover:shadow-base-content/5 z-10'
+                              }`}
                           >
-                            {/* Code + priority */}
-                            <div class="flex items-center gap-1.5 mb-1">
-                              <Show when={story.code}>
-                                <span class="text-[9px] font-mono font-bold text-base-content/35">{story.code}</span>
-                              </Show>
-                              <PrioIcon size={10} class={prio.color} />
+                            {/* Identifier & Avatar */}
+                            <div class="flex items-center justify-between mb-2">
+                              <div class="flex items-center gap-1.5">
+                                <Show when={story.code}>
+                                  <span class="text-[10px] font-mono font-semibold text-base-content/40 tracking-wider">
+                                    {story.code}
+                                  </span>
+                                </Show>
+                                <div class={`flex items-center justify-center w-5 h-5 rounded-md bg-base-content/[0.03] ${prio.color}`}>
+                                  <PrioIcon size={12} strokeWidth={2.5} />
+                                </div>
+                              </div>
                               <Show when={assignee}>
-                                <img
-                                  src={assignee!.avatar_url!}
-                                  alt=""
-                                  class="w-4 h-4 rounded-full ml-auto"
-                                />
+                                <div class="relative group/avatar">
+                                  <div class="w-5 h-5 rounded-full bg-base-content/5 overflow-hidden ring-2 ring-base-100/50 shadow-sm">
+                                    <Show when={assignee?.avatar_url} fallback={
+                                      <div class="w-full h-full flex items-center justify-center text-[8px] font-bold text-base-content/50 uppercase">
+                                        {assignee!.name.substring(0, 2)}
+                                      </div>
+                                    }>
+                                      <img
+                                        src={assignee!.avatar_url!}
+                                        alt=""
+                                        class="w-full h-full object-cover"
+                                      />
+                                    </Show>
+                                  </div>
+                                </div>
                               </Show>
                             </div>
+
                             {/* Title */}
-                            <p class="text-sm sm:text-[12px] font-medium leading-snug text-base-content/90 line-clamp-2">
+                            <p class="text-[13px] font-medium leading-relaxed text-base-content/90 mb-3 group-hover:text-base-content transition-colors line-clamp-3">
                               {story.title}
                             </p>
-                            {/* Meta */}
+
+                            {/* Meta info bottom */}
                             <Show when={story.estimate > 0 || story.due_date}>
-                              <div class="flex items-center gap-2 mt-1.5">
+                              <div class="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
                                 <Show when={story.estimate > 0}>
-                                  <span class="text-[11px] sm:text-[9px] text-base-content/30">{story.estimate} {estimateEmoji(story.estimate)}</span>
+                                  <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-base-content/[0.03] text-[10px] font-medium text-base-content/60 border border-base-content/[0.03]">
+                                    <span>{story.estimate}</span>
+                                    <span>{estimateEmoji(story.estimate)}</span>
+                                  </div>
                                 </Show>
                                 <Show when={story.due_date}>
-                                  <span class="text-[11px] sm:text-[9px] text-base-content/30">{story.due_date}</span>
+                                  <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-base-content/[0.03] text-[10px] font-medium text-base-content/60 border border-base-content/[0.03]">
+                                    <span>{story.due_date}</span>
+                                  </div>
                                 </Show>
                               </div>
                             </Show>
@@ -240,8 +264,13 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
 
                     {/* Empty state */}
                     <Show when={storiesByStatus(col.id).length === 0}>
-                      <div class="px-2 py-6 text-center text-[10px] text-base-content/15">
-                        {col.emptyLabel}
+                      <div class="flex flex-col items-center justify-center h-full py-8 text-center opacity-0 animate-in fade-in duration-500">
+                        <div class="w-8 h-8 rounded-full bg-base-content/[0.02] flex items-center justify-center mb-2">
+                          <div class={`w-1.5 h-1.5 rounded-full ${col.dot} opacity-40`} />
+                        </div>
+                        <span class="text-[11px] font-medium text-base-content/40">
+                          {col.emptyLabel}
+                        </span>
                       </div>
                     </Show>
                   </div>
@@ -270,12 +299,12 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
 };
 
 const KanbanSkeleton: Component = () => (
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
     {[...Array(4)].map(() => (
-      <div class="space-y-1.5 rounded-2xl bg-base-content/[0.03] border border-base-content/[0.04] p-2 pt-3">
-        <div class="h-3 w-16 rounded bg-base-200/60 mx-1 mb-2" />
-        <div class="h-16 rounded-xl bg-base-200/40" />
-        <div class="h-16 rounded-xl bg-base-200/40" />
+      <div class="flex flex-col space-y-2 rounded-2xl bg-base-200/30 border border-base-content/[0.05] p-2 pt-3 min-h-[400px]">
+        <div class="h-4 w-20 rounded-md bg-base-content/5 mx-2 mb-2" />
+        <div class="h-28 rounded-[14px] bg-base-100/50 border border-base-content/[0.02]" />
+        <div class="h-28 rounded-[14px] bg-base-100/50 border border-base-content/[0.02]" />
       </div>
     ))}
   </div>

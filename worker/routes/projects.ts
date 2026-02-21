@@ -55,12 +55,45 @@ projects.post('/', requireAdmin, async (c) => {
 projects.patch('/:id', requireAdmin, async (c) => {
   const db = c.get('db');
   const id = c.req.param('id');
-  const body = await c.req.json<Partial<{ name: string; prefix: string; color: string; icon_url: string; status: 'active' | 'archived' }>>();
+  const body = await c.req.json<Partial<{
+    name: string;
+    prefix: string;
+    color: string;
+    icon_url: string;
+    status: 'active' | 'archived';
+  }>>();
 
-  await db.update(schema.projects).set(body).where(eq(schema.projects.id, id));
+  // Whitelist fields
+  const allowed: Record<string, unknown> = {};
+  if (body.name !== undefined) allowed.name = body.name;
+  if (body.prefix !== undefined) allowed.prefix = body.prefix;
+  if (body.color !== undefined) allowed.color = body.color;
+  if (body.icon_url !== undefined) allowed.icon_url = body.icon_url;
+  if (body.status !== undefined) allowed.status = body.status;
+
+  if (Object.keys(allowed).length > 0) {
+    await db.update(schema.projects).set(allowed).where(eq(schema.projects.id, id));
+  }
 
   const [updated] = await db.select().from(schema.projects).where(eq(schema.projects.id, id)).limit(1);
   return c.json(updated);
+});
+
+projects.delete('/:id', requireAdmin, async (c) => {
+  const db = c.get('db');
+  const id = c.req.param('id');
+
+  // Check if project has stories
+  const stories = await db.select({ id: schema.stories.id }).from(schema.stories).where(eq(schema.stories.project_id, id)).limit(1);
+
+  if (stories.length > 0) {
+    // Soft delete — archive instead
+    await db.update(schema.projects).set({ status: 'archived' }).where(eq(schema.projects.id, id));
+    return c.json({ ok: true, archived: true });
+  }
+
+  await db.delete(schema.projects).where(eq(schema.projects.id, id));
+  return c.json({ ok: true });
 });
 
 export default projects;

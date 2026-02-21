@@ -115,19 +115,19 @@ const AttachmentSection: Component<AttachmentSectionProps> = (props) => {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div class="flex items-center gap-1.5">
-          <Paperclip size={11} class="text-base-content/20" />
-          <span class="text-[9px] font-bold uppercase text-base-content/20 tracking-wider">Adjuntos</span>
+        <div class="flex items-center gap-2 mb-3">
+          <Paperclip size={12} strokeWidth={2.5} class="text-base-content/30" />
+          <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30">Adjuntos</span>
           <Show when={items().length > 0}>
-            <span class="text-[9px] text-base-content/15">{items().length}</span>
+            <span class="text-ios-blue-500 text-[10px] font-bold">{items().length}</span>
           </Show>
           <button
             onClick={() => fileInput.click()}
             disabled={uploading()}
-            class="ml-auto flex items-center gap-1 text-[10px] text-ios-blue-500 hover:text-ios-blue-400 transition-colors disabled:opacity-40"
+            class="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-base-content/[0.04] hover:bg-base-content/[0.08] text-[10px] font-bold text-base-content/60 hover:text-base-content transition-all disabled:opacity-40"
           >
-            <Show when={uploading()} fallback={<Upload size={10} />}>
-              <Loader2 size={10} class="animate-spin" />
+            <Show when={uploading()} fallback={<Upload size={12} strokeWidth={2.5} />}>
+              <Loader2 size={12} strokeWidth={2.5} class="animate-spin" />
             </Show>
             {uploading() ? 'Subiendo...' : 'Subir'}
           </button>
@@ -142,54 +142,51 @@ const AttachmentSection: Component<AttachmentSectionProps> = (props) => {
 
         {/* Drop zone indicator */}
         <Show when={dragOver()}>
-          <div class="flex items-center justify-center gap-2 py-5 rounded-xl border-2 border-dashed border-ios-blue-500/40 bg-ios-blue-500/[0.06] text-ios-blue-500/60">
-            <ImagePlus size={16} />
-            <span class="text-[11px] font-medium">Suelta aquí</span>
+          <div class="flex items-center justify-center gap-2 py-8 rounded-2xl border-2 border-dashed border-ios-blue-500/40 bg-ios-blue-500/[0.06] text-ios-blue-500/60 transition-all duration-300">
+            <ImagePlus size={20} strokeWidth={2.5} />
+            <span class="text-[13px] font-bold">Suelta aquí</span>
           </div>
         </Show>
 
         {/* Files grid */}
         <Show when={!dragOver() && items().length > 0}>
-          <div class="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <For each={items()}>
               {(att) => {
                 const imgUrl = isImage(att.mime_type) ? api.attachments.fileUrl(att.id) : null;
                 return (
-                  <div class="group relative rounded-lg overflow-hidden bg-base-200/40 border border-base-content/[0.06] hover:border-base-content/[0.12] transition-all">
+                  <div class="group relative rounded-xl overflow-hidden bg-base-200/40 border border-base-content/[0.06] shadow-sm hover:border-base-content/[0.12] transition-all duration-300 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (imgUrl) { setLightboxSrc({ src: imgUrl, alt: att.file_name }); }
+                      else { window.open(api.attachments.fileUrl(att.id), '_blank'); }
+                    }}>
                     <Show
                       when={imgUrl}
                       fallback={
-                        <div
-                          class="flex flex-col items-center gap-1 px-2 py-3 cursor-pointer"
-                          onClick={() => window.open(api.attachments.fileUrl(att.id), '_blank')}
-                        >
-                          <FileIcon size={14} class="text-base-content/25" />
+                        <div class="flex flex-col items-center justify-center gap-1.5 py-4 px-2">
+                          <FileIcon size={20} strokeWidth={2.5} class="text-base-content/30" />
                           <p class="text-[9px] font-medium truncate w-full text-center text-base-content/50">{att.file_name}</p>
-                          <p class="text-[8px] text-base-content/20">{formatSize(att.file_size)}</p>
+                          <p class="text-[8px] font-bold text-base-content/30">{formatSize(att.file_size)}</p>
                         </div>
                       }
                     >
-                      <div
-                        class="cursor-pointer"
-                        onClick={() => setLightboxSrc({ src: imgUrl!, alt: att.file_name })}
-                      >
-                        <img
-                          src={imgUrl!}
-                          alt={att.file_name}
-                          class="w-full h-20 object-cover"
-                          loading="lazy"
-                        />
-                        <div class="px-1.5 py-1">
-                          <p class="text-[8px] truncate text-base-content/40">{att.file_name}</p>
-                        </div>
+                      <img
+                        src={imgUrl!}
+                        alt={att.file_name}
+                        class="w-full h-20 object-cover transition-transform duration-500 group-hover:scale-110"
+                        loading="lazy"
+                      />
+                      <div class="absolute bottom-0 inset-x-0 bg-black/60 backdrop-blur-md px-2 py-1.5 transition-opacity">
+                        <p class="text-[9px] font-medium truncate text-white/90">{att.file_name}</p>
                       </div>
                     </Show>
 
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDelete(att); }}
-                      class="absolute top-1 right-1 p-1 rounded-md bg-black/40 text-white/70 hover:text-white hover:bg-red-500/80 opacity-0 group-hover:opacity-100 transition-all"
+                      class="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-white/70 hover:text-white hover:bg-red-500/90 opacity-0 group-hover:opacity-100 transition-all z-10"
                     >
-                      <Trash2 size={10} />
+                      <Trash2 size={12} strokeWidth={2.5} />
                     </button>
                   </div>
                 );
@@ -202,10 +199,10 @@ const AttachmentSection: Component<AttachmentSectionProps> = (props) => {
         <Show when={!dragOver() && items().length === 0 && !uploading()}>
           <button
             onClick={() => fileInput.click()}
-            class="w-full flex items-center justify-center gap-1.5 py-3 rounded-lg border border-dashed border-base-content/[0.06] text-base-content/15 hover:border-base-content/12 hover:text-base-content/25 transition-all cursor-pointer"
+            class="w-full flex flex-col items-center justify-center gap-2 py-6 rounded-2xl border border-dashed border-base-content/[0.12] text-base-content/30 hover:border-base-content/25 hover:text-base-content/50 hover:bg-base-content/[0.02] transition-all cursor-pointer"
           >
-            <ImagePlus size={14} />
-            <span class="text-[10px]">Arrastra, pega o selecciona</span>
+            <ImagePlus size={20} strokeWidth={2.5} />
+            <span class="text-[12px] font-bold">Arrastra, pega o selecciona</span>
           </button>
         </Show>
 

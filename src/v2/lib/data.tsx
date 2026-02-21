@@ -3,7 +3,7 @@ import {
   type ParentComponent, type Accessor,
 } from 'solid-js';
 import type { User, Project } from '../types';
-import { api } from './api';
+import { api, API_BASE } from './api';
 
 interface DataContextValue {
   users: Accessor<User[]>;
@@ -17,7 +17,17 @@ interface DataContextValue {
 const DataContext = createContext<DataContextValue>();
 
 export const DataProvider: ParentComponent = (props) => {
-  const [users, { refetch: refetchUsers }] = createResource(() => api.team.getMembers() as Promise<User[]>);
+  // Resolve relative avatar URLs (e.g. /api/team/avatars/...) to absolute using API_BASE
+  const resolveAvatarUrl = (url: string | null) => {
+    if (!url) return null;
+    if (url.startsWith('/api/')) return `${API_BASE}${url}`;
+    return url;
+  };
+
+  const [users, { refetch: refetchUsers }] = createResource(async () => {
+    const list = await api.team.getMembers() as User[];
+    return list.map(u => ({ ...u, avatar_url: resolveAvatarUrl(u.avatar_url) }));
+  });
   const [projectList, { refetch: refetchProjects }] = createResource(() => api.projects.list());
 
   const value: DataContextValue = {

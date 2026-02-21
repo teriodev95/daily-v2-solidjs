@@ -23,6 +23,10 @@ goals.get('/', async (c) => {
   if (year) rows = rows.filter(g => g.year === parseInt(year));
   if (shared === 'true') rows = rows.filter(g => g.is_shared);
 
+  // By default exclude closed goals unless explicitly requested
+  const includeClosed = c.req.query('include_closed');
+  if (includeClosed !== 'true') rows = rows.filter(g => !g.is_closed);
+
   return c.json(rows);
 });
 
@@ -58,7 +62,7 @@ goals.post('/', async (c) => {
 goals.patch('/:id', async (c) => {
   const db = c.get('db');
   const id = c.req.param('id');
-  const body = await c.req.json<Partial<{ text: string; is_completed: boolean; is_shared: boolean }>>();
+  const body = await c.req.json<Partial<{ text: string; is_completed: boolean; is_closed: boolean; is_shared: boolean }>>();
 
   await db.update(schema.weekGoals).set(body).where(eq(schema.weekGoals.id, id));
 

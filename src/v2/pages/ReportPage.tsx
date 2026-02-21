@@ -6,21 +6,35 @@ import { useData } from '../lib/data';
 import {
   CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle,
   Plus, Package, Target, Play, RotateCcw, Check,
-  Eye, Trash2, ArrowRightCircle, Flag,
+  Eye, Trash2, ArrowRightCircle, Flag, XCircle,
 } from 'lucide-solid';
 import StoryDetail from '../components/StoryDetail';
+import ShareReportModal from '../components/ShareReportModal';
 import type { ReportCategory } from '../types';
 
 interface ReportPageProps {
   onCreateStory?: (category: ReportCategory) => void;
   refreshKey?: number;
   onStoryDeleted?: () => void;
+  shareRequested?: number; // increment to trigger share modal with auto-copy
 }
 
 const ReportPage: Component<ReportPageProps> = (props) => {
   const auth = useAuth();
   const data = useData();
   const [selectedStory, setSelectedStory] = createSignal<Story | null>(null);
+  const [selectedAssignment, setSelectedAssignment] = createSignal<Assignment | null>(null);
+  const [showShareModal, setShowShareModal] = createSignal(false);
+  const [shareAutoCopy, setShareAutoCopy] = createSignal(false);
+
+  // Watch for external share request (keyboard shortcut T)
+  createEffect(() => {
+    const req = props.shareRequested;
+    if (req && req > 0) {
+      setShareAutoCopy(true);
+      setShowShareModal(true);
+    }
+  });
 
   const today = new Date().toISOString().split('T')[0];
   const userId = () => auth.user()?.id ?? '';
@@ -145,7 +159,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       enteringIds().has(storyId) ? 'animate-card-enter' : '';
 
   // ─── Context menu ───
-  const [ctxMenu, setCtxMenu] = createSignal<{ story?: Story; goal?: { id: string, text: string }; x: number; y: number } | null>(null);
+  const [ctxMenu, setCtxMenu] = createSignal<{ story?: Story; goal?: { id: string, text: string }; assignment?: Assignment; x: number; y: number } | null>(null);
 
   const openCtxMenu = (e: MouseEvent, story: Story) => {
     e.preventDefault();
@@ -230,11 +244,32 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     }, 4000);
   };
 
-  const ctxToggleGoalComplete = (id: string, currentStatus: boolean | undefined) => {
+  const toggleGoalComplete = (id: string, currentStatus: boolean | undefined) => {
     closeCtxMenu();
-    api.goals.update(id, { is_completed: !currentStatus }).then(() => {
-      refetchGoals();
-    }).catch(() => { });
+    // Optimistic update — no refetch
+    mutateGoals(prev => prev?.map(g => g.id === id ? { ...g, is_completed: !currentStatus } : g) ?? []);
+    api.goals.update(id, { is_completed: !currentStatus }).catch(() => refetchGoals());
+  };
+
+  const ctxCloseGoal = (id: string) => {
+    closeCtxMenu();
+    // Optimistic: remove from list
+    mutateGoals(prev => prev?.filter(g => g.id !== id) ?? []);
+    api.goals.update(id, { is_closed: true }).catch(() => refetchGoals());
+  };
+
+  const openAssignmentCtxMenu = (e: MouseEvent, assignment: Assignment) => {
+    e.preventDefault();
+    const menuW = 200;
+    const menuH = 120;
+    const x = Math.max(8, Math.min(e.clientX, window.innerWidth - menuW - 8));
+    const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuH - 8));
+    setCtxMenu({ assignment, x, y });
+  };
+
+  const ctxCloseAssignment = (id: string) => {
+    closeCtxMenu();
+    api.assignments.update(id, { status: 'closed', closed_at: new Date().toISOString() }).catch(() => { });
   };
 
   const undoDelete = () => {
@@ -280,6 +315,78 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     return opts;
   };
 
+  // ─── Inline quick-add ───
+  const quickAdd = async (title: string, status: StoryStatus) => {
+    if (!title.trim()) return;
+    const now = new Date().toISOString();
+    try {
+      const created = await api.stories.create({
+        title: title.trim(),
+        status,
+        assignee_id: userId(),
+        completed_at: status === 'done' ? now : null,
+      });
+      // Add to local list with enter animation
+      setEnteringIds(prev => new Set([...prev, created.id]));
+      setLocalStories(prev => [...prev, created as Story]);
+      setTimeout(() => {
+        setEnteringIds(prev => { const n = new Set(prev); n.delete(created.id); return n; });
+      }, 260);
+    } catch { refetchStories(); }
+  };
+
+  const InlineAdd = (p: { status: StoryStatus; placeholder: string }) => {
+    const [editing, setEditing] = createSignal(false);
+    const [value, setValue] = createSignal('');
+    let inputRef!: HTMLInputElement;
+
+    const submit = () => {
+      const v = value().trim();
+      if (v) {
+        quickAdd(v, p.status);
+        setValue('');
+      }
+      // Keep input open for rapid entry
+    };
+
+    const open = () => {
+      setEditing(true);
+      setTimeout(() => inputRef?.focus(), 10);
+    };
+
+    const close = () => {
+      if (!value().trim()) setEditing(false);
+    };
+
+    return (
+      <Show when={editing()} fallback={
+        <button
+          onClick={open}
+          class="w-full flex items-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all"
+        >
+          <Plus size={14} />
+          {p.placeholder}
+        </button>
+      }>
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-base-200/50 border border-base-content/[0.08] focus-within:border-ios-blue-500/40 transition-colors">
+          <Plus size={14} class="text-base-content/20 shrink-0" />
+          <input
+            ref={inputRef}
+            value={value()}
+            onInput={(e) => setValue(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submit(); }
+              if (e.key === 'Escape') { setValue(''); setEditing(false); }
+            }}
+            onBlur={close}
+            placeholder={p.placeholder}
+            class="flex-1 bg-transparent text-sm outline-none placeholder:text-base-content/20"
+          />
+        </div>
+      </Show>
+    );
+  };
+
   // Reusable story badge
   const ProjectBadge = (p: { story: Story }) => {
     const proj = getProject(p.story.project_id);
@@ -319,9 +426,14 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                           : 'bg-base-200/90 border-base-300/60 hover:bg-base-200'
                           }`}
                       >
-                        <Show when={goal.is_completed} fallback={<Circle size={13} class="text-base-content/20 shrink-0" />}>
-                          <CheckCircle size={13} class="text-ios-green-500 shrink-0" />
-                        </Show>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleGoalComplete(goal.id, goal.is_completed); }}
+                          class="shrink-0 p-0.5 -ml-0.5 rounded hover:bg-base-content/10 transition-colors"
+                        >
+                          <Show when={goal.is_completed} fallback={<Circle size={13} class="text-base-content/20" />}>
+                            <CheckCircle size={13} class="text-ios-green-500" />
+                          </Show>
+                        </button>
                         {goal.text}
                       </div>
                     )}
@@ -348,7 +460,11 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                           return diff;
                         };
                         return (
-                          <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap border border-purple-500/20 bg-purple-500/[0.04] text-purple-600 dark:text-purple-300 shrink-0 shadow-sm">
+                          <div
+                            onClick={() => setSelectedAssignment(assignment)}
+                            onContextMenu={(e) => openAssignmentCtxMenu(e, assignment)}
+                            class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap border border-purple-500/20 bg-purple-500/[0.04] text-purple-600 dark:text-purple-300 shrink-0 shadow-sm cursor-pointer hover:bg-purple-500/[0.08] transition-colors"
+                          >
                             {assignment.title}
                             <Show when={assignment.due_date}>
                               <span class={`text-[10px] ml-0.5 uppercase tracking-wider font-bold shrink-0 ${dueDays()! < 0 ? 'text-red-500' : dueDays()! <= 2 ? 'text-amber-500' : 'text-purple-500/50'}`}>
@@ -441,6 +557,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                     <span class="text-sm text-base-content/20">Sin tareas completadas</span>
                   </div>
                 </Show>
+                <InlineAdd status="done" placeholder="¿Algo más que completaste?" />
               </div>
             </section>
 
@@ -488,6 +605,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                     <span class="text-sm text-base-content/20">Mueve tareas aquí desde el backlog</span>
                   </div>
                 </Show>
+                <InlineAdd status="todo" placeholder="¿Otra tarea para hoy?" />
               </div>
             </section>
           </div>
@@ -525,13 +643,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   </div>
                 )}
               </For>
-              <button
-                onClick={() => props.onCreateStory?.('backlog')}
-                class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all"
-              >
-                <Plus size={14} />
-                Agregar al backlog...
-              </button>
+              <InlineAdd status="backlog" placeholder="Agregar al backlog..." />
             </div>
           </section>
 
@@ -667,7 +779,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                 </div>
 
                 <button
-                  onClick={() => ctxToggleGoalComplete(g.id, isCompleted)}
+                  onClick={() => toggleGoalComplete(g.id, isCompleted)}
                   class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/70 hover:bg-base-content/5 transition-colors"
                 >
                   <Show when={isCompleted} fallback={<CheckCircle size={14} class="shrink-0 text-ios-green-500" />}>
@@ -675,6 +787,17 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   </Show>
                   <span class={isCompleted ? "" : "text-ios-green-500"}>{isCompleted ? "Reabrir" : "Marcar completado"}</span>
                 </button>
+
+                {/* Cerrar — only when completed */}
+                <Show when={isCompleted}>
+                  <button
+                    onClick={() => ctxCloseGoal(g.id)}
+                    class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
+                  >
+                    <XCircle size={14} class="shrink-0" />
+                    Cerrar
+                  </button>
+                </Show>
 
                 {/* Separator */}
                 <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
@@ -686,6 +809,26 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                 >
                   <Trash2 size={14} class="shrink-0" />
                   Eliminar
+                </button>
+              </div>
+            );
+          } else if (menu().assignment) {
+            const a = menu().assignment!;
+            return (
+              <div
+                class="fixed z-[100] min-w-[180px] py-1.5 rounded-xl bg-base-100 border border-base-content/[0.08] shadow-xl shadow-black/20 animate-ctx-menu"
+                style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div class="px-3 py-1.5 text-[10px] font-semibold text-base-content/30 uppercase tracking-wider truncate">
+                  ENCOMIENDA
+                </div>
+                <button
+                  onClick={() => ctxCloseAssignment(a.id)}
+                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/70 hover:bg-base-content/5 transition-colors"
+                >
+                  <XCircle size={14} class="shrink-0" />
+                  Cerrar
                 </button>
               </div>
             );
@@ -724,6 +867,118 @@ const ReportPage: Component<ReportPageProps> = (props) => {
             }}
           />
         )}
+      </Show>
+
+      {/* Share Report Modal */}
+      <Show when={showShareModal()}>
+        <ShareReportModal
+          onClose={() => { setShowShareModal(false); setShareAutoCopy(false); }}
+          completedYesterday={completedYesterday()}
+          completedToday={completedToday()}
+          activeStories={activeStories()}
+          backlogStories={backlogStories()}
+          goals={myGoals()}
+          assignments={myAssignments()}
+          report={report()}
+          userName={auth.user()?.name ?? ''}
+          autoCopy={shareAutoCopy()}
+        />
+      </Show>
+
+      {/* Assignment Detail Modal */}
+      <Show when={selectedAssignment()}>
+        {(a) => {
+          const assigner = () => data.getUserById(a().assigned_by);
+          const assignee = () => data.getUserById(a().assigned_to);
+          const proj = () => a().project_id ? data.getProjectById(a().project_id!) : null;
+          const dueDays = () => {
+            if (!a().due_date) return null;
+            return Math.ceil((new Date(a().due_date!).getTime() - Date.now()) / 86400000);
+          };
+          const formatDate = (d: string) => new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+
+          return (
+            <div
+              class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center animate-in fade-in duration-200"
+              onClick={() => setSelectedAssignment(null)}
+            >
+              <div
+                class="bg-base-100/95 shadow-2xl shadow-black w-full sm:max-w-md sm:rounded-[24px] rounded-t-[24px] max-h-[80vh] overflow-y-auto border sm:border-base-content/[0.08] animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 scrollbar-none"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div class="px-6 pt-5 pb-4 border-b border-base-content/[0.04]">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <Flag size={16} class="text-purple-500" />
+                      <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/30">Encomienda</span>
+                      <Show when={proj()}>
+                        <span class="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ "background-color": `${proj()!.color}15`, color: proj()!.color }}>{proj()!.name}</span>
+                      </Show>
+                    </div>
+                    <button onClick={() => setSelectedAssignment(null)} class="p-2 -mr-3 rounded-full hover:bg-base-content/10 transition-colors">
+                      <XCircle size={18} class="text-base-content/40" />
+                    </button>
+                  </div>
+                </div>
+
+                <div class="px-6 py-5 space-y-5">
+                  {/* Title */}
+                  <h2 class="text-lg font-bold text-base-content/90 leading-snug">{a().title}</h2>
+
+                  {/* Description */}
+                  <Show when={a().description}>
+                    <p class="text-sm text-base-content/60 leading-relaxed">{a().description}</p>
+                  </Show>
+
+                  {/* Meta */}
+                  <div class="space-y-3">
+                    {/* Assigner */}
+                    <Show when={assigner()}>
+                      <div class="flex items-center gap-3">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/30 w-20 shrink-0">Asignada por</span>
+                        <div class="flex items-center gap-2">
+                          <img src={assigner()!.avatar_url!} alt="" class="w-6 h-6 rounded-full" />
+                          <span class="text-sm font-medium text-base-content/70">{assigner()!.name}</span>
+                        </div>
+                      </div>
+                    </Show>
+
+                    {/* Assignee */}
+                    <Show when={assignee()}>
+                      <div class="flex items-center gap-3">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/30 w-20 shrink-0">Asignada a</span>
+                        <div class="flex items-center gap-2">
+                          <img src={assignee()!.avatar_url!} alt="" class="w-6 h-6 rounded-full" />
+                          <span class="text-sm font-medium text-base-content/70">{assignee()!.name}</span>
+                        </div>
+                      </div>
+                    </Show>
+
+                    {/* Due date */}
+                    <Show when={a().due_date}>
+                      <div class="flex items-center gap-3">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/30 w-20 shrink-0">Fecha límite</span>
+                        <span class={`text-sm font-medium ${dueDays()! < 0 ? 'text-red-500' : dueDays()! <= 2 ? 'text-amber-500' : 'text-base-content/70'}`}>
+                          {formatDate(a().due_date!)}
+                          <span class="text-[11px] ml-1.5 text-base-content/30">
+                            ({dueDays()! < 0 ? 'vencida' : dueDays() === 0 ? 'hoy' : dueDays() === 1 ? 'mañana' : `en ${dueDays()}d`})
+                          </span>
+                        </span>
+                      </div>
+                    </Show>
+
+                    {/* Created */}
+                    <div class="flex items-center gap-3">
+                      <span class="text-[11px] font-bold uppercase tracking-wider text-base-content/30 w-20 shrink-0">Creada</span>
+                      <span class="text-sm text-base-content/50">{formatDate(a().created_at)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }}
       </Show>
     </>
   );

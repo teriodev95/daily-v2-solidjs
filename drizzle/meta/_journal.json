@@ -15,6 +15,13 @@
       "when": 1771597608717,
       "tag": "0001_gray_agent_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1771700000000,
+      "tag": "0002_add_goals_is_closed",
+      "breakpoints": true
     }
   ]
 }
