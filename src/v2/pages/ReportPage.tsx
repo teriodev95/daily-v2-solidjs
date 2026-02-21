@@ -387,18 +387,22 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                 {/* Today's completions */}
                 <For each={completedToday()}>
                   {(story) => (
-                    <div onContextMenu={(e) => openCtxMenu(e, story)} class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 group ${cardClass(story.id)}`}>
+                    <div
+                      onContextMenu={(e) => openCtxMenu(e, story)}
+                      onClick={() => setSelectedStory(story)}
+                      class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-all group ${cardClass(story.id)}`}
+                    >
                       <button
-                        onClick={() => moveStory(story.id, 'in_progress')}
+                        onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'in_progress'); }}
                         class="p-1.5 rounded-md text-base-content/15 sm:text-base-content/0 group-hover:text-base-content/20 hover:!text-amber-500 hover:!bg-amber-500/10 transition-all shrink-0"
                         title="Reabrir"
                       >
                         <RotateCcw size={14} />
                       </button>
-                      <button onClick={() => setSelectedStory(story)} class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                      <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
                         <span class="text-sm text-base-content/40 line-through flex-1 truncate">{story.title}</span>
                         <ProjectBadge story={story} />
-                      </button>
+                      </div>
                       <span class="text-[9px] text-base-content/15 shrink-0">hoy</span>
                     </div>
                   )}
@@ -454,20 +458,24 @@ const ReportPage: Component<ReportPageProps> = (props) => {
               <div class="space-y-2">
                 <For each={activeStories()}>
                   {(story) => (
-                    <div onContextMenu={(e) => openCtxMenu(e, story)} class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 group ${cardClass(story.id)}`}>
+                    <div
+                      onContextMenu={(e) => openCtxMenu(e, story)}
+                      onClick={() => setSelectedStory(story)}
+                      class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-all group ${cardClass(story.id)}`}
+                    >
                       <button
-                        onClick={() => moveStory(story.id, 'done')}
+                        onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'done'); }}
                         class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 transition-all shrink-0"
                         title="Marcar completada"
                       >
                         <Check size={14} />
                       </button>
-                      <button onClick={() => setSelectedStory(story)} class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                      <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
                         <span class="text-sm flex-1 truncate">{story.title}</span>
                         <ProjectBadge story={story} />
-                      </button>
+                      </div>
                       <Show when={story.status === 'in_progress'}>
-                        <span class="relative flex h-2 w-2 shrink-0" title="En progreso">
+                        <span class="relative flex h-2 w-2 shrink-0 opacity-70" title="En progreso">
                           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-ios-blue-500 opacity-50" />
                           <span class="relative inline-flex rounded-full h-2 w-2 bg-ios-blue-500" />
                         </span>
@@ -498,18 +506,22 @@ const ReportPage: Component<ReportPageProps> = (props) => {
             <div class="space-y-2">
               <For each={backlogStories()}>
                 {(story) => (
-                  <div onContextMenu={(e) => openCtxMenu(e, story)} class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 group ${cardClass(story.id)}`}>
+                  <div
+                    onContextMenu={(e) => openCtxMenu(e, story)}
+                    onClick={() => setSelectedStory(story)}
+                    class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 cursor-pointer hover:bg-base-200/70 transition-all group ${cardClass(story.id)}`}
+                  >
                     <button
-                      onClick={() => moveStory(story.id, 'todo')}
+                      onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'todo'); }}
                       class="p-1.5 rounded-md text-base-content/15 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all shrink-0"
                       title="Mover a trabajo activo"
                     >
                       <Play size={14} />
                     </button>
-                    <button onClick={() => setSelectedStory(story)} class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                    <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
                       <span class="text-sm text-base-content/35 flex-1 truncate">{story.title}</span>
                       <ProjectBadge story={story} />
-                    </button>
+                    </div>
                   </div>
                 )}
               </For>
