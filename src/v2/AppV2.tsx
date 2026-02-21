@@ -82,91 +82,92 @@ const AppShell: Component = () => {
 
       {/* Floating Top Bar */}
       <header class="sticky top-0 z-50 px-3 pt-3 hidden md:block">
-        <div class="max-w-5xl mx-auto bg-base-200/60 backdrop-blur-2xl rounded-2xl border border-base-content/[0.06] shadow-lg shadow-black/10">
-          <div class="h-12 px-4 flex items-center justify-between">
-            <div class="flex items-center gap-5">
-              <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 rounded-lg bg-ios-blue-500 flex items-center justify-center text-white font-bold text-xs">
-                  D
-                </div>
-                <span class="font-semibold text-sm">Daily Check</span>
-              </div>
-
+        <div class="max-w-5xl mx-auto flex items-center justify-between pointer-events-none">
+          {/* Left Pill (Logo) */}
+          <div class="pointer-events-auto h-12 px-4 flex items-center gap-2.5 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
+            <div class="w-7 h-7 rounded-lg bg-ios-blue-500 flex items-center justify-center text-white font-bold text-xs ring-1 ring-black/10">
+              D
             </div>
+            <span class="font-semibold text-sm tracking-tight">Daily Check</span>
+          </div>
 
-            <div class="flex items-center gap-1">
-              <button
-                onClick={() => setShowSearch(true)}
-                class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-base-content/25 hover:text-base-content/50 hover:bg-base-content/5 transition-all"
-                title="Buscar (⌘K)"
-              >
-                <Search size={14} />
-                <span class="text-[10px] text-base-content/20 hidden lg:inline">Buscar</span>
-                <kbd class="hidden lg:flex text-[9px] text-base-content/15 border border-base-content/[0.08] rounded px-1 py-px">⌘K</kbd>
-              </button>
-              <button
-                onClick={toggleTheme}
-                class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
-              >
-                <Show when={isDark()} fallback={<Sun size={15} />}>
-                  <Moon size={15} />
-                </Show>
-              </button>
-              <button
-                onClick={() => auth.logout()}
-                class="p-2 rounded-xl text-base-content/35 hover:text-red-500 hover:bg-red-500/10 transition-all"
-                title="Cerrar sesión"
-              >
-                <LogOut size={15} />
-              </button>
-              <Show when={user()}>
-                <div class="ml-1 pl-2 border-l border-base-content/[0.06]">
-                  <img
-                    src={user()!.avatar_url!}
-                    alt={user()!.name}
-                    class="w-7 h-7 rounded-full ring-2 ring-base-content/[0.06]"
-                  />
-                </div>
+          {/* Right Pill (Actions) */}
+          <div class="pointer-events-auto h-12 px-2 flex items-center gap-1 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
+            <button
+              onClick={() => setShowSearch(true)}
+              class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-base-content/25 hover:text-base-content/50 hover:bg-base-content/5 transition-all"
+              title="Buscar (⌘K)"
+            >
+              <Search size={14} />
+              <span class="text-[10px] text-base-content/20 hidden lg:inline">Buscar</span>
+              <kbd class="hidden lg:flex text-[9px] text-base-content/15 border border-base-content/[0.08] rounded px-1 py-px font-mono">⌘K</kbd>
+            </button>
+            <div class="w-px h-4 bg-base-content/[0.08] mx-0.5" />
+            <button
+              onClick={toggleTheme}
+              class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
+            >
+              <Show when={isDark()} fallback={<Sun size={15} />}>
+                <Moon size={15} />
               </Show>
-            </div>
+            </button>
+            <button
+              onClick={() => auth.logout()}
+              class="p-2 rounded-xl text-base-content/35 hover:text-red-500 hover:bg-red-500/10 transition-all"
+              title="Cerrar sesión"
+            >
+              <LogOut size={15} />
+            </button>
+            <Show when={user()}>
+              <div class="ml-1 pl-2 border-l border-base-content/[0.08]">
+                <img
+                  src={user()!.avatar_url!}
+                  alt={user()!.name}
+                  class="w-7 h-7 rounded-full ring-2 ring-base-content/[0.06] shadow-sm"
+                />
+              </div>
+            </Show>
           </div>
         </div>
       </header>
 
       {/* Mobile Top Bar — minimal */}
       <header class="md:hidden sticky top-0 z-50 px-3 pt-2">
-        <div class="bg-base-200/60 backdrop-blur-2xl rounded-2xl border border-base-content/[0.06] shadow-lg shadow-black/10">
-          <div class="h-11 px-4 flex items-center justify-between">
-            <div class="flex items-center gap-2.5">
-              <div class="w-6 h-6 rounded-md bg-ios-blue-500 flex items-center justify-center text-white font-bold text-[10px]">
-                D
-              </div>
-              <span class="font-semibold text-sm">Daily Check</span>
+        <div class="flex items-center justify-between pointer-events-none">
+          {/* Left Pill (Logo) */}
+          <div class="pointer-events-auto h-11 px-3.5 flex items-center gap-2 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-sm">
+            <div class="w-6 h-6 rounded-md bg-ios-blue-500 flex items-center justify-center text-white font-bold text-[10px] ring-1 ring-black/10">
+              D
             </div>
-            <div class="flex items-center gap-0.5">
-              <button
-                onClick={() => setShowSearch(true)}
-                class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 transition-all"
-                title="Buscar"
-              >
-                <Search size={16} />
-              </button>
-              <button
-                onClick={toggleTheme}
-                class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 transition-all"
-              >
-                <Show when={isDark()} fallback={<Sun size={15} />}>
-                  <Moon size={15} />
-                </Show>
-              </button>
-              <Show when={user()}>
+            <span class="font-semibold text-sm tracking-tight text-base-content/90">Daily Check</span>
+          </div>
+
+          {/* Right Pill (Actions) */}
+          <div class="pointer-events-auto h-11 px-1.5 flex items-center gap-0.5 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-sm">
+            <button
+              onClick={() => setShowSearch(true)}
+              class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
+              title="Buscar"
+            >
+              <Search size={16} />
+            </button>
+            <button
+              onClick={toggleTheme}
+              class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
+            >
+              <Show when={isDark()} fallback={<Sun size={15} />}>
+                <Moon size={15} />
+              </Show>
+            </button>
+            <Show when={user()}>
+              <div class="ml-0.5 pl-1.5 border-l border-base-content/[0.08]">
                 <img
                   src={user()!.avatar_url!}
                   alt={user()!.name}
-                  class="w-6 h-6 rounded-full ring-2 ring-base-content/[0.06] ml-0.5"
+                  class="w-6 h-6 rounded-full ring-2 ring-base-content/[0.06] shadow-sm"
                 />
-              </Show>
-            </div>
+              </div>
+            </Show>
           </div>
         </div>
       </header>
