@@ -219,11 +219,11 @@ const AppShell: Component = () => {
             {(tab) => (
               <button
                 onClick={() => switchTab(tab.id)}
-                class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-xl transition-all duration-300 active:scale-95 group"
+                class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-[26px] transition-all duration-300 active:scale-95 group"
                 style={{ "-webkit-tap-highlight-color": "transparent" }}
               >
                 {/* hover/active background */}
-                <div class={`absolute inset-0 rounded-xl transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
+                <div class={`absolute inset-0 rounded-[26px] transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
 
                 {/* icon container with bounce */}
                 <div class={`relative z-10 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center ${activeTab() === tab.id ? '-translate-y-1.5 text-base-content scale-110' : 'translate-y-0 text-base-content/50 group-hover:text-base-content/80 group-hover:-translate-y-1 group-hover:scale-110'
@@ -251,10 +251,10 @@ const AppShell: Component = () => {
           {/* Create FAB */}
           <button
             onClick={() => openCreateModal()}
-            class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-xl transition-all duration-300 active:scale-95 group"
+            class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-[26px] transition-all duration-300 active:scale-95 group"
             style={{ "-webkit-tap-highlight-color": "transparent" }}
           >
-            <div class="absolute inset-0 rounded-xl transition-all duration-300 bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20" />
+            <div class="absolute inset-0 rounded-[26px] transition-all duration-300 bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20" />
             <div class="relative z-10 text-ios-blue-500 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center group-hover:-translate-y-1 group-hover:scale-110">
               <Plus size={22} strokeWidth={2.5} />
             </div>
@@ -278,10 +278,10 @@ const AppShell: Component = () => {
               {(tab) => (
                 <button
                   onClick={() => switchTab(tab.id)}
-                  class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-2xl transition-all duration-300 active:scale-90 group"
+                  class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-[22px] transition-all duration-300 active:scale-90 group"
                   style={{ "-webkit-tap-highlight-color": "transparent" }}
                 >
-                  <div class={`absolute inset-0 rounded-2xl transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent'}`} />
+                  <div class={`absolute inset-0 rounded-[22px] transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent'}`} />
 
                   <div class={`relative z-10 transition-all duration-300 flex items-center justify-center ${activeTab() === tab.id ? '-translate-y-[4px] text-base-content scale-[1.12]' : 'translate-y-0 text-base-content/40'
                     }`}>
@@ -300,7 +300,7 @@ const AppShell: Component = () => {
           {/* Create FAB (Mobile) */}
           <button
             onClick={() => openCreateModal()}
-            class="relative flex flex-col items-center justify-center w-[48px] h-[48px] shrink-0 rounded-2xl transition-all duration-300 active:scale-90 group bg-ios-blue-500 text-white ml-0.5"
+            class="relative flex flex-col items-center justify-center w-[48px] h-[48px] shrink-0 rounded-[22px] transition-all duration-300 active:scale-90 group bg-ios-blue-500 text-white ml-0.5"
             style={{ "-webkit-tap-highlight-color": "transparent" }}
           >
             <Plus size={24} strokeWidth={2.5} class="transition-transform group-active:rotate-45" />
