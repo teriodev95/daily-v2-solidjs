@@ -8,6 +8,7 @@ import {
   Flame, ArrowUp, ArrowRight, ArrowDown,
   Calendar, UserPlus, Braces, ClipboardPaste,
   ClipboardCheck, AlertCircle, Trash2, Sparkles,
+  Paperclip, ImagePlus, FileIcon, Loader2,
 } from 'lucide-solid';
 
 interface Props {
@@ -68,6 +69,20 @@ function parseStoryJson(text: string): Record<string, any> | null {
   }
 }
 
+interface QueuedFile {
+  id: string;
+  file: File;
+  previewUrl: string | null;
+}
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const isImageType = (type: string) => type.startsWith('image/');
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const CreateStoryModal: Component<Props> = (props) => {
   const auth = useAuth();
   const data = useData();
@@ -87,6 +102,33 @@ const CreateStoryModal: Component<Props> = (props) => {
   const [objective, setObjective] = createSignal('');
   const [estimate, setEstimate] = createSignal<number>(0);
   const [dueDate, setDueDate] = createSignal('');
+
+  // ─── Queued files (uploaded after story creation) ───
+  const [queuedFiles, setQueuedFiles] = createSignal<QueuedFile[]>([]);
+  const [dragOver, setDragOver] = createSignal(false);
+  const [uploadingFiles, setUploadingFiles] = createSignal(false);
+  let fileInput!: HTMLInputElement;
+
+  const queueFile = (file: File) => {
+    if (file.size > MAX_FILE_SIZE) return;
+    const previewUrl = isImageType(file.type) ? URL.createObjectURL(file) : null;
+    setQueuedFiles(prev => [...prev, { id: crypto.randomUUID(), file, previewUrl }]);
+  };
+
+  const removeQueuedFile = (id: string) => {
+    setQueuedFiles(prev => {
+      const item = prev.find(f => f.id === id);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter(f => f.id !== id);
+    });
+  };
+
+  onCleanup(() => {
+    // Clean up object URLs
+    for (const f of queuedFiles()) {
+      if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+    }
+  });
 
   // ─── JSON paste state ───
   const [showJsonPaste, setShowJsonPaste] = createSignal(false);
@@ -164,6 +206,21 @@ const CreateStoryModal: Component<Props> = (props) => {
     const target = e.target as HTMLElement;
     if (target.closest('[data-json-textarea]')) return;
 
+    // Check for file paste first
+    if (e.clipboardData?.items) {
+      for (const item of Array.from(e.clipboardData.items)) {
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            queueFile(file);
+          }
+          return;
+        }
+      }
+    }
+
+    // Then check for JSON paste
     const text = e.clipboardData?.getData('text/plain') ?? '';
     const parsed = parseStoryJson(text);
     if (parsed) {
@@ -230,6 +287,15 @@ const CreateStoryModal: Component<Props> = (props) => {
         await api.stories.addCriteria(created.id, criteria());
       }
 
+      // Upload queued files
+      if (queuedFiles().length > 0) {
+        setUploadingFiles(true);
+        await Promise.allSettled(
+          queuedFiles().map(qf => api.attachments.upload(created.id, qf.file))
+        );
+        setUploadingFiles(false);
+      }
+
       props.onCreated?.();
       props.onClose();
     } catch (e: any) {
@@ -250,6 +316,18 @@ const CreateStoryModal: Component<Props> = (props) => {
         class="relative bg-base-100 w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[calc(100vh-2.5rem)]"
         onClick={(e) => e.stopPropagation()}
         onPaste={handleGlobalPaste}
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer!.dropEffect = 'copy'; setDragOver(true); }}
+        onDragLeave={(e) => {
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          const { clientX: x, clientY: y } = e;
+          if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const files = e.dataTransfer?.files;
+          if (files) for (const f of Array.from(files)) queueFile(f);
+        }}
       >
         {/* JSON applied flash */}
         <Show when={jsonAppliedFlash()}>
@@ -278,7 +356,7 @@ const CreateStoryModal: Component<Props> = (props) => {
               </button>
               <button
                 onClick={() => props.onClose()}
-                class="p-1 rounded-lg hover:bg-base-content/8 transition-colors"
+                class="p-2 rounded-lg hover:bg-base-content/8 transition-colors"
               >
                 <X size={16} class="text-base-content/30" />
               </button>
@@ -345,7 +423,7 @@ const CreateStoryModal: Component<Props> = (props) => {
             value={title()}
             onInput={(e) => setTitle(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-            class="w-full text-base font-semibold bg-transparent outline-none placeholder:text-base-content/15 mb-5"
+            class="w-full text-[16px] font-semibold bg-transparent outline-none placeholder:text-base-content/15 mb-5"
           />
 
           {/* Project chips */}
@@ -392,7 +470,7 @@ const CreateStoryModal: Component<Props> = (props) => {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <fieldset>
               <legend class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25 mb-2">Prioridad</legend>
-              <div class="grid grid-cols-4 gap-1">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-1">
                 <For each={priorityOptions}>
                   {(opt) => {
                     const Icon = opt.icon;
@@ -400,7 +478,7 @@ const CreateStoryModal: Component<Props> = (props) => {
                     return (
                       <button
                         onClick={() => setPriority(opt.id)}
-                        class={`flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-[10px] font-medium transition-all ${
+                        class={`flex flex-col items-center gap-0.5 py-2 sm:py-1.5 rounded-lg text-[11px] sm:text-[10px] font-medium transition-all ${
                           selected() ? `${opt.selectedBg} ${opt.color}` : `${opt.bg} text-base-content/25 hover:text-base-content/40`
                         }`}
                       >
@@ -506,7 +584,7 @@ const CreateStoryModal: Component<Props> = (props) => {
                   {(opt) => (
                     <button
                       onClick={() => setStatus(opt.id)}
-                      class={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
+                      class={`flex items-center justify-center gap-1.5 py-2 sm:py-1.5 rounded-lg text-xs sm:text-[11px] font-medium transition-all ${
                         status() === opt.id
                           ? 'bg-base-content/8 text-base-content ring-1 ring-base-content/10'
                           : 'text-base-content/25 hover:bg-base-content/[0.03]'
@@ -522,12 +600,12 @@ const CreateStoryModal: Component<Props> = (props) => {
 
             <fieldset>
               <legend class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25 mb-2">Estimación</legend>
-              <div class="grid grid-cols-6 gap-1">
+              <div class="grid grid-cols-3 sm:grid-cols-6 gap-1">
                 <For each={fibonacciPoints}>
                   {(pts) => (
                     <button
                       onClick={() => setEstimate(estimate() === pts ? 0 : pts)}
-                      class={`h-8 rounded-lg text-[11px] font-bold transition-all ${
+                      class={`h-9 sm:h-8 rounded-lg text-xs sm:text-[11px] font-bold transition-all ${
                         estimate() === pts
                           ? 'bg-ios-blue-500 text-white shadow-sm shadow-ios-blue-500/20'
                           : 'bg-base-content/[0.03] text-base-content/30 hover:bg-base-content/8'
@@ -546,19 +624,19 @@ const CreateStoryModal: Component<Props> = (props) => {
             <legend class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25 mb-2">Fecha límite</legend>
             <div class="flex items-center gap-1.5">
               <button onClick={() => setDueDateRelative(0)}
-                class={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                class={`px-3 py-2 sm:px-2.5 sm:py-1 rounded-lg text-xs sm:text-[11px] font-medium transition-all ${
                   dueDate() === new Date().toISOString().split('T')[0]
                     ? 'bg-base-content/8 text-base-content ring-1 ring-base-content/10'
                     : 'bg-base-content/[0.03] text-base-content/40 hover:bg-base-content/8'
                 }`}>Hoy</button>
               <button onClick={() => setDueDateRelative(1)}
-                class={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                class={`px-3 py-2 sm:px-2.5 sm:py-1 rounded-lg text-xs sm:text-[11px] font-medium transition-all ${
                   (() => { const t = new Date(); t.setDate(t.getDate() + 1); return dueDate() === t.toISOString().split('T')[0]; })()
                     ? 'bg-base-content/8 text-base-content ring-1 ring-base-content/10'
                     : 'bg-base-content/[0.03] text-base-content/40 hover:bg-base-content/8'
                 }`}>Mañana</button>
               <button onClick={() => setDueDateRelative(7)}
-                class="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-base-content/[0.03] text-base-content/40 hover:bg-base-content/8 transition-all">+1 sem</button>
+                class="px-3 py-2 sm:px-2.5 sm:py-1 rounded-lg text-xs sm:text-[11px] font-medium bg-base-content/[0.03] text-base-content/40 hover:bg-base-content/8 transition-all">+1 sem</button>
               <div class="flex items-center gap-1.5 ml-auto">
                 <Calendar size={12} class="text-base-content/20 shrink-0" />
                 <input type="date" value={dueDate()} onInput={(e) => setDueDate(e.currentTarget.value)}
@@ -601,6 +679,86 @@ const CreateStoryModal: Component<Props> = (props) => {
             </fieldset>
           </Show>
 
+          {/* Drag overlay */}
+          <Show when={dragOver()}>
+            <div class="flex items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed border-ios-blue-500/40 bg-ios-blue-500/[0.06] text-ios-blue-500/60 mb-4">
+              <ImagePlus size={18} />
+              <span class="text-xs font-medium">Suelta aquí para adjuntar</span>
+            </div>
+          </Show>
+
+          {/* Hidden file input (always mounted) */}
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            class="hidden"
+            onChange={() => {
+              const files = fileInput.files;
+              if (files) for (const f of Array.from(files)) queueFile(f);
+              fileInput.value = '';
+            }}
+          />
+
+          {/* Queued files preview */}
+          <Show when={queuedFiles().length > 0}>
+            <fieldset class="mb-4">
+              <legend class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25 mb-2">
+                <span class="flex items-center gap-1.5">
+                  <Paperclip size={10} />
+                  Adjuntos
+                  <span class="text-ios-blue-500 normal-case tracking-normal">{queuedFiles().length}</span>
+                </span>
+              </legend>
+              <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                <For each={queuedFiles()}>
+                  {(qf) => (
+                    <div class="group relative rounded-lg overflow-hidden bg-base-200/40 border border-base-content/[0.06]">
+                      <Show
+                        when={qf.previewUrl}
+                        fallback={
+                          <div class="flex flex-col items-center justify-center gap-1 py-3 px-2">
+                            <FileIcon size={16} class="text-base-content/30" />
+                            <p class="text-[9px] truncate w-full text-center text-base-content/40">{qf.file.name}</p>
+                            <p class="text-[8px] text-base-content/20">{formatFileSize(qf.file.size)}</p>
+                          </div>
+                        }
+                      >
+                        <img src={qf.previewUrl!} alt={qf.file.name} class="w-full h-16 object-cover" />
+                        <p class="text-[8px] truncate px-1.5 py-1 text-base-content/40">{qf.file.name}</p>
+                      </Show>
+                      <button
+                        onClick={() => removeQueuedFile(qf.id)}
+                        class="absolute top-1 right-1 p-1 rounded bg-black/40 text-white/70 hover:text-white hover:bg-red-500/80 opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  )}
+                </For>
+                {/* Add more button */}
+                <button
+                  onClick={() => fileInput.click()}
+                  class="flex flex-col items-center justify-center gap-1 py-3 rounded-lg border border-dashed border-base-content/[0.08] text-base-content/20 hover:border-base-content/15 hover:text-base-content/30 transition-all"
+                >
+                  <ImagePlus size={16} />
+                  <span class="text-[9px]">Agregar</span>
+                </button>
+              </div>
+            </fieldset>
+          </Show>
+
+          {/* Attach button when no files queued */}
+          <Show when={queuedFiles().length === 0 && !dragOver()}>
+            <button
+              onClick={() => fileInput.click()}
+              class="flex items-center gap-1.5 text-[11px] text-base-content/25 hover:text-base-content/40 transition-colors mb-3"
+            >
+              <Paperclip size={12} />
+              Adjuntar archivos
+            </button>
+          </Show>
+
           {/* Divider + Toggle details */}
           <div class="border-t border-base-content/[0.06] pt-3">
             <button
@@ -624,7 +782,7 @@ const CreateStoryModal: Component<Props> = (props) => {
                   onInput={(e) => setDescription(e.currentTarget.value)}
                   placeholder="Describe la historia..."
                   rows={2}
-                  class="w-full bg-base-content/[0.03] rounded-xl px-3.5 py-2 text-sm outline-none resize-none placeholder:text-base-content/15 focus:bg-base-content/[0.05] focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
+                  class="w-full bg-base-content/[0.03] rounded-xl px-3.5 py-2.5 sm:py-2 text-[16px] sm:text-sm outline-none resize-none placeholder:text-base-content/15 focus:bg-base-content/[0.05] focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
                 />
               </fieldset>
 
@@ -636,7 +794,7 @@ const CreateStoryModal: Component<Props> = (props) => {
                     onInput={(e) => setPurpose(e.currentTarget.value)}
                     placeholder="¿Qué valor aporta?"
                     rows={2}
-                    class="w-full bg-base-content/[0.03] rounded-xl px-3.5 py-2 text-sm outline-none resize-none placeholder:text-base-content/15 focus:bg-base-content/[0.05] focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
+                    class="w-full bg-base-content/[0.03] rounded-xl px-3.5 py-2.5 sm:py-2 text-[16px] sm:text-sm outline-none resize-none placeholder:text-base-content/15 focus:bg-base-content/[0.05] focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
                   />
                 </fieldset>
 
@@ -647,7 +805,7 @@ const CreateStoryModal: Component<Props> = (props) => {
                     onInput={(e) => setObjective(e.currentTarget.value)}
                     placeholder="¿Resultado esperado?"
                     rows={2}
-                    class="w-full bg-base-content/[0.03] rounded-xl px-3.5 py-2 text-sm outline-none resize-none placeholder:text-base-content/15 focus:bg-base-content/[0.05] focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
+                    class="w-full bg-base-content/[0.03] rounded-xl px-3.5 py-2.5 sm:py-2 text-[16px] sm:text-sm outline-none resize-none placeholder:text-base-content/15 focus:bg-base-content/[0.05] focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
                   />
                 </fieldset>
               </div>
@@ -656,20 +814,20 @@ const CreateStoryModal: Component<Props> = (props) => {
         </div>
 
         {/* Footer */}
-        <div class="shrink-0 px-6 pb-5 pt-3 border-t border-base-content/[0.06]">
+        <div class="shrink-0 px-6 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 pt-3 border-t border-base-content/[0.06]">
           <Show when={error()}>
             <p class="text-[11px] text-red-500 mb-2">{error()}</p>
           </Show>
           <button
             onClick={handleSubmit}
             disabled={!canSubmit()}
-            class={`w-full py-2.5 rounded-xl text-[13px] font-semibold transition-all ${
+            class={`w-full py-3 sm:py-2.5 rounded-xl text-sm sm:text-[13px] font-semibold transition-all ${
               canSubmit()
                 ? 'bg-ios-blue-500 text-white active:scale-[0.98] shadow-sm shadow-ios-blue-500/20'
                 : 'bg-base-content/[0.04] text-base-content/15 cursor-not-allowed'
             }`}
           >
-            {submitting() ? 'Creando...' : 'Crear historia'}
+            {uploadingFiles() ? 'Subiendo adjuntos...' : submitting() ? 'Creando...' : 'Crear historia'}
           </button>
         </div>
       </div>

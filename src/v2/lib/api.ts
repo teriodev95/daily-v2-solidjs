@@ -1,6 +1,6 @@
 import type {
   User, Team, Project, Story, AcceptanceCriteria,
-  DailyReport, WeekGoal, Assignment,
+  DailyReport, WeekGoal, Assignment, Attachment,
 } from '../types';
 
 export class ApiError extends Error {
@@ -19,6 +19,24 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       'Content-Type': 'application/json',
       ...options?.headers,
     },
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new ApiError(res.status, (body as any).error ?? res.statusText);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
   });
 
   if (!res.ok) {
@@ -77,6 +95,8 @@ export const api = {
       const qs = params ? '?' + new URLSearchParams(params).toString() : '';
       return request<StoryWithAssignees[]>(`/api/stories${qs}`);
     },
+    search: (q: string) =>
+      request<StoryWithAssignees[]>(`/api/stories/search?q=${encodeURIComponent(q)}`),
     get: (id: string) => request<StoryDetailed>(`/api/stories/${id}`),
     create: (data: Record<string, unknown>) =>
       request<StoryWithAssignees>('/api/stories', { method: 'POST', body: JSON.stringify(data) }),
@@ -127,6 +147,16 @@ export const api = {
       request<Assignment>('/api/assignments', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Record<string, unknown>) =>
       request<Assignment>(`/api/assignments/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  },
+
+  attachments: {
+    list: (storyId: string) =>
+      request<Attachment[]>(`/api/attachments/story/${storyId}`),
+    upload: (storyId: string, file: File) =>
+      uploadFile<Attachment>(`/api/attachments/story/${storyId}`, file),
+    delete: (id: string) =>
+      request<{ ok: boolean }>(`/api/attachments/${id}`, { method: 'DELETE' }),
+    fileUrl: (id: string) => `${API_BASE}/api/attachments/file/${id}`,
   },
 
   admin: {

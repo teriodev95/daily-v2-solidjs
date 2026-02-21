@@ -1,10 +1,54 @@
 import { Hono } from 'hono';
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, or, like, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
 import { requireAdmin } from '../middleware/auth';
 
 const stories = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// Full-text search across title, description, purpose, objective, code
+stories.get('/search', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const q = (c.req.query('q') ?? '').trim();
+
+  if (!q || q.length < 2) return c.json([]);
+
+  const pattern = `%${q}%`;
+
+  // SQLite LIKE is case-insensitive for ASCII by default
+  const rows = await db
+    .select()
+    .from(schema.stories)
+    .where(
+      and(
+        eq(schema.stories.team_id, user.teamId),
+        or(
+          like(schema.stories.title, pattern),
+          like(schema.stories.description, pattern),
+          like(schema.stories.purpose, pattern),
+          like(schema.stories.objective, pattern),
+          like(schema.stories.code, pattern),
+        ),
+      ),
+    )
+    .limit(20);
+
+  // Attach assignees
+  const storyIds = rows.map(s => s.id);
+  const assigneeMap = new Map<string, string[]>();
+  if (storyIds.length > 0) {
+    const allAssignees = await db.select().from(schema.storyAssignees);
+    for (const a of allAssignees) {
+      if (!storyIds.includes(a.story_id)) continue;
+      const arr = assigneeMap.get(a.story_id) ?? [];
+      arr.push(a.user_id);
+      assigneeMap.set(a.story_id, arr);
+    }
+  }
+
+  return c.json(rows.map(s => ({ ...s, assignees: assigneeMap.get(s.id) ?? [] })));
+});
 
 stories.get('/', async (c) => {
   const user = c.get('user');
@@ -164,8 +208,18 @@ stories.delete('/:id', requireAdmin, async (c) => {
   const db = c.get('db');
   const id = c.req.param('id');
 
+  // Clean up R2 attachments
+  const attachmentRows = await db
+    .select()
+    .from(schema.attachments)
+    .where(eq(schema.attachments.story_id, id));
+  if (attachmentRows.length > 0) {
+    await c.env.BUCKET.delete(attachmentRows.map(a => a.r2_key));
+  }
+
   await db.delete(schema.storyAssignees).where(eq(schema.storyAssignees.story_id, id));
   await db.delete(schema.acceptanceCriteria).where(eq(schema.acceptanceCriteria.story_id, id));
+  await db.delete(schema.attachments).where(eq(schema.attachments.story_id, id));
   await db.delete(schema.stories).where(eq(schema.stories.id, id));
 
   return c.json({ ok: true });

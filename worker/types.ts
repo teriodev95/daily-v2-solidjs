@@ -5,6 +5,7 @@ import * as schema from './db/schema';
 export interface Env {
   DB: D1Database;
   JWT_SECRET: string;
+  BUCKET: R2Bucket;
 }
 
 export type AppDb = DrizzleD1Database<typeof schema>;

@@ -6,3 +6,7 @@ compatibility_date = "2024-12-01"
 binding = "DB"
 database_name = "daily-check-db"
 database_id = "2e9170b0-e0e1-43fc-b1ec-a7d23cb6964d"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "daily-check-attachments"

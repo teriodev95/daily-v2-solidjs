@@ -109,6 +109,18 @@ export const assignments = sqliteTable('assignments', {
   closed_at: text('closed_at'),
 });
 
+export const attachments = sqliteTable('attachments', {
+  id: text('id').primaryKey(),
+  story_id: text('story_id').notNull().references(() => stories.id, { onDelete: 'cascade' }),
+  team_id: text('team_id').notNull().references(() => teams.id),
+  file_name: text('file_name').notNull(),
+  file_size: integer('file_size').notNull(),
+  mime_type: text('mime_type').notNull(),
+  r2_key: text('r2_key').notNull(),
+  uploaded_by: text('uploaded_by').notNull().references(() => users.id),
+  created_at: text('created_at').notNull(),
+});
+
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
   user_id: text('user_id').notNull().references(() => users.id),

@@ -99,6 +99,18 @@ export interface WeekGoal {
   created_at: string;
 }
 
+export interface Attachment {
+  id: string;
+  story_id: string;
+  team_id: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  r2_key: string;
+  uploaded_by: string;
+  created_at: string;
+}
+
 export interface Assignment {
   id: string;
   team_id: string;

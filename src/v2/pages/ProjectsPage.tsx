@@ -20,6 +20,9 @@ const priorityConfig: Record<string, { color: string; icon: any }> = {
   low: { color: 'text-base-content/30', icon: ArrowDown },
 };
 
+const estimateMap: Record<number, string> = { 1: '🐝', 2: '🐭', 3: '🐦', 4: '🐱', 5: '🐶', 6: '🐄', 7: '🐘', 8: '🐋' };
+const estimateEmoji = (v: number) => estimateMap[v] ?? '';
+
 const columns: { id: StoryStatus; label: string; dot: string; emptyLabel: string }[] = [
   { id: 'backlog', label: 'Backlog', dot: 'bg-base-content/25', emptyLabel: 'Sin historias en backlog' },
   { id: 'todo', label: 'Por hacer', dot: 'bg-ios-blue-500', emptyLabel: 'Nada pendiente' },
@@ -163,14 +166,14 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
         }
       >
         <Show when={!projectStories.loading} fallback={<KanbanSkeleton />}>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 items-start">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
             <For each={columns}>
               {(col) => (
                 <div
-                  class={`rounded-2xl transition-all min-h-[200px] ${
+                  class={`rounded-2xl transition-all min-h-[120px] sm:min-h-[200px] border ${
                     dragOverCol() === col.id
-                      ? 'bg-ios-blue-500/[0.06] ring-2 ring-ios-blue-500/20 ring-dashed'
-                      : 'bg-base-content/[0.02]'
+                      ? 'bg-ios-blue-500/[0.06] ring-2 ring-ios-blue-500/20 ring-dashed border-ios-blue-500/10'
+                      : 'bg-base-content/[0.03] border-base-content/[0.04]'
                   }`}
                   onDragOver={(e) => handleDragOver(e, col.id)}
                   onDragLeave={handleDragLeave}
@@ -179,8 +182,8 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
                   {/* Column header */}
                   <div class="flex items-center gap-2 px-3 pt-3 pb-2">
                     <div class={`w-2 h-2 rounded-full ${col.dot}`} />
-                    <span class="text-[11px] font-semibold text-base-content/50">{col.label}</span>
-                    <span class="text-[10px] text-base-content/20 ml-auto">{columnCount(col.id)}</span>
+                    <span class="text-[11px] font-semibold text-base-content/60">{col.label}</span>
+                    <span class="text-[10px] text-base-content/25 ml-auto font-medium">{columnCount(col.id)}</span>
                   </div>
 
                   {/* Cards */}
@@ -197,14 +200,14 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
                             onDragStart={(e) => handleDragStart(e, story.id)}
                             onDragEnd={handleDragEnd}
                             onClick={() => setSelectedStory(story)}
-                            class={`p-2.5 rounded-xl bg-base-100 border border-base-content/[0.04] hover:border-base-content/[0.08] cursor-pointer transition-all group ${
-                              draggingId() === story.id ? 'opacity-40 scale-95' : 'hover:shadow-sm'
+                            class={`p-3 sm:p-2.5 rounded-xl bg-base-200/50 border border-base-content/[0.06] hover:border-base-content/[0.12] cursor-pointer transition-all group shadow-sm shadow-black/[0.04] ${
+                              draggingId() === story.id ? 'opacity-40 scale-95' : 'hover:shadow-md hover:shadow-black/[0.06]'
                             }`}
                           >
                             {/* Code + priority */}
                             <div class="flex items-center gap-1.5 mb-1">
                               <Show when={story.code}>
-                                <span class="text-[9px] font-mono font-bold text-base-content/25">{story.code}</span>
+                                <span class="text-[9px] font-mono font-bold text-base-content/35">{story.code}</span>
                               </Show>
                               <PrioIcon size={10} class={prio.color} />
                               <Show when={assignee}>
@@ -216,17 +219,17 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
                               </Show>
                             </div>
                             {/* Title */}
-                            <p class="text-[12px] font-medium leading-snug text-base-content/80 line-clamp-2">
+                            <p class="text-sm sm:text-[12px] font-medium leading-snug text-base-content/90 line-clamp-2">
                               {story.title}
                             </p>
                             {/* Meta */}
                             <Show when={story.estimate > 0 || story.due_date}>
                               <div class="flex items-center gap-2 mt-1.5">
                                 <Show when={story.estimate > 0}>
-                                  <span class="text-[9px] text-base-content/20">{story.estimate}pts</span>
+                                  <span class="text-[11px] sm:text-[9px] text-base-content/30">{story.estimate} {estimateEmoji(story.estimate)}</span>
                                 </Show>
                                 <Show when={story.due_date}>
-                                  <span class="text-[9px] text-base-content/20">{story.due_date}</span>
+                                  <span class="text-[11px] sm:text-[9px] text-base-content/30">{story.due_date}</span>
                                 </Show>
                               </div>
                             </Show>
@@ -252,7 +255,14 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
       {/* Story Detail Modal */}
       <Show when={selectedStory()}>
         {(story) => (
-          <StoryDetail story={story()} onClose={() => setSelectedStory(null)} onDeleted={() => { setSelectedStory(null); refetch(); props.onStoryDeleted?.(); }} />
+          <StoryDetail
+            story={story()}
+            onClose={() => setSelectedStory(null)}
+            onDeleted={() => { setSelectedStory(null); refetch(); props.onStoryDeleted?.(); }}
+            onUpdated={(id, fields) => {
+              setLocalStories(prev => prev.map(s => s.id === id ? { ...s, ...fields } as Story : s));
+            }}
+          />
         )}
       </Show>
     </div>
@@ -260,9 +270,9 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
 };
 
 const KanbanSkeleton: Component = () => (
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
     {[...Array(4)].map(() => (
-      <div class="space-y-1.5 rounded-2xl bg-base-content/[0.02] p-2 pt-3">
+      <div class="space-y-1.5 rounded-2xl bg-base-content/[0.03] border border-base-content/[0.04] p-2 pt-3">
         <div class="h-3 w-16 rounded bg-base-200/60 mx-1 mb-2" />
         <div class="h-16 rounded-xl bg-base-200/40" />
         <div class="h-16 rounded-xl bg-base-200/40" />
