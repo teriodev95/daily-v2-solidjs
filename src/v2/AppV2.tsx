@@ -11,6 +11,8 @@ import AdminPage from './pages/AdminPage';
 import CreateStoryModal from './components/CreateStoryModal';
 import SearchModal from './components/SearchModal';
 import StoryDetail from './components/StoryDetail';
+import InstallPrompt from './components/InstallPrompt';
+import UpdateToast from './components/UpdateToast';
 
 type Tab = 'report' | 'team' | 'projects' | 'admin';
 
@@ -356,6 +358,9 @@ const AppShell: Component = () => {
           />
         )}
       </Show>
+
+      {/* PWA install prompt */}
+      <InstallPrompt />
     </div>
   );
 };
@@ -390,6 +395,7 @@ const AuthGate: Component = () => {
           <AppShell />
         </DataProvider>
       </Show>
+      <UpdateToast />
     </Show>
   );
 };
