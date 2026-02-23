@@ -5,8 +5,9 @@ import { api } from '../lib/api';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
   Calendar, Target, FileText, HelpCircle, ClipboardCheck, Trash2,
-  Check, Loader2, UserPlus, CalendarDays,
+  Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban,
 } from 'lucide-solid';
+import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
 import AttachmentSection from './AttachmentSection';
 import DatePickerPopover from './DatePickerPopover';
 
@@ -46,7 +47,7 @@ const getRelativeDateInfo = (type: 'hoy' | 'manana' | 'pasado' | 'semana') => {
 
   if (type === 'hoy') {
     const sub = `${diasCortos[today.getDay()]} ${today.getDate()}`;
-    return { dateStr: today.toISOString().split('T')[0], label: 'Hoy', sub };
+    return { dateStr: toLocalDateStr(today), label: 'Hoy', sub };
   }
 
   if (type === 'semana') {
@@ -54,7 +55,7 @@ const getRelativeDateInfo = (type: 'hoy' | 'manana' | 'pasado' | 'semana') => {
     d.setDate(d.getDate() + 7);
     if (d.getDay() === 0) d.setDate(d.getDate() + 1);
     const sub = `${diasCortos[d.getDay()]} ${d.getDate()}`;
-    return { dateStr: d.toISOString().split('T')[0], label: '+1 sem', sub };
+    return { dateStr: toLocalDateStr(d), label: '+1 sem', sub };
   }
 
   let targetDate = new Date();
@@ -69,7 +70,7 @@ const getRelativeDateInfo = (type: 'hoy' | 'manana' | 'pasado' | 'semana') => {
   const isNextWeek = getWeekNumber(targetDate) !== todayWeek;
   const sub = isNextWeek ? 'próx.' : 'esta sem';
 
-  return { dateStr: targetDate.toISOString().split('T')[0], label: dayName, sub };
+  return { dateStr: toLocalDateStr(targetDate), label: dayName, sub };
 };
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -89,36 +90,6 @@ interface Props {
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
 
-const URL_RE = /(https?:\/\/[^\s<>\"')\]]+)/g;
-
-const Linkify: Component<{ text: string; class?: string }> = (p) => {
-  const parts = () => {
-    const result: { text: string; isUrl: boolean }[] = [];
-    let last = 0;
-    const str = p.text;
-    let match: RegExpExecArray | null;
-    URL_RE.lastIndex = 0;
-    while ((match = URL_RE.exec(str)) !== null) {
-      if (match.index > last) result.push({ text: str.slice(last, match.index), isUrl: false });
-      result.push({ text: match[0], isUrl: true });
-      last = match.index + match[0].length;
-    }
-    if (last < str.length) result.push({ text: str.slice(last), isUrl: false });
-    return result;
-  };
-
-  return (
-    <span class={p.class}>
-      <For each={parts()}>
-        {(part) => part.isUrl
-          ? <a href={part.text} target="_blank" rel="noopener noreferrer" class="text-ios-blue-500 hover:underline break-all">{part.text}</a>
-          : <>{part.text}</>
-        }
-      </For>
-    </span>
-  );
-};
-
 const StoryDetail: Component<Props> = (props) => {
   const data = useData();
 
@@ -134,9 +105,9 @@ const StoryDetail: Component<Props> = (props) => {
   const [estimate, setEstimate] = createSignal(props.story.estimate || 0);
   const [showEstimatePicker, setShowEstimatePicker] = createSignal(false);
   const [showDatePicker, setShowDatePicker] = createSignal(false);
+  const [projectId, setProjectId] = createSignal(props.story.project_id || '');
+  const [showProjectPicker, setShowProjectPicker] = createSignal(false);
   let dateTriggerRef!: HTMLButtonElement;
-  const [editingDesc, setEditingDesc] = createSignal(false);
-
   // Save state
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>('idle');
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -216,11 +187,13 @@ const StoryDetail: Component<Props> = (props) => {
       setDueDate(detail.due_date || '');
       setEstimate(detail.estimate || 0);
       setAssigneeId(detail.assignee_id || '');
+      setProjectId((detail as any).project_id || '');
     } catch { /* story detail is supplementary */ }
     setDetailLoaded(true);
   });
 
-  const project = () => props.story.project_id ? data.getProjectById(props.story.project_id) : null;
+  const project = () => projectId() ? data.getProjectById(projectId()) : null;
+  const activeProjects = () => data.projects().filter(p => p.status === 'active');
   const criteria = () => criteriaList();
   const activeMembers = () => data.users().filter(u => u.is_active);
 
@@ -321,17 +294,61 @@ const StoryDetail: Component<Props> = (props) => {
               <Show when={props.story.code}>
                 <span class="text-[13px] font-mono font-bold text-base-content/50">{props.story.code}</span>
               </Show>
-              <Show when={project()}>
-                <span
-                  class="text-[11px] font-bold px-2.5 py-1 rounded-md"
-                  style={{
+              <div class="relative">
+                <button
+                  onClick={() => setShowProjectPicker(v => !v)}
+                  class={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md transition-all ${project()
+                      ? 'hover:opacity-80'
+                      : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08] hover:text-base-content/60'
+                    }`}
+                  style={project() ? {
                     "background-color": `${project()!.color}15`,
                     color: project()!.color,
-                  }}
+                  } : undefined}
                 >
-                  {project()!.name}
-                </span>
-              </Show>
+                  <Show when={project()} fallback={<><FolderKanban size={12} /> Proyecto</>}>
+                    {project()!.name}
+                  </Show>
+                </button>
+                <Show when={showProjectPicker()}>
+                  <div class="fixed inset-0 z-20" onClick={() => setShowProjectPicker(false)} />
+                  <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[200px] backdrop-blur-md">
+                    <button
+                      onClick={() => { setProjectId(''); setShowProjectPicker(false); saveImmediate({ project_id: null }); }}
+                      class={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-all ${!projectId() ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/50'}`}
+                    >
+                      <div class="w-6 h-6 rounded-lg border border-dashed border-base-content/20 shrink-0" />
+                      Sin proyecto
+                    </button>
+                    <For each={activeProjects()}>
+                      {(p) => {
+                        const selected = () => projectId() === p.id;
+                        return (
+                          <button
+                            onClick={() => { setProjectId(p.id); setShowProjectPicker(false); saveImmediate({ project_id: p.id }); }}
+                            class={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-semibold transition-all ${selected() ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/70'}`}
+                          >
+                            <Show when={p.icon_url} fallback={
+                              <div
+                                class="w-6 h-6 rounded-lg shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
+                                style={{ "background-color": p.color }}
+                              >
+                                {p.prefix}
+                              </div>
+                            }>
+                              <img src={p.icon_url!} alt="" class="w-6 h-6 rounded-lg object-cover shadow-sm shrink-0" />
+                            </Show>
+                            <span class="truncate">{p.name}</span>
+                            <Show when={selected()}>
+                              <Check size={12} class="text-ios-blue-500 ml-auto shrink-0" />
+                            </Show>
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </Show>
+              </div>
               <Show when={isRich()}>
                 {(() => {
                   const PIcon = prio().icon;
@@ -385,6 +402,14 @@ const StoryDetail: Component<Props> = (props) => {
             />
             <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
           </div>
+
+          {/* Recurring badge */}
+          <Show when={props.story.frequency}>
+            <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/[0.06] border border-purple-500/10 w-fit">
+              <RefreshCw size={11} class="text-purple-500/60" />
+              <span class="text-[11px] font-bold text-purple-500/70">{frequencyLabel(props.story)}</span>
+            </div>
+          </Show>
 
           {/* Meta section: date + estimate + assignees */}
           <div class="space-y-5 pb-2 border-b border-base-content/[0.03]">
@@ -540,62 +565,43 @@ const StoryDetail: Component<Props> = (props) => {
             </div>
           </div>
 
-          {/* Purpose + Description — 2-col on desktop */}
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 pt-2">
-            <section class="space-y-3">
-              <div class="flex items-center gap-2 text-base-content/40">
-                <HelpCircle size={14} />
-                <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">¿Para qué?</h3>
-              </div>
-              <div class="relative group">
-                <textarea
-                  value={purpose()}
-                  rows={1}
-                  class="w-full text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed bg-transparent resize-none outline-none rounded-xl px-4 py-3 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.02] hover:bg-base-content/[0.015] transition-all placeholder:text-base-content/20"
-                  placeholder="Propósito de la historia..."
-                  ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
-                  onInput={(e) => { const val = e.currentTarget.value; setPurpose(val); autoResize(e.currentTarget); scheduleSave({ purpose: val }); }}
-                />
-                <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
-              </div>
-            </section>
+          {/* Purpose */}
+          <section class="space-y-3 pt-2">
+            <div class="flex items-center gap-2 text-base-content/40">
+              <HelpCircle size={14} />
+              <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">¿Para qué?</h3>
+            </div>
+            <div class="relative group">
+              <textarea
+                value={purpose()}
+                rows={1}
+                class="w-full text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed bg-transparent resize-none outline-none rounded-xl px-4 py-3 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.02] hover:bg-base-content/[0.015] transition-all placeholder:text-base-content/20"
+                placeholder="Propósito de la historia..."
+                ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
+                onInput={(e) => { const val = e.currentTarget.value; setPurpose(val); autoResize(e.currentTarget); scheduleSave({ purpose: val }); }}
+              />
+              <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
+            </div>
+          </section>
 
-            <section class="space-y-3">
-              <div class="flex items-center gap-2 text-base-content/40">
-                <FileText size={14} />
-                <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">Descripción</h3>
-              </div>
-              <Show
-                when={editingDesc()}
-                fallback={
-                  <div class="relative group cursor-text">
-                    <div
-                      onClick={() => setEditingDesc(true)}
-                      class="w-full text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed rounded-xl px-4 py-3 border border-transparent group-hover:bg-base-content/[0.015] transition-all whitespace-pre-wrap min-h-[48px]"
-                    >
-                      <Show when={description()} fallback={<span class="text-base-content/20">Descripción extendida...</span>}>
-                        <Linkify text={description()} />
-                      </Show>
-                    </div>
-                    <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                  </div>
-                }
-              >
-                <div class="relative group">
-                  <textarea
-                    value={description()}
-                    rows={1}
-                    class="w-full text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed bg-base-content/[0.02] resize-none outline-none rounded-xl px-4 py-3 border border-base-content/10 transition-all whitespace-pre-wrap placeholder:text-base-content/20 shadow-inner shadow-black/5"
-                    placeholder="Descripción extendida..."
-                    ref={(el) => { requestAnimationFrame(() => { autoResize(el); el.focus(); }); }}
-                    onInput={(e) => { const val = e.currentTarget.value; setDescription(val); autoResize(e.currentTarget); scheduleSave({ description: val }); }}
-                    onBlur={() => setEditingDesc(false)}
-                  />
-                  <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
-                </div>
-              </Show>
-            </section>
-          </div>
+          {/* Description — always-visible box */}
+          <section class="space-y-3">
+            <div class="flex items-center gap-2 text-base-content/40">
+              <FileText size={14} />
+              <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">Descripción</h3>
+            </div>
+            <div class="relative group">
+              <textarea
+                value={description()}
+                rows={4}
+                class="w-full min-h-[120px] text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed bg-base-content/[0.02] resize-none outline-none rounded-xl px-4 py-3 border border-base-content/[0.08] focus:border-base-content/15 focus:bg-base-content/[0.03] hover:border-base-content/12 transition-all placeholder:text-base-content/20"
+                placeholder="Descripción extendida..."
+                ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
+                onInput={(e) => { const val = e.currentTarget.value; setDescription(val); autoResize(e.currentTarget); scheduleSave({ description: val }); }}
+              />
+              <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
+            </div>
+          </section>
 
           {/* Objective */}
           <section class="space-y-3 pt-2">

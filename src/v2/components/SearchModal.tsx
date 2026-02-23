@@ -2,7 +2,7 @@ import { createSignal, onMount, onCleanup, For, Show, type Component } from 'sol
 import type { Story } from '../types';
 import { useData } from '../lib/data';
 import { api } from '../lib/api';
-import { Search, ArrowRight, X } from 'lucide-solid';
+import { Search, ArrowRight, X, RefreshCw } from 'lucide-solid';
 
 const statusDot: Record<string, string> = {
   backlog: 'bg-base-content/20',
@@ -163,6 +163,7 @@ const SearchModal: Component<Props> = (props) => {
                             <Show when={story.code}>
                               <span class="text-[10px] font-mono font-bold text-base-content/30 bg-base-content/[0.04] px-1.5 py-0.5 rounded">{story.code}</span>
                             </Show>
+                            <Show when={story.frequency}><RefreshCw size={9} class="text-purple-500/50 shrink-0" /></Show>
                             <span class="text-[14px] sm:text-sm font-bold truncate group-hover:text-ios-blue-500 transition-colors tracking-wide text-base-content/90">{highlight(story.title, query())}</span>
                           </div>
                           <Show when={match()}>

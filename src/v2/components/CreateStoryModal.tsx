@@ -3,6 +3,7 @@ import type { Priority, StoryStatus, ReportCategory } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
+import { toLocalDateStr } from '../lib/recurrence';
 import {
   X, ChevronDown, ChevronUp, Check,
   Flame, ArrowUp, ArrowRight, ArrowDown,
@@ -179,7 +180,7 @@ const CreateStoryModal: Component<Props> = (props) => {
 
     if (type === 'hoy') {
       const sub = `${diasCortos[today.getDay()]} ${today.getDate()}`;
-      return { dateStr: today.toISOString().split('T')[0], label: 'Hoy', sub };
+      return { dateStr: toLocalDateStr(today), label: 'Hoy', sub };
     }
 
     if (type === 'semana') {
@@ -187,7 +188,7 @@ const CreateStoryModal: Component<Props> = (props) => {
       d.setDate(d.getDate() + 7);
       if (d.getDay() === 0) d.setDate(d.getDate() + 1);
       const sub = `${diasCortos[d.getDay()]} ${d.getDate()}`;
-      return { dateStr: d.toISOString().split('T')[0], label: '+1 sem', sub };
+      return { dateStr: toLocalDateStr(d), label: '+1 sem', sub };
     }
 
     let targetDate = new Date();
@@ -202,7 +203,7 @@ const CreateStoryModal: Component<Props> = (props) => {
     const isNextWeek = getWeekNumber(targetDate) !== todayWeek();
     const sub = isNextWeek ? 'próx.' : 'esta sem';
 
-    return { dateStr: targetDate.toISOString().split('T')[0], label: dayName, sub };
+    return { dateStr: toLocalDateStr(targetDate), label: dayName, sub };
   };
 
   const btnHoy = () => getRelativeDateInfo('hoy');
@@ -232,7 +233,7 @@ const CreateStoryModal: Component<Props> = (props) => {
       ));
     }
 
-    if (obj.description || obj.purpose || obj.objective || rawCriteria.length > 0) {
+    if (obj.purpose || obj.objective || rawCriteria.length > 0) {
       setShowDetails(true);
     }
 
@@ -474,6 +475,18 @@ const CreateStoryModal: Component<Props> = (props) => {
               class="w-full text-[24px] sm:text-[26px] font-extrabold bg-transparent outline-none placeholder:text-base-content/15 tracking-tight text-base-content/90 focus:text-base-content transition-colors px-4 py-1"
             />
           </div>
+
+          {/* Description — always visible */}
+          <fieldset class="px-1">
+            <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">Descripción</legend>
+            <textarea
+              value={description()}
+              onInput={(e) => setDescription(e.currentTarget.value)}
+              placeholder="Describe la historia..."
+              rows={4}
+              class="w-full min-h-[120px] bg-base-content/[0.02] border border-base-content/[0.08] rounded-2xl px-4 py-3 text-[14px] font-medium outline-none resize-none placeholder:text-base-content/20 focus:bg-base-content/[0.03] focus:border-base-content/15 hover:border-base-content/12 focus:ring-1 focus:ring-ios-blue-500/30 transition-all leading-relaxed"
+            />
+          </fieldset>
 
           {/* Project chips */}
           <fieldset>
@@ -837,17 +850,6 @@ const CreateStoryModal: Component<Props> = (props) => {
           {/* Expandable details — only text fields */}
           <Show when={showDetails()}>
             <div class="space-y-6 pt-4 px-1 animate-in fade-in slide-in-from-top-4 duration-300">
-              <fieldset>
-                <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">Descripción</legend>
-                <textarea
-                  value={description()}
-                  onInput={(e) => setDescription(e.currentTarget.value)}
-                  placeholder="Describe la historia..."
-                  rows={2}
-                  class="w-full bg-base-content/[0.03] rounded-2xl px-4 py-3 text-[14px] font-medium outline-none resize-none placeholder:text-base-content/20 focus:bg-base-content/[0.05] focus:ring-1 focus:ring-ios-blue-500/30 transition-all leading-relaxed"
-                />
-              </fieldset>
-
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <fieldset>
                   <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">¿Para qué?</legend>

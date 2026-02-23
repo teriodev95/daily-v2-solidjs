@@ -2,9 +2,10 @@ import { createResource, For, Show, type Component } from 'solid-js';
 import type { Story, Assignment } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
+import { toLocalDateStr } from '../lib/recurrence';
 import {
   CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle,
-  Package, Target, Flag,
+  Package, Target, Flag, RefreshCw,
 } from 'lucide-solid';
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 const MemberReportPreview: Component<Props> = (props) => {
   const data = useData();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateStr(new Date());
 
   const [stories] = createResource(
     () => props.memberId,
@@ -148,7 +149,10 @@ const MemberReportPreview: Component<Props> = (props) => {
                     return (
                       <button onClick={() => props.onStoryClick?.(story)} class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-base-200/40 hover:bg-base-200/70 transition-colors text-left">
                         <CheckCircle size={12} class="text-ios-green-500/30 shrink-0" />
-                        <span class="text-[12px] text-base-content/35 line-through flex-1 truncate">{story.title}</span>
+                        <span class="text-[12px] text-base-content/35 line-through flex-1 truncate flex items-center gap-1">
+                          <Show when={story.frequency}><RefreshCw size={8} class="text-purple-500/40 shrink-0" /></Show>
+                          {story.title}
+                        </span>
                         <Show when={story.code}>
                           <span class="text-[8px] font-mono font-bold px-1 py-0.5 rounded shrink-0" style={{ "background-color": `${proj?.color ?? '#525252'}10`, color: `${proj?.color ?? '#525252'}60` }}>{story.code}</span>
                         </Show>
@@ -175,7 +179,10 @@ const MemberReportPreview: Component<Props> = (props) => {
                     return (
                       <button onClick={() => props.onStoryClick?.(story)} class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-base-200/40 hover:bg-base-200/70 transition-colors text-left">
                         <Circle size={12} class="text-ios-blue-500/40 shrink-0" />
-                        <span class="text-[12px] text-base-content/70 flex-1 truncate">{story.title}</span>
+                        <span class="text-[12px] text-base-content/70 flex-1 truncate flex items-center gap-1">
+                          <Show when={story.frequency}><RefreshCw size={8} class="text-purple-500/40 shrink-0" /></Show>
+                          {story.title}
+                        </span>
                         <Show when={story.code}>
                           <span class="text-[8px] font-mono font-bold px-1 py-0.5 rounded shrink-0" style={{ "background-color": `${proj?.color ?? '#525252'}15`, color: proj?.color ?? '#525252' }}>{story.code}</span>
                         </Show>
@@ -208,7 +215,10 @@ const MemberReportPreview: Component<Props> = (props) => {
                   {(story) => (
                     <button onClick={() => props.onStoryClick?.(story)} class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg bg-base-200/40 hover:bg-base-200/70 transition-colors text-left">
                       <Circle size={12} class="text-base-content/15 shrink-0" />
-                      <span class="text-[12px] text-base-content/40 flex-1 truncate">{story.title}</span>
+                      <span class="text-[12px] text-base-content/40 flex-1 truncate flex items-center gap-1">
+                        <Show when={story.frequency}><RefreshCw size={8} class="text-purple-500/40 shrink-0" /></Show>
+                        {story.title}
+                      </span>
                     </button>
                   )}
                 </For>

@@ -6,6 +6,11 @@ import { requireAdmin } from '../middleware/auth';
 
 const stories = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+const parseRecurrenceDays = (s: any) => ({
+  ...s,
+  recurrence_days: s.recurrence_days ? JSON.parse(s.recurrence_days) : null,
+});
+
 // Full-text search across title, description, purpose, objective, code
 stories.get('/search', async (c) => {
   const user = c.get('user');
@@ -47,7 +52,7 @@ stories.get('/search', async (c) => {
     }
   }
 
-  return c.json(rows.map(s => ({ ...s, assignees: assigneeMap.get(s.id) ?? [] })));
+  return c.json(rows.map(s => parseRecurrenceDays({ ...s, assignees: assigneeMap.get(s.id) ?? [] })));
 });
 
 stories.get('/', async (c) => {
@@ -85,7 +90,7 @@ stories.get('/', async (c) => {
     assigneeMap.set(a.story_id, arr);
   }
 
-  const result = rows.map(s => ({
+  const result = rows.map(s => parseRecurrenceDays({
     ...s,
     assignees: assigneeMap.get(s.id) ?? [],
   }));
@@ -116,6 +121,7 @@ stories.post('/', async (c) => {
     frequency?: string;
     day_of_week?: number;
     day_of_month?: number;
+    recurrence_days?: number[];
     recurring_parent_id?: string;
   }>();
 
@@ -144,6 +150,7 @@ stories.post('/', async (c) => {
     frequency: body.frequency as any ?? null,
     day_of_week: body.day_of_week ?? null,
     day_of_month: body.day_of_month ?? null,
+    recurrence_days: body.recurrence_days ? JSON.stringify(body.recurrence_days) : null,
     recurring_parent_id: body.recurring_parent_id ?? null,
     created_at: now,
     updated_at: now,
@@ -158,7 +165,7 @@ stories.post('/', async (c) => {
   const [created] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
   const assigneeLinks = await db.select().from(schema.storyAssignees).where(eq(schema.storyAssignees.story_id, id));
 
-  return c.json({ ...created, assignees: assigneeLinks.map(a => a.user_id) }, 201);
+  return c.json(parseRecurrenceDays({ ...created, assignees: assigneeLinks.map(a => a.user_id) }), 201);
 });
 
 stories.get('/:id', async (c) => {
@@ -178,11 +185,11 @@ stories.get('/:id', async (c) => {
     .from(schema.storyAssignees)
     .where(eq(schema.storyAssignees.story_id, id));
 
-  return c.json({
+  return c.json(parseRecurrenceDays({
     ...story,
     assignees: assigneeLinks.map(a => a.user_id),
     criteria,
-  });
+  }));
 });
 
 stories.patch('/:id', async (c) => {
@@ -191,6 +198,9 @@ stories.patch('/:id', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
 
   const { assignees, ...fields } = body;
+  if (fields.recurrence_days !== undefined) {
+    fields.recurrence_days = fields.recurrence_days ? JSON.stringify(fields.recurrence_days) : null;
+  }
   if (Object.keys(fields).length > 0) {
     await db
       .update(schema.stories)
@@ -201,7 +211,7 @@ stories.patch('/:id', async (c) => {
   const [updated] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
   const assigneeLinks = await db.select().from(schema.storyAssignees).where(eq(schema.storyAssignees.story_id, id));
 
-  return c.json({ ...updated, assignees: assigneeLinks.map(a => a.user_id) });
+  return c.json(parseRecurrenceDays({ ...updated, assignees: assigneeLinks.map(a => a.user_id) }));
 });
 
 stories.delete('/:id', requireAdmin, async (c) => {

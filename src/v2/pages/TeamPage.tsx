@@ -3,7 +3,7 @@ import type { Story } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
-import { CheckCircle, Circle, Share2, Target, ClipboardList } from 'lucide-solid';
+import { CheckCircle, Circle, Share2, Target, ClipboardList, RefreshCw } from 'lucide-solid';
 import MemberReportPreview from '../components/MemberReportPreview';
 import StoryDetail from '../components/StoryDetail';
 
@@ -133,7 +133,10 @@ const TeamPage: Component = () => {
                       <div class="flex items-center justify-center w-8 h-8 rounded-xl bg-ios-blue-500/10 shrink-0 group-hover:bg-ios-blue-500/20 transition-colors">
                         <Share2 size={14} strokeWidth={2.5} class="text-ios-blue-500" />
                       </div>
-                      <span class="text-[14px] sm:text-[15px] font-medium flex-1 min-w-0 truncate text-base-content/80 group-hover:text-base-content transition-colors">{story.title}</span>
+                      <span class="text-[14px] sm:text-[15px] font-medium flex-1 min-w-0 truncate text-base-content/80 group-hover:text-base-content transition-colors flex items-center gap-1.5">
+                        {story.title}
+                        <Show when={story.frequency}><RefreshCw size={9} class="text-purple-500/50 shrink-0" /></Show>
+                      </span>
                       <Show when={owner}>
                         <img src={owner!.avatar_url!} alt="" class="w-6 h-6 rounded-full shrink-0 shadow-sm" title={owner!.name} />
                       </Show>

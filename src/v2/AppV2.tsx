@@ -1,5 +1,5 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays } from 'lucide-solid';
+import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays, ListChecks } from 'lucide-solid';
 import dailyIcon from '../assets/daily-icon.png';
 import type { ReportCategory, Story } from './types';
 import { AuthProvider, useAuth } from './lib/auth';
@@ -9,6 +9,7 @@ import ReportPage from './pages/ReportPage';
 import TeamPage from './pages/TeamPage';
 import ProjectsPage from './pages/ProjectsPage';
 import AdminPage from './pages/AdminPage';
+import TasksPage from './pages/TasksPage';
 import CreateStoryModal from './components/CreateStoryModal';
 import SearchModal from './components/SearchModal';
 import CalendarModal from './components/CalendarModal';
@@ -16,11 +17,13 @@ import StoryDetail from './components/StoryDetail';
 import InstallPrompt from './components/InstallPrompt';
 import UpdateToast from './components/UpdateToast';
 
-type Tab = 'report' | 'team' | 'projects' | 'admin';
+type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks';
 
 const AppShell: Component = () => {
   const auth = useAuth();
-  const [activeTab, setActiveTab] = createSignal<Tab>('report');
+  // Default to 'tasks' on mobile, 'report' on desktop
+  const isMobile = window.innerWidth < 640;
+  const [activeTab, setActiveTab] = createSignal<Tab>(isMobile ? 'tasks' : 'report');
   const savedTheme = localStorage.getItem('dc-theme') || 'ios-dark';
   const [isDark, setIsDark] = createSignal(savedTheme === 'ios-dark');
   const [showCreateModal, setShowCreateModal] = createSignal(false);
@@ -77,6 +80,18 @@ const AppShell: Component = () => {
     return t;
   };
 
+  // Mobile dock: Tasks first (leftmost), then the rest
+  const mobileTabs = () => {
+    const t: { id: Tab; label: string; icon: any; key: string }[] = [
+      { id: 'tasks', label: 'Tareas', icon: ListChecks, key: 'X' },
+      ...baseTabs,
+    ];
+    if (user()?.role === 'admin') {
+      t.push({ id: 'admin', label: 'Admin', icon: Settings, key: 'A' });
+    }
+    return t;
+  };
+
   const user = () => auth.user();
 
   // Global keyboard shortcuts
@@ -121,7 +136,7 @@ const AppShell: Component = () => {
             <img src={dailyIcon} alt="Daily Check" class="w-7 h-7 rounded-lg ring-1 ring-black/10" />
             <div class="flex flex-col">
               <span class="font-semibold text-sm tracking-tight leading-tight">Daily Check</span>
-              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.4.0</span>
+              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.5.0</span>
             </div>
           </div>
 
@@ -180,7 +195,7 @@ const AppShell: Component = () => {
             <img src={dailyIcon} alt="Daily Check" class="w-6 h-6 rounded-md ring-1 ring-black/10" />
             <div class="flex flex-col">
               <span class="font-semibold text-sm tracking-tight text-base-content/90 leading-tight">Daily Check</span>
-              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.4.0</span>
+              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.5.0</span>
             </div>
           </div>
 
@@ -237,6 +252,10 @@ const AppShell: Component = () => {
             <AdminPage />
           </div>
         </Show>
+        {/* Tasks — mobile only page, but mounted always (hidden via display) */}
+        <div class={activeTab() === 'tasks' ? 'stagger-in' : ''} style={{ display: activeTab() === 'tasks' ? undefined : 'none' }}>
+          <TasksPage refreshKey={refreshKey()} />
+        </div>
       </main>
 
       {/* =========================================
@@ -317,9 +336,9 @@ const AppShell: Component = () => {
           MOBILE Style Dock 
           ========================================= */}
       <div class="flex sm:hidden fixed bottom-[calc(0.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 justify-center pointer-events-none px-4">
-        <nav class="w-full max-w-[360px] bg-base-200/85 backdrop-blur-3xl saturate-200 rounded-[28px] border border-base-content/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.15)] pointer-events-auto p-1.5 flex items-center justify-between">
+        <nav class="w-full max-w-[400px] bg-base-200/85 backdrop-blur-3xl saturate-200 rounded-[28px] border border-base-content/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.15)] pointer-events-auto p-1.5 flex items-center justify-between">
           <div class="flex items-center justify-around flex-1 pl-1">
-            <For each={tabs()}>
+            <For each={mobileTabs()}>
               {(tab) => (
                 <button
                   onClick={() => switchTab(tab.id)}

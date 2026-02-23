@@ -6,7 +6,7 @@ import { useData } from '../lib/data';
 import {
   CheckCircle, Circle, ArrowRight, PackageCheck, Repeat,
   ChevronRight, Calendar, Flame, ArrowUp, ArrowDown,
-  Target,
+  Target, RefreshCw,
 } from 'lucide-solid';
 import StoryDetail from '../components/StoryDetail';
 import AssignmentDetail from '../components/AssignmentDetail';
@@ -149,7 +149,10 @@ const DashboardPage: Component<DashboardPageProps> = (props) => {
                               <span class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600">En progreso</span>
                             </Show>
                           </div>
-                          <p class="text-[14px] sm:text-[15px] font-medium truncate text-base-content/90 group-hover:text-base-content transition-colors">{story.title}</p>
+                          <p class="text-[14px] sm:text-[15px] font-medium truncate text-base-content/90 group-hover:text-base-content transition-colors flex items-center gap-1.5">
+                            {story.title}
+                            <Show when={story.frequency}><RefreshCw size={9} class="text-purple-500/50 shrink-0" /></Show>
+                          </p>
                         </div>
 
                         <div class="flex flex-col items-end gap-1.5 shrink-0">

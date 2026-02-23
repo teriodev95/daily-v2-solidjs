@@ -1,9 +1,10 @@
 import { createSignal, createResource, onCleanup, For, Show, type Component } from 'solid-js';
-import type { Story } from '../types';
+import type { Story, StoryCompletion } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
-import { X, Calendar, ChevronRight } from 'lucide-solid';
+import { isRecurringOnDate, isRecurring, frequencyLabel, toLocalDateStr } from '../lib/recurrence';
+import { X, Calendar, ChevronRight, RefreshCw } from 'lucide-solid';
 import StoryDetail from './StoryDetail';
 
 // ─── Helpers ────────────────────────────────────
@@ -11,7 +12,7 @@ import StoryDetail from './StoryDetail';
 const DAY_NAMES_SHORT = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-const toDateKey = (d: Date) => d.toISOString().split('T')[0];
+const toDateKey = (d: Date) => toLocalDateStr(d);
 
 const isSameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -46,6 +47,12 @@ const statusLabel: Record<string, { text: string; color: string }> = {
   done: { text: 'Hecho', color: 'text-ios-green-500' },
 };
 
+interface CalendarStoryItem {
+  story: Story;
+  isRecurring: boolean;
+  isCompleted: boolean;
+}
+
 // ─── Component ──────────────────────────────────
 
 interface Props {
@@ -72,33 +79,98 @@ const CalendarModal: Component<Props> = (props) => {
     return list as Story[];
   });
 
+  // Load completions for the visible week range
+  const weekRange = () => {
+    const from = toDateKey(week[0]);
+    const to = toDateKey(week[week.length - 1]);
+    return { from, to, uid: userId() };
+  };
+
+  const [completions, { mutate: mutateCompletions }] = createResource(weekRange, async ({ from, to, uid }) => {
+    if (!uid) return [];
+    return api.completions.list(from, to);
+  });
+
+  const completionSet = (): Set<string> => {
+    const set = new Set<string>();
+    for (const c of completions() ?? []) {
+      set.add(`${c.story_id}:${c.completion_date}`);
+    }
+    return set;
+  };
+
+  const isCompletedOn = (storyId: string, dateKey: string) =>
+    completionSet().has(`${storyId}:${dateKey}`);
+
   const storiesByDate = () => {
     const all = stories() ?? [];
-    const map = new Map<string, Story[]>();
+    const map = new Map<string, CalendarStoryItem[]>();
 
-    for (const s of all) {
-      if (s.status === 'done') continue;
-      const dateStr = s.due_date ?? s.scheduled_date;
-      if (!dateStr) continue;
-      const key = dateStr.split('T')[0];
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(s);
+    for (const d of week) {
+      const dateKey = toDateKey(d);
+      const items: CalendarStoryItem[] = [];
+
+      for (const s of all) {
+        // Recurring stories: check if they apply on this date
+        if (isRecurring(s)) {
+          if (isRecurringOnDate(s, d)) {
+            items.push({
+              story: s,
+              isRecurring: true,
+              isCompleted: isCompletedOn(s.id, dateKey),
+            });
+          }
+          continue;
+        }
+
+        // Normal stories: by due_date or scheduled_date
+        if (s.status === 'done') continue;
+        const dateStr = s.due_date ?? s.scheduled_date;
+        if (!dateStr) continue;
+        const key = dateStr.split('T')[0];
+        if (key === dateKey) {
+          items.push({ story: s, isRecurring: false, isCompleted: false });
+        }
+      }
+
+      // Sort: priority weight
+      const priorityWeight: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+      items.sort((a, b) => (priorityWeight[a.story.priority] ?? 9) - (priorityWeight[b.story.priority] ?? 9));
+
+      if (items.length > 0) {
+        map.set(dateKey, items);
+      }
     }
 
-    const priorityWeight: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-    for (const arr of map.values()) {
-      arr.sort((a, b) => (priorityWeight[a.priority] ?? 9) - (priorityWeight[b.priority] ?? 9));
-    }
     return map;
   };
 
   const countForDate = (d: Date) => storiesByDate().get(toDateKey(d))?.length ?? 0;
 
-  const selectedStories = () => storiesByDate().get(toDateKey(selectedDay())) ?? [];
+  const selectedItems = () => storiesByDate().get(toDateKey(selectedDay())) ?? [];
 
   const undatedStories = () => {
     const all = stories() ?? [];
-    return all.filter(s => s.status !== 'done' && !s.due_date && !s.scheduled_date);
+    return all.filter(s => s.status !== 'done' && !s.due_date && !s.scheduled_date && !isRecurring(s));
+  };
+
+  // Toggle recurring completion
+  const toggleCompletion = async (storyId: string, dateKey: string, currentlyCompleted: boolean) => {
+    // Optimistic update
+    if (currentlyCompleted) {
+      mutateCompletions(prev => (prev ?? []).filter(c => !(c.story_id === storyId && c.completion_date === dateKey)));
+      api.completions.delete(storyId, dateKey).catch(() => {});
+    } else {
+      const optimistic: StoryCompletion = {
+        id: `temp-${Date.now()}`,
+        story_id: storyId,
+        user_id: userId(),
+        completion_date: dateKey,
+        created_at: new Date().toISOString(),
+      };
+      mutateCompletions(prev => [...(prev ?? []), optimistic]);
+      api.completions.create(storyId, dateKey).catch(() => {});
+    }
   };
 
   // Close on Escape — if detail is open close it first, otherwise close calendar
@@ -226,57 +298,97 @@ const CalendarModal: Component<Props> = (props) => {
                 <span class="text-[12px] font-bold text-base-content/40 uppercase tracking-widest">
                   {isSameDay(selectedDay(), today) ? 'Hoy' : dayLabel(selectedDay())} — {selectedDay().getDate()} {MONTH_NAMES[selectedDay().getMonth()]}
                 </span>
-                <Show when={selectedStories().length > 0}>
+                <Show when={selectedItems().length > 0}>
                   <span class="text-[10px] font-bold bg-ios-blue-500/10 text-ios-blue-500 px-1.5 py-0.5 rounded-md ml-auto">
-                    {selectedStories().length}
+                    {selectedItems().length}
                   </span>
                 </Show>
               </div>
 
-              <Show when={selectedStories().length > 0} fallback={
+              <Show when={selectedItems().length > 0} fallback={
                 <div class="px-6 py-6 text-center">
                   <p class="text-[13px] font-bold text-base-content/25">Sin HUs para este día</p>
                 </div>
               }>
                 <div class="px-3 pb-2">
-                  <For each={selectedStories()}>
-                    {(story) => {
+                  <For each={selectedItems()}>
+                    {(item) => {
+                      const story = item.story;
                       const proj = story.project_id ? data.getProjectById(story.project_id) : null;
                       const st = statusLabel[story.status] ?? statusLabel.backlog;
                       const isOverdue = () => {
                         if (!story.due_date) return false;
-                        return new Date(story.due_date) < today && story.status !== 'done';
+                        return story.due_date < toDateKey(today) && story.status !== 'done';
                       };
+                      const dateKey = toDateKey(selectedDay());
 
                       return (
-                        <button
-                          onClick={() => setDetailStory(story)}
+                        <div
                           class="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-base-content/[0.04] transition-all group text-left"
                         >
-                          <div class={`w-2 h-2 rounded-full shrink-0 ${priorityColor[story.priority] ?? 'bg-base-content/20'}`} />
-                          <div class="flex-1 min-w-0">
+                          {/* Recurring completion toggle */}
+                          <Show when={item.isRecurring} fallback={
+                            <div class={`w-2 h-2 rounded-full shrink-0 ${priorityColor[story.priority] ?? 'bg-base-content/20'}`} />
+                          }>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleCompletion(story.id, dateKey, item.isCompleted);
+                              }}
+                              class="shrink-0 transition-all"
+                            >
+                              <div class={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                                item.isCompleted
+                                  ? 'bg-ios-green-500 border-ios-green-500'
+                                  : 'border-base-content/20 hover:border-ios-green-500/50'
+                              }`}>
+                                <Show when={item.isCompleted}>
+                                  <svg class="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M2.5 6L5 8.5L9.5 3.5" />
+                                  </svg>
+                                </Show>
+                              </div>
+                            </button>
+                          </Show>
+
+                          <button
+                            onClick={() => setDetailStory(story)}
+                            class="flex-1 min-w-0 text-left"
+                          >
                             <div class="flex items-center gap-2">
                               <Show when={story.code}>
                                 <span class="text-[10px] font-mono font-bold text-base-content/25 bg-base-content/[0.04] px-1.5 py-0.5 rounded shrink-0">
                                   {story.code}
                                 </span>
                               </Show>
-                              <span class="text-[13px] font-bold truncate text-base-content/80 group-hover:text-base-content transition-colors">
+                              <span class={`text-[13px] font-bold truncate transition-colors ${
+                                item.isCompleted
+                                  ? 'text-base-content/30 line-through'
+                                  : 'text-base-content/80 group-hover:text-base-content'
+                              }`}>
                                 {story.title}
                               </span>
                             </div>
                             <div class="flex items-center gap-2 mt-0.5">
-                              <span class={`text-[10px] font-bold ${st.color}`}>{st.text}</span>
+                              <Show when={item.isRecurring}>
+                                <span class="text-[9px] font-bold text-purple-500/70 bg-purple-500/10 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                                  <RefreshCw size={8} />
+                                  {frequencyLabel(story)}
+                                </span>
+                              </Show>
+                              <Show when={!item.isRecurring}>
+                                <span class={`text-[10px] font-bold ${st.color}`}>{st.text}</span>
+                              </Show>
                               <Show when={isOverdue()}>
                                 <span class="text-[10px] font-bold text-red-500">Vencida</span>
                               </Show>
-                              <Show when={story.due_date}>
+                              <Show when={story.due_date && !item.isRecurring}>
                                 <span class="text-[10px] font-medium text-base-content/25">
                                   vence {new Date(story.due_date!).getDate()} {MONTH_NAMES[new Date(story.due_date!).getMonth()]}
                                 </span>
                               </Show>
                             </div>
-                          </div>
+                          </button>
                           <Show when={proj}>
                             <span
                               class="text-[9px] font-bold px-1.5 py-0.5 rounded-md shrink-0"
@@ -286,7 +398,7 @@ const CalendarModal: Component<Props> = (props) => {
                             </span>
                           </Show>
                           <ChevronRight size={14} class="text-base-content/15 shrink-0 group-hover:text-base-content/40 transition-colors" />
-                        </button>
+                        </div>
                       );
                     }}
                   </For>

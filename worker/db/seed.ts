@@ -9,6 +9,7 @@ const seed = new Hono<{ Bindings: Env; Variables: Variables }>();
 seed.post('/reset', async (c) => {
   const db = c.get('db');
   // Delete in order respecting foreign keys
+  await db.delete(schema.storyCompletions);
   await db.delete(schema.storyAssignees);
   await db.delete(schema.acceptanceCriteria);
   await db.delete(schema.attachments);
@@ -57,6 +58,56 @@ seed.post('/seed-users', async (c) => {
     }).onConflictDoNothing();
   }
 
+  // ── Recurring stories ──
+  const now = new Date().toISOString();
+  const recurringStories = [
+    {
+      id: 'sr1', project_id: null, code: null,
+      title: 'Revisar sistema de tickets',
+      purpose: 'Atención diaria a tickets de soporte', description: '', objective: '',
+      priority: 'medium', estimate: 0, status: 'todo', category: null,
+      assignee_id: 'u3', created_by: 'u3',
+      due_date: null, scheduled_date: null, completed_at: null,
+      is_shared: false, sort_order: 0,
+      frequency: 'weekly', day_of_week: null, day_of_month: null,
+      recurrence_days: JSON.stringify([1, 2, 3, 4, 5, 6]),
+      recurring_parent_id: null,
+    },
+    {
+      id: 'sr2', project_id: null, code: null,
+      title: 'Revisar débitos',
+      purpose: 'Revisión semanal de débitos', description: '', objective: '',
+      priority: 'medium', estimate: 0, status: 'todo', category: null,
+      assignee_id: 'u2', created_by: 'u2',
+      due_date: null, scheduled_date: null, completed_at: null,
+      is_shared: false, sort_order: 0,
+      frequency: 'weekly', day_of_week: null, day_of_month: null,
+      recurrence_days: JSON.stringify([2]),
+      recurring_parent_id: null,
+    },
+    {
+      id: 'sr3', project_id: null, code: null,
+      title: 'Revisar servidores',
+      purpose: 'Revisión mensual de servidores', description: '', objective: '',
+      priority: 'medium', estimate: 0, status: 'todo', category: null,
+      assignee_id: 'u2', created_by: 'u2',
+      due_date: null, scheduled_date: null, completed_at: null,
+      is_shared: false, sort_order: 0,
+      frequency: 'monthly', day_of_week: null, day_of_month: 1,
+      recurrence_days: null,
+      recurring_parent_id: null,
+    },
+  ];
+  for (const s of recurringStories) {
+    await db.insert(schema.stories).values({
+      ...s,
+      team_id: 't1',
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    } as any).onConflictDoNothing();
+  }
+
   return c.json({ ok: true, message: 'Team, users & projects seeded (no test data)' });
 });
 
@@ -99,6 +150,7 @@ seed.post('/seed', async (c) => {
   }
 
   // ── Clear old stories ──
+  await db.delete(schema.storyCompletions);
   await db.delete(schema.storyAssignees);
   await db.delete(schema.acceptanceCriteria);
   await db.delete(schema.stories);

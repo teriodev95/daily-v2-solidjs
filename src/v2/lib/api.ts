@@ -1,6 +1,6 @@
 import type {
   User, Team, Project, Story, AcceptanceCriteria,
-  DailyReport, WeekGoal, Assignment, Attachment,
+  DailyReport, WeekGoal, Assignment, Attachment, StoryCompletion,
 } from '../types';
 
 export class ApiError extends Error {
@@ -163,6 +163,21 @@ export const api = {
     delete: (id: string) =>
       request<{ ok: boolean }>(`/api/attachments/${id}`, { method: 'DELETE' }),
     fileUrl: (id: string) => `${API_BASE}/api/attachments/file/${id}`,
+  },
+
+  completions: {
+    list: (from: string, to: string) =>
+      request<StoryCompletion[]>(`/api/completions?from=${from}&to=${to}`),
+    create: (story_id: string, completion_date: string) =>
+      request<StoryCompletion>('/api/completions', {
+        method: 'POST',
+        body: JSON.stringify({ story_id, completion_date }),
+      }),
+    delete: (story_id: string, completion_date: string) =>
+      request<{ ok: boolean }>('/api/completions', {
+        method: 'DELETE',
+        body: JSON.stringify({ story_id, completion_date }),
+      }),
   },
 
   admin: {

@@ -12,6 +12,7 @@ import reportsRoutes from './routes/reports';
 import goalsRoutes from './routes/goals';
 import assignmentsRoutes from './routes/assignments';
 import attachmentsRoutes from './routes/attachments';
+import completionsRoutes from './routes/completions';
 import seedRoutes from './db/seed';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -57,6 +58,7 @@ app.use('/api/reports/*', authMiddleware);
 app.use('/api/goals/*', authMiddleware);
 app.use('/api/assignments/*', authMiddleware);
 app.use('/api/attachments/*', authMiddleware);
+app.use('/api/completions/*', authMiddleware);
 
 // Protected routes
 app.route('/api/team', teamRoutes);
@@ -66,5 +68,6 @@ app.route('/api/reports', reportsRoutes);
 app.route('/api/goals', goalsRoutes);
 app.route('/api/assignments', assignmentsRoutes);
 app.route('/api/attachments', attachmentsRoutes);
+app.route('/api/completions', completionsRoutes);
 
 export default app;

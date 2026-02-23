@@ -62,6 +62,7 @@ export interface Story {
   frequency: Frequency | null;
   day_of_week: number | null;
   day_of_month: number | null;
+  recurrence_days: number[] | null;
   recurring_parent_id: string | null;
   is_active: boolean;
   created_at: string;
@@ -109,6 +110,14 @@ export interface Attachment {
   mime_type: string;
   r2_key: string;
   uploaded_by: string;
+  created_at: string;
+}
+
+export interface StoryCompletion {
+  id: string;
+  story_id: string;
+  user_id: string;
+  completion_date: string;
   created_at: string;
 }
 

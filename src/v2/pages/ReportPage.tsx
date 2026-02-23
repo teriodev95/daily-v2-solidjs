@@ -1,13 +1,14 @@
 import { createSignal, createResource, createEffect, onCleanup, For, Show, type Component } from 'solid-js';
-import type { Story, StoryStatus, Assignment, WeekGoal } from '../types';
+import type { Story, StoryStatus, Assignment, WeekGoal, StoryCompletion } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import {
   CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle,
   Plus, Package, Target, Play, RotateCcw, Check,
-  Eye, Trash2, ArrowRightCircle, Flag, XCircle,
+  Eye, Trash2, ArrowRightCircle, Flag, XCircle, RefreshCw, Archive,
 } from 'lucide-solid';
+import { isRecurring, isRecurringOnDate, frequencyLabel, shouldShowRecurringInActive, toLocalDateStr } from '../lib/recurrence';
 import StoryDetail from '../components/StoryDetail';
 import ShareReportModal from '../components/ShareReportModal';
 import type { ReportCategory } from '../types';
@@ -36,7 +37,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     }
   });
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateStr(new Date());
   const userId = () => auth.user()?.id ?? '';
 
   const [reportData] = createResource(
@@ -57,6 +58,45 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     () => ({ uid: userId(), _r: props.refreshKey }),
     ({ uid }) => uid ? api.assignments.list({ assigned_to: uid, status: 'open' }) : Promise.resolve([]),
   );
+
+  // Recurring completions for today
+  const [todayCompletions, { mutate: mutateCompletions }] = createResource(
+    () => ({ uid: userId(), date: today }),
+    ({ uid, date }) => uid ? api.completions.list(date, date) : Promise.resolve([]),
+  );
+
+  const todayCompletionSet = (): Set<string> => {
+    const set = new Set<string>();
+    for (const c of todayCompletions() ?? []) {
+      set.add(c.story_id);
+    }
+    return set;
+  };
+
+  const recurringTodayStories = () => {
+    const all = localStories();
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    return all.filter(s => isRecurring(s) && isRecurringOnDate(s, todayDate));
+  };
+
+  const toggleRecurringCompletion = (storyId: string) => {
+    const completed = todayCompletionSet().has(storyId);
+    if (completed) {
+      mutateCompletions(prev => (prev ?? []).filter(c => c.story_id !== storyId));
+      api.completions.delete(storyId, today).catch(() => {});
+    } else {
+      const optimistic: StoryCompletion = {
+        id: `temp-${Date.now()}`,
+        story_id: storyId,
+        user_id: userId(),
+        completion_date: today,
+        created_at: new Date().toISOString(),
+      };
+      mutateCompletions(prev => [...(prev ?? []), optimistic]);
+      api.completions.create(storyId, today).catch(() => {});
+    }
+  };
 
   // Local state for optimistic updates
   const [localStories, setLocalStories] = createSignal<Story[]>([]);
@@ -180,7 +220,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     });
   };
 
-  const activeStories = () => localStories().filter(s => s.status === 'in_progress' || s.status === 'todo');
+  const activeStories = () => localStories().filter(s =>
+    (s.status === 'in_progress' || s.status === 'todo') && shouldShowRecurringInActive(s)
+  );
   const backlogStories = () => localStories().filter(s => s.status === 'backlog');
   const myGoals = () => goalsList() ?? [];
   const myAssignments = () => (assignmentsList() ?? []) as Assignment[];
@@ -393,6 +435,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     const opts: { label: string; status: StoryStatus; icon: any; color: string }[] = [];
     if (current !== 'in_progress') opts.push({ label: 'En progreso', status: 'in_progress', icon: Play, color: 'text-ios-blue-500' });
     if (current !== 'todo' && current !== 'backlog') opts.push({ label: 'Por hacer', status: 'todo', icon: Package, color: 'text-orange-500' });
+    if (current !== 'backlog') opts.push({ label: 'Backlog', status: 'backlog', icon: Archive, color: 'text-base-content/40' });
     if (current !== 'done') opts.push({ label: 'Completada', status: 'done', icon: Check, color: 'text-ios-green-500' });
     return opts;
   };
@@ -830,6 +873,63 @@ const ReportPage: Component<ReportPageProps> = (props) => {
           </section>
 
 
+
+          {/* Recurring tasks */}
+          <Show when={recurringTodayStories().length > 0}>
+            <section>
+              <div class="flex items-center gap-3 mb-4">
+                <div class="w-9 h-9 rounded-full bg-purple-500/10 flex items-center justify-center">
+                  <RefreshCw size={18} class="text-purple-500" />
+                </div>
+                <div>
+                  <h2 class="text-sm font-bold">Tareas recurrentes</h2>
+                  <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Rutinas de hoy</p>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <For each={recurringTodayStories()}>
+                  {(story) => {
+                    const completed = () => todayCompletionSet().has(story.id);
+                    return (
+                      <div
+                        onClick={() => setSelectedStory(story)}
+                        class={`flex items-center gap-2 px-3 py-3 rounded-xl cursor-pointer transition-all group ${
+                          completed() ? 'bg-base-200/40' : 'bg-base-200/60 hover:bg-base-200/90'
+                        }`}
+                      >
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleRecurringCompletion(story.id); }}
+                          class="shrink-0 transition-all"
+                        >
+                          <div class={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            completed()
+                              ? 'bg-ios-green-500 border-ios-green-500'
+                              : 'border-base-content/20 hover:border-ios-green-500/50'
+                          }`}>
+                            <Show when={completed()}>
+                              <svg class="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M2.5 6L5 8.5L9.5 3.5" />
+                              </svg>
+                            </Show>
+                          </div>
+                        </button>
+                        <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                          <span class={`text-sm flex-1 truncate transition-colors ${
+                            completed() ? 'text-base-content/30 line-through' : ''
+                          }`}>{story.title}</span>
+                          <span class="text-[9px] font-bold text-purple-500/60 bg-purple-500/10 px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
+                            <RefreshCw size={8} />
+                            {frequencyLabel(story)}
+                          </span>
+                          <ProjectBadge story={story} />
+                        </div>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </section>
+          </Show>
 
           {/* Learning */}
           <section>

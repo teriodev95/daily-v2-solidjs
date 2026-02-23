@@ -53,10 +53,19 @@ export const stories = sqliteTable('stories', {
   frequency: text('frequency', { enum: ['daily', 'weekly', 'monthly'] }),
   day_of_week: integer('day_of_week'),
   day_of_month: integer('day_of_month'),
+  recurrence_days: text('recurrence_days'),
   recurring_parent_id: text('recurring_parent_id'),
   is_active: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   created_at: text('created_at').notNull(),
   updated_at: text('updated_at').notNull(),
+});
+
+export const storyCompletions = sqliteTable('story_completions', {
+  id: text('id').primaryKey(),
+  story_id: text('story_id').notNull().references(() => stories.id, { onDelete: 'cascade' }),
+  user_id: text('user_id').notNull().references(() => users.id),
+  completion_date: text('completion_date').notNull(),
+  created_at: text('created_at').notNull(),
 });
 
 export const storyAssignees = sqliteTable('story_assignees', {
