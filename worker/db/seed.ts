@@ -6,6 +6,60 @@ import { requireAdmin } from '../middleware/auth';
 
 const seed = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+seed.post('/reset', async (c) => {
+  const db = c.get('db');
+  // Delete in order respecting foreign keys
+  await db.delete(schema.storyAssignees);
+  await db.delete(schema.acceptanceCriteria);
+  await db.delete(schema.attachments);
+  await db.delete(schema.assignments);
+  await db.delete(schema.weekGoals);
+  await db.delete(schema.dailyReports);
+  await db.delete(schema.stories);
+  await db.delete(schema.sessions);
+  await db.delete(schema.projects);
+  await db.delete(schema.users);
+  await db.delete(schema.teams);
+  return c.json({ ok: true, message: 'All data deleted' });
+});
+
+seed.post('/seed-users', async (c) => {
+  const db = c.get('db');
+  const pw = await hashPassword('password123');
+
+  await db.insert(schema.teams).values({
+    id: 't1', name: 'Equipo Desarrollo', created_at: '2026-01-01T00:00:00Z',
+  }).onConflictDoNothing();
+
+  const users = [
+    { id: 'u1', name: 'Jesús', email: 'jesus@daily.dev', role: 'admin' as const, avatar_url: 'https://api.dicebear.com/9.x/initials/svg?seed=J&backgroundColor=007AFF&textColor=ffffff' },
+    { id: 'u2', name: 'Luis', email: 'luis@daily.dev', role: 'collaborator' as const, avatar_url: 'https://api.dicebear.com/9.x/initials/svg?seed=L&backgroundColor=34C759&textColor=ffffff' },
+    { id: 'u3', name: 'Diego', email: 'diego@daily.dev', role: 'collaborator' as const, avatar_url: 'https://api.dicebear.com/9.x/initials/svg?seed=D&backgroundColor=FF9500&textColor=ffffff' },
+    { id: 'u4', name: 'Alejandro', email: 'alejandro@daily.dev', role: 'collaborator' as const, avatar_url: 'https://api.dicebear.com/9.x/initials/svg?seed=A&backgroundColor=AF52DE&textColor=ffffff' },
+    { id: 'u5', name: 'Adrián Martínez', email: 'adrian.m@daily.dev', role: 'collaborator' as const, avatar_url: 'https://api.dicebear.com/9.x/initials/svg?seed=AM&backgroundColor=5856D6&textColor=ffffff' },
+    { id: 'u6', name: 'Adrian Orozco', email: 'adrian.o@daily.dev', role: 'collaborator' as const, avatar_url: 'https://api.dicebear.com/9.x/initials/svg?seed=AO&backgroundColor=FF2D55&textColor=ffffff' },
+    { id: 'u7', name: 'Mane', email: 'mane@daily.dev', role: 'collaborator' as const, avatar_url: 'https://api.dicebear.com/9.x/initials/svg?seed=M&backgroundColor=FF9F0A&textColor=ffffff' },
+  ];
+  for (const u of users) {
+    await db.insert(schema.users).values({
+      ...u, team_id: 't1', password: pw, is_active: true, created_at: new Date().toISOString(),
+    }).onConflictDoNothing();
+  }
+
+  const projectRows = [
+    { id: 'p1', name: 'Xpress', prefix: 'XP', color: '#007AFF', icon_url: 'https://api.dicebear.com/9.x/initials/svg?seed=XP&backgroundColor=007AFF&textColor=ffffff' },
+    { id: 'p2', name: 'Daily Check', prefix: 'DC', color: '#34C759', icon_url: 'https://api.dicebear.com/9.x/initials/svg?seed=DC&backgroundColor=34C759&textColor=ffffff' },
+    { id: 'p3', name: 'Portal Clientes', prefix: 'PC', color: '#FF9500', icon_url: 'https://api.dicebear.com/9.x/initials/svg?seed=PC&backgroundColor=FF9500&textColor=ffffff' },
+  ];
+  for (const p of projectRows) {
+    await db.insert(schema.projects).values({
+      ...p, team_id: 't1', status: 'active', created_by: 'u1', created_at: new Date().toISOString(),
+    }).onConflictDoNothing();
+  }
+
+  return c.json({ ok: true, message: 'Team, users & projects seeded (no test data)' });
+});
+
 seed.post('/seed', async (c) => {
   const db = c.get('db');
   const pw = await hashPassword('password123');

@@ -25,7 +25,7 @@ const CreateAssignmentModal: Component<CreateAssignmentModalProps> = (props) => 
   const [closing, setClosing] = createSignal(false);
   const [error, setError] = createSignal('');
 
-  const activeMembers = () => data.users().filter(u => u.is_active && u.id !== auth.user()?.id);
+  const activeMembers = () => data.users().filter(u => u.is_active);
   const activeProjects = () => data.projects().filter(p => p.status === 'active');
 
   const canSubmit = () => title().trim() && assignedTo();

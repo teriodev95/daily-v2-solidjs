@@ -84,6 +84,7 @@ interface Props {
   onClose: () => void;
   onDeleted?: () => void;
   onUpdated?: (storyId: string, fields: Record<string, unknown>) => void;
+  zIndex?: number;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
@@ -305,7 +306,8 @@ const StoryDetail: Component<Props> = (props) => {
 
   return (
     <div
-      class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center animate-in fade-in duration-200"
+      class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center animate-in fade-in duration-200"
+      style={{ "z-index": props.zIndex ?? 100 }}
       onClick={() => props.onClose()}
     >
       <div

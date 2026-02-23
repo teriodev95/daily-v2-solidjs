@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import {
   Users, FolderKanban, Plus, Pencil, Shield,
   ChevronDown, ChevronRight, UserIcon, Archive, Send,
-  Flag, CalendarDays,
+  Flag, CalendarDays, Copy, Check,
 } from 'lucide-solid';
 import MemberModal from '../components/MemberModal';
 import ProjectModal from '../components/ProjectModal';
@@ -27,6 +27,14 @@ const AdminPage: Component = () => {
   const [showInactive, setShowInactive] = createSignal(false);
   const [showArchived, setShowArchived] = createSignal(false);
   const [showClosed, setShowClosed] = createSignal(false);
+  const [copiedId, setCopiedId] = createSignal<string | null>(null);
+
+  const copyEmail = (e: MouseEvent, member: User) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(member.email);
+    setCopiedId(member.id);
+    setTimeout(() => setCopiedId(null), 1500);
+  };
 
   // Assignments resource
   const [assignmentsList, { refetch: refetchAssignments }] = createResource(
@@ -183,7 +191,7 @@ const AdminPage: Component = () => {
                         </div>
                         <p class="text-[11px] text-base-content/30 truncate">{member.email}</p>
                       </div>
-                      <div class="flex items-center gap-2 shrink-0">
+                      <div class="flex items-center gap-1.5 shrink-0">
                         <span class={`text-[9px] px-1.5 py-0.5 rounded-md font-medium ${
                           member.role === 'admin'
                             ? 'bg-amber-500/15 text-amber-500'
@@ -191,6 +199,19 @@ const AdminPage: Component = () => {
                         }`}>
                           {member.role === 'admin' ? 'Admin' : 'Colab'}
                         </span>
+                        <button
+                          onClick={(e) => copyEmail(e, member)}
+                          class={`p-1.5 rounded-lg transition-all duration-200 ${
+                            copiedId() === member.id
+                              ? 'bg-ios-green-500/15 text-ios-green-500'
+                              : 'text-base-content/15 opacity-0 group-hover:opacity-100 hover:bg-base-content/5 hover:text-base-content/40'
+                          }`}
+                          title={`Copiar ${member.email}`}
+                        >
+                          <Show when={copiedId() === member.id} fallback={<Copy size={13} />}>
+                            <Check size={13} />
+                          </Show>
+                        </button>
                         <Pencil size={13} class="text-base-content/15 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </div>
@@ -231,6 +252,19 @@ const AdminPage: Component = () => {
                           <p class="text-sm font-medium truncate">{member.name}</p>
                           <p class="text-[11px] text-base-content/20 truncate">{member.email}</p>
                         </div>
+                        <button
+                          onClick={(e) => copyEmail(e, member)}
+                          class={`p-1.5 rounded-lg transition-all duration-200 shrink-0 ${
+                            copiedId() === member.id
+                              ? 'bg-ios-green-500/15 text-ios-green-500'
+                              : 'text-base-content/15 hover:bg-base-content/5 hover:text-base-content/40'
+                          }`}
+                          title={`Copiar ${member.email}`}
+                        >
+                          <Show when={copiedId() === member.id} fallback={<Copy size={13} />}>
+                            <Check size={13} />
+                          </Show>
+                        </button>
                         <span class="text-[9px] px-1.5 py-0.5 rounded-md font-medium bg-red-500/10 text-red-400 shrink-0">Inactivo</span>
                       </div>
                     )}

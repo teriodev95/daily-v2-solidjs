@@ -348,36 +348,16 @@ const CalendarModal: Component<Props> = (props) => {
         </div>
       </div>
 
-      {/* ── StoryDetail overlay — above calendar at z-210 ── */}
+      {/* ── StoryDetail overlay — above calendar ── */}
       <Show when={detailStory()}>
         {(story) => (
-          <div
-            class="fixed inset-0 z-[210]"
-            style={{
-              animation: isDetailExiting()
-                ? 'cal-detail-out 0.25s cubic-bezier(0.32,0.72,0,1) forwards'
-                : 'cal-detail-in 0.3s cubic-bezier(0.32,0.72,0,1) forwards',
-            }}
-          >
-            <StoryDetail
-              story={story()}
-              onClose={closeDetail}
-            />
-          </div>
+          <StoryDetail
+            story={story()}
+            onClose={closeDetail}
+            zIndex={210}
+          />
         )}
       </Show>
-
-      {/* Inline keyframes for enter/exit */}
-      <style>{`
-        @keyframes cal-detail-in {
-          from { opacity: 0; transform: translateY(12px) scale(0.98); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes cal-detail-out {
-          from { opacity: 1; transform: translateY(0) scale(1); }
-          to   { opacity: 0; transform: translateY(8px) scale(0.98); }
-        }
-      `}</style>
     </>
   );
 };
