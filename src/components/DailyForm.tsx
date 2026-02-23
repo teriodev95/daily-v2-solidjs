@@ -33,6 +33,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
   let todayTasksContainer: HTMLDivElement = undefined!;
   let pilaContainer: HTMLDivElement = undefined!;
   let weekGoalsContainer: HTMLDivElement = undefined!;
+  let weekGoalsAddBtn: HTMLButtonElement = undefined!;
 
   // Datos internos (no reactivos)
   let completedYesterdayData: string[] = [''];
@@ -422,7 +423,6 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
     removeButton.addEventListener('click', () => {
       onRemove(index);
-      triggerAutoSave(); // Activar auto-guardado cuando se elimine un elemento
     });
 
     actionsContainer.appendChild(removeButton);
@@ -447,8 +447,19 @@ const DailyForm: Component<DailyFormProps> = (props) => {
     return null;
   };
 
+  // AbortControllers para limpiar event listeners de drop zones al re-renderizar
+  const dropZoneControllers: Record<string, AbortController> = {};
+
   // Función para crear zona de drop
   const createDropZone = (sectionType: 'yesterday' | 'today' | 'pila', container: HTMLElement) => {
+    // Abortar listeners previos de esta sección para evitar acumulación
+    if (dropZoneControllers[sectionType]) {
+      dropZoneControllers[sectionType].abort();
+    }
+    const controller = new AbortController();
+    dropZoneControllers[sectionType] = controller;
+    const signal = controller.signal;
+
     const indicatorId = sectionType === 'yesterday' ? 'yesterday-drop-indicator' :
       sectionType === 'today' ? 'today-drop-indicator' :
         'pila-drop-indicator';
@@ -460,7 +471,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         indicator.style.opacity = '1';
       }
       container.classList.add('bg-blue-50', 'dark:bg-blue-900/20', 'border-blue-300', 'dark:border-blue-600');
-    });
+    }, { signal });
 
     container.addEventListener('dragleave', (e) => {
       // Solo ocultar si realmente salimos del container
@@ -471,7 +482,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         }
         container.classList.remove('bg-blue-50', 'dark:bg-blue-900/20', 'border-blue-300', 'dark:border-blue-600');
       }
-    });
+    }, { signal });
 
     container.addEventListener('drop', (e) => {
       e.preventDefault();
@@ -507,7 +518,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           triggerAutoSave();
         }
       }
-    });
+    }, { signal });
   };
 
   // Función para crear botón de agregar
@@ -522,7 +533,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
 
   // Funciones para renderizar secciones
   const renderCompletedYesterday = () => {
-    completedYesterdayContainer.innerHTML = '';
+    const fragment = document.createDocumentFragment();
 
     completedYesterdayData.forEach((value, index) => {
       const element = createTextarea(
@@ -530,35 +541,38 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         value,
         (idx, val) => {
           completedYesterdayData[idx] = val;
-          triggerAutoSave(); // Activar auto-guardado
+          triggerAutoSave();
         },
         (idx) => {
-          if (completedYesterdayData.length > 1) {
+          if (completedYesterdayData.length > 1 && idx >= 0 && idx < completedYesterdayData.length) {
             completedYesterdayData.splice(idx, 1);
             renderCompletedYesterday();
-            triggerAutoSave(); // Activar auto-guardado
+            triggerAutoSave();
           }
         },
         index,
         completedYesterdayData.length > 1,
         'yesterday'
       );
-      completedYesterdayContainer.appendChild(element);
+      fragment.appendChild(element);
     });
 
     const addButton = createAddButton('¿Algo más que logré?', () => {
       completedYesterdayData.push('');
       renderCompletedYesterday();
-      triggerAutoSave(); // Activar auto-guardado al agregar elemento
+      triggerAutoSave();
     });
-    completedYesterdayContainer.appendChild(addButton);
+    fragment.appendChild(addButton);
+
+    completedYesterdayContainer.innerHTML = '';
+    completedYesterdayContainer.appendChild(fragment);
 
     // Configurar zona de drop
     createDropZone('yesterday', completedYesterdayContainer);
   };
 
   const renderTodayTasks = () => {
-    todayTasksContainer.innerHTML = '';
+    const fragment = document.createDocumentFragment();
 
     todayTasksData.forEach((value, index) => {
       const wrapper = document.createElement('div');
@@ -569,13 +583,13 @@ const DailyForm: Component<DailyFormProps> = (props) => {
         value,
         (idx, val) => {
           todayTasksData[idx] = val;
-          triggerAutoSave(); // Activar auto-guardado
+          triggerAutoSave();
         },
         (idx) => {
-          if (todayTasksData.length > 1) {
+          if (todayTasksData.length > 1 && idx >= 0 && idx < todayTasksData.length) {
             todayTasksData.splice(idx, 1);
             renderTodayTasks();
-            triggerAutoSave(); // Activar auto-guardado
+            triggerAutoSave();
           }
         },
         index,
@@ -615,7 +629,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
             priorityButton.title = 'Activar como prioridad';
             priorityButton.addEventListener('click', () => {
               handleActivatePriority(index);
-              renderTodayTasks(); // Re-renderizar para actualizar estado del botón
+              renderTodayTasks();
             });
           }
 
@@ -630,22 +644,26 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       }
 
       wrapper.appendChild(element);
-      todayTasksContainer.appendChild(wrapper);
+      fragment.appendChild(wrapper);
     });
 
     const addButton = createAddButton('¿Otra prioridad para hoy?', () => {
       todayTasksData.push('');
       renderTodayTasks();
-      triggerAutoSave(); // Activar auto-guardado al agregar elemento
+      triggerAutoSave();
     });
-    todayTasksContainer.appendChild(addButton);
+    fragment.appendChild(addButton);
+
+    todayTasksContainer.innerHTML = '';
+    todayTasksContainer.appendChild(fragment);
 
     // Configurar zona de drop
     createDropZone('today', todayTasksContainer);
   };
 
   const renderPila = () => {
-    pilaContainer.innerHTML = '';
+    // Build new elements in a fragment to avoid visual flash
+    const fragment = document.createDocumentFragment();
 
     pilaData.forEach((value, index) => {
       const element = createTextarea(
@@ -656,15 +674,17 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           triggerAutoSave();
         },
         (idx) => {
-          pilaData.splice(idx, 1);
-          renderPila();
-          triggerAutoSave();
+          if (idx >= 0 && idx < pilaData.length) {
+            pilaData.splice(idx, 1);
+            renderPila();
+            triggerAutoSave();
+          }
         },
         index,
         true,
         'pila'
       );
-      pilaContainer.appendChild(element);
+      fragment.appendChild(element);
     });
 
     // Si no hay tareas en la pila, mostrar mensaje
@@ -672,8 +692,12 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       const emptyMessage = document.createElement('div');
       emptyMessage.className = 'flex items-center justify-center min-h-[100px] text-gray-400 dark:text-gray-500 text-sm';
       emptyMessage.innerHTML = '<div class="text-center"><p>📦</p><p class="mt-2">Arrastra aquí las tareas para después</p></div>';
-      pilaContainer.appendChild(emptyMessage);
+      fragment.appendChild(emptyMessage);
     }
+
+    // Swap content atomically to prevent flash
+    pilaContainer.innerHTML = '';
+    pilaContainer.appendChild(fragment);
 
     // Configurar zona de drop
     createDropZone('pila', pilaContainer);
@@ -730,6 +754,36 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       triggerAutoSave();
     });
 
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // Add new goal after current one
+        weekGoalsData.splice(index + 1, 0, { text: '', completed: false });
+        renderWeekGoals();
+        triggerAutoSave();
+        // Focus the newly created input
+        const inputs = weekGoalsContainer.querySelectorAll('input[type="text"]');
+        const newInput = inputs[index + 1] as HTMLInputElement | undefined;
+        if (newInput) {
+          newInput.focus();
+          newInput.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        }
+      } else if (e.key === 'Backspace' && input.value === '' && weekGoalsData.length > 1) {
+        e.preventDefault();
+        // Remove empty goal on Backspace and focus previous
+        const focusIdx = Math.max(0, index - 1);
+        weekGoalsData.splice(index, 1);
+        renderWeekGoals();
+        triggerAutoSave();
+        const inputs = weekGoalsContainer.querySelectorAll('input[type="text"]');
+        const prevInput = inputs[focusIdx] as HTMLInputElement | undefined;
+        if (prevInput) {
+          prevInput.focus();
+          prevInput.setSelectionRange(prevInput.value.length, prevInput.value.length);
+        }
+      }
+    });
+
     input.addEventListener('blur', () => {
       triggerImmediateAutoSave();
     });
@@ -783,20 +837,21 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       weekGoalsContainer.appendChild(element);
     });
 
-    const addButton = createAddButton('Añadir nuevo objetivo clave...', () => {
-      weekGoalsData.push({ text: '', completed: false });
-      renderWeekGoals();
-      triggerAutoSave();
+  };
+
+  const handleAddWeekGoal = () => {
+    weekGoalsData.push({ text: '', completed: false });
+    renderWeekGoals();
+    triggerAutoSave();
+    // Focus the newly created input and scroll to it
+    requestAnimationFrame(() => {
+      const inputs = weekGoalsContainer.querySelectorAll('input[type="text"]');
+      const newInput = inputs[inputs.length - 1] as HTMLInputElement | undefined;
+      if (newInput) {
+        newInput.focus();
+        newInput.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
     });
-
-    // Estilizar el botón de agregar para que coincida con el diseño
-    // Estilizar el botón de agregar para que coincida con el diseño (Icono + simple)
-    addButton.className = 'flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-full transition-all duration-200';
-    addButton.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-    `;
-
-    weekGoalsContainer.appendChild(addButton);
   };
 
   // Cerrar menú de impresión al hacer clic fuera
@@ -997,7 +1052,7 @@ const DailyForm: Component<DailyFormProps> = (props) => {
       <div class="sticky top-[69px] lg:top-[80px] z-40 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 backdrop-blur-sm transition-all duration-300 flex items-center justify-center">
 
         {/* Barra de Objetivos */}
-        <div class="w-full max-w-4xl bg-white dark:bg-[#0A0A0A] rounded-full px-2 py-2 flex items-center shadow-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+        <div class="w-full max-w-4xl bg-white dark:bg-[#0A0A0A] rounded-full px-2 py-2 flex items-center shadow-lg border border-gray-200 dark:border-gray-800">
           {/* Icon Section */}
           <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800/50 flex items-center justify-center ml-1">
             <div class="relative w-5 h-5 flex items-center justify-center">
@@ -1010,10 +1065,19 @@ const DailyForm: Component<DailyFormProps> = (props) => {
           <div class="h-6 w-px bg-gray-200 dark:bg-gray-800 mx-3 hidden sm:block"></div>
 
           {/* Horizontal Scrollable Goals */}
-          {/* Horizontal Scrollable Goals */}
-          <div class="flex-1 flex items-center overflow-x-auto space-x-6 px-2 no-scrollbar mask-linear-fade" ref={weekGoalsContainer!}>
+          <div class="flex-1 flex items-center overflow-x-auto space-x-6 px-2 no-scrollbar" ref={weekGoalsContainer!}>
             {/* Goals injected here */}
           </div>
+
+          {/* Add Goal Button - fixed outside scroll area */}
+          <button
+            type="button"
+            class="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-full transition-all duration-200 mr-1"
+            onClick={handleAddWeekGoal}
+            ref={weekGoalsAddBtn!}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
         </div>
 
       </div>
