@@ -1,5 +1,5 @@
 import { createSignal, createResource, createEffect, onCleanup, For, Show, type Component } from 'solid-js';
-import type { Story, StoryStatus, Assignment } from '../types';
+import type { Story, StoryStatus, Assignment, WeekGoal } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
@@ -62,13 +62,85 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const [localStories, setLocalStories] = createSignal<Story[]>([]);
   const [exitingIds, setExitingIds] = createSignal<Set<string>>(new Set());
   const [enteringIds, setEnteringIds] = createSignal<Set<string>>(new Set());
+  const [deletedIds, setDeletedIds] = createSignal<Set<string>>(new Set());
 
   createEffect(() => {
     const fetched = userStories();
-    if (fetched) setLocalStories(fetched as Story[]);
+    if (fetched) {
+      const removed = deletedIds();
+      if (removed.size > 0) {
+        setLocalStories((fetched as Story[]).filter(s => !removed.has(s.id)));
+      } else {
+        setLocalStories(fetched as Story[]);
+      }
+    }
   });
 
   const report = () => reportData();
+
+  // ─── Learnings & impediments (JSON array inside string field) ───
+  const parseItems = (raw: string | undefined | null): string[] => {
+    if (!raw) return [];
+    try { const arr = JSON.parse(raw); return Array.isArray(arr) ? arr : [raw]; }
+    catch { return raw.trim() ? [raw] : []; }
+  };
+
+  const [learnings, setLearnings] = createSignal<string[]>([]);
+  const [impediments, setImpediments] = createSignal<string[]>([]);
+  const [newLearning, setNewLearning] = createSignal('');
+  const [newImpediment, setNewImpediment] = createSignal('');
+
+  createEffect(() => {
+    const r = report();
+    if (r) {
+      setLearnings(parseItems(r.learning));
+      setImpediments(parseItems(r.impediments));
+    }
+  });
+
+  const getWeekNumber = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    const diff = now.getTime() - start.getTime();
+    return Math.ceil((diff / 86400000 + start.getDay() + 1) / 7);
+  };
+
+  const saveReport = (field: 'learning' | 'impediments', items: string[]) => {
+    api.reports.upsert(today, {
+      week_number: report()?.week_number ?? getWeekNumber(),
+      [field]: JSON.stringify(items),
+    }).catch(() => { });
+  };
+
+  const addLearning = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const next = [...learnings(), trimmed];
+    setLearnings(next);
+    setNewLearning('');
+    saveReport('learning', next);
+  };
+
+  const removeLearning = (index: number) => {
+    const next = learnings().filter((_, i) => i !== index);
+    setLearnings(next);
+    saveReport('learning', next);
+  };
+
+  const addImpediment = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const next = [...impediments(), trimmed];
+    setImpediments(next);
+    setNewImpediment('');
+    saveReport('impediments', next);
+  };
+
+  const removeImpediment = (index: number) => {
+    const next = impediments().filter((_, i) => i !== index);
+    setImpediments(next);
+    saveReport('impediments', next);
+  };
 
   // Date helpers
   const yesterdayRange = () => {
@@ -194,14 +266,17 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const dismissToast = (then: () => void) => {
     setToastExiting(true);
     setTimeout(() => {
-      setToastExiting(false);
       setDeletePending(null);
+      setToastExiting(false);
       then();
     }, 180);
   };
 
   const ctxDelete = (story: Story) => {
     closeCtxMenu();
+
+    // Track as deleted so refetches won't restore it
+    setDeletedIds(prev => new Set([...prev, story.id]));
 
     // Exit animation then remove from list
     setExitingIds(prev => new Set([...prev, story.id]));
@@ -219,7 +294,6 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     deleteTimer = setTimeout(() => {
       dismissToast(() => {
         api.stories.delete(story.id).catch(() => { });
-        refetchStories();
       });
       deleteTimer = null;
     }, 4000);
@@ -279,6 +353,8 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
     dismissToast(() => {
       if (pending.story) {
+        // Remove from deleted tracking
+        setDeletedIds(prev => { const n = new Set(prev); n.delete(pending.story!.id); return n; });
         // Restore story with enter animation
         setEnteringIds(prev => new Set([...prev, pending.story!.id]));
         setLocalStories(prev => [...prev, pending.story!]);
@@ -293,16 +369,22 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   onCleanup(() => { if (deleteTimer) clearTimeout(deleteTimer); });
 
-  // Close context menu on outside click or Escape
+  // Close context menu on outside click or Escape, Ctrl+Z undo
   const handleGlobalClick = () => { if (ctxMenu()) closeCtxMenu(); };
-  const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') closeCtxMenu(); };
+  const handleKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') closeCtxMenu();
+    if (e.key === 'z' && (e.metaKey || e.ctrlKey) && !e.shiftKey && deletePending()) {
+      e.preventDefault();
+      undoDelete();
+    }
+  };
 
   if (typeof document !== 'undefined') {
     document.addEventListener('click', handleGlobalClick);
-    document.addEventListener('keydown', handleEsc);
+    document.addEventListener('keydown', handleKeydown);
     onCleanup(() => {
       document.removeEventListener('click', handleGlobalClick);
-      document.removeEventListener('keydown', handleEsc);
+      document.removeEventListener('keydown', handleKeydown);
     });
   }
 
@@ -387,6 +469,126 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     );
   };
 
+  // Inline goal add
+  const GoalInlineAdd = () => {
+    const [editing, setEditing] = createSignal(false);
+    const [value, setValue] = createSignal('');
+    let inputRef!: HTMLInputElement;
+
+    const submit = () => {
+      const v = value().trim();
+      if (!v) return;
+      const now = new Date();
+      const start = new Date(now.getFullYear(), 0, 1);
+      const wn = Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
+      const tempId = `temp-${Date.now()}`;
+      // Optimistic add
+      mutateGoals(prev => [...(prev ?? []), {
+        id: tempId, user_id: '', team_id: '', week_number: wn, year: now.getFullYear(),
+        text: v, is_completed: false, is_closed: false, is_shared: false, created_at: now.toISOString(),
+      }]);
+      setValue('');
+      api.goals.create({ week_number: wn, year: now.getFullYear(), text: v })
+        .then(() => refetchGoals())
+        .catch(() => mutateGoals(prev => prev?.filter(g => g.id !== tempId) ?? []));
+    };
+
+    const open = () => {
+      setEditing(true);
+      setTimeout(() => inputRef?.focus(), 10);
+    };
+
+    const close = () => {
+      if (!value().trim()) setEditing(false);
+    };
+
+    return (
+      <Show when={editing()} fallback={
+        <button
+          onClick={open}
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-base-content/25 border border-dashed border-base-300/50 whitespace-nowrap hover:bg-base-content/5 transition-all shrink-0 shadow-sm"
+        >
+          <Plus size={13} />
+        </button>
+      }>
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-base-200/90 border border-ios-blue-500/40 shrink-0 shadow-sm">
+          <input
+            ref={inputRef}
+            value={value()}
+            onInput={(e) => setValue(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submit(); }
+              if (e.key === 'Escape') { setValue(''); setEditing(false); }
+            }}
+            onBlur={close}
+            placeholder="Nuevo objetivo..."
+            class="w-36 bg-transparent text-[13px] font-medium outline-none placeholder:text-base-content/20"
+          />
+        </div>
+      </Show>
+    );
+  };
+
+  // Inline goal chip (view + click-to-edit)
+  const GoalChip = (p: { goal: WeekGoal }) => {
+    const [editing, setEditing] = createSignal(false);
+    const [value, setValue] = createSignal(p.goal.text);
+    let inputRef!: HTMLInputElement;
+
+    const save = () => {
+      const v = value().trim();
+      if (!v || v === p.goal.text) { setValue(p.goal.text); setEditing(false); return; }
+      mutateGoals(prev => prev?.map(g => g.id === p.goal.id ? { ...g, text: v } : g) ?? []);
+      setEditing(false);
+      api.goals.update(p.goal.id, { text: v }).catch(() => {
+        mutateGoals(prev => prev?.map(g => g.id === p.goal.id ? { ...g, text: p.goal.text } : g) ?? []);
+      });
+    };
+
+    const startEdit = () => {
+      setEditing(true);
+      setValue(p.goal.text);
+      setTimeout(() => { inputRef?.focus(); inputRef?.select(); }, 10);
+    };
+
+    return (
+      <Show when={editing()} fallback={
+        <div
+          onClick={startEdit}
+          onContextMenu={(e) => openGoalCtxMenu(e, p.goal)}
+          class={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap border transition-all shrink-0 cursor-pointer shadow-sm ${p.goal.is_completed
+            ? 'bg-base-content/5 text-base-content/30 line-through border-transparent hover:bg-base-content/10 shadow-none'
+            : 'bg-base-200/90 border-base-300/60 hover:bg-base-200'
+            }`}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleGoalComplete(p.goal.id, p.goal.is_completed); }}
+            class="shrink-0 p-0.5 -ml-0.5 rounded hover:bg-base-content/10 transition-colors"
+          >
+            <Show when={p.goal.is_completed} fallback={<Circle size={13} class="text-base-content/20" />}>
+              <CheckCircle size={13} class="text-ios-green-500" />
+            </Show>
+          </button>
+          {p.goal.text}
+        </div>
+      }>
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-base-200/90 border border-ios-blue-500/40 shrink-0 shadow-sm">
+          <input
+            ref={inputRef}
+            value={value()}
+            onInput={(e) => setValue(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); save(); }
+              if (e.key === 'Escape') { setValue(p.goal.text); setEditing(false); }
+            }}
+            onBlur={save}
+            class="w-48 bg-transparent text-[13px] font-medium outline-none placeholder:text-base-content/20"
+          />
+        </div>
+      </Show>
+    );
+  };
+
   // Reusable story badge
   const ProjectBadge = (p: { story: Story }) => {
     const proj = getProject(p.story.project_id);
@@ -418,29 +620,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                     <Target size={14} class="text-base-content/50" />
                   </div>
                   <For each={myGoals()}>
-                    {(goal) => (
-                      <div
-                        onContextMenu={(e) => openGoalCtxMenu(e, goal)}
-                        class={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap border transition-all shrink-0 cursor-pointer shadow-sm ${goal.is_completed
-                          ? 'bg-base-content/5 text-base-content/30 line-through border-transparent hover:bg-base-content/10 shadow-none'
-                          : 'bg-base-200/90 border-base-300/60 hover:bg-base-200'
-                          }`}
-                      >
-                        <button
-                          onClick={(e) => { e.stopPropagation(); toggleGoalComplete(goal.id, goal.is_completed); }}
-                          class="shrink-0 p-0.5 -ml-0.5 rounded hover:bg-base-content/10 transition-colors"
-                        >
-                          <Show when={goal.is_completed} fallback={<Circle size={13} class="text-base-content/20" />}>
-                            <CheckCircle size={13} class="text-ios-green-500" />
-                          </Show>
-                        </button>
-                        {goal.text}
-                      </div>
-                    )}
+                    {(goal) => <GoalChip goal={goal} />}
                   </For>
-                  <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-base-content/25 border border-dashed border-base-300/50 whitespace-nowrap hover:bg-base-content/5 transition-all shrink-0 shadow-sm">
-                    <Plus size={13} />
-                  </button>
+                  <GoalInlineAdd />
                 </div>
               </div>
 
@@ -661,13 +843,35 @@ const ReportPage: Component<ReportPageProps> = (props) => {
               </div>
             </div>
             <div class="space-y-2">
-              <Show when={report()?.learning}>
-                <div class="flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
-                  <Circle size={14} class="text-base-content/15 shrink-0" />
-                  <span class="text-sm">{report()!.learning}</span>
-                </div>
-              </Show>
-              <button class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all">
+              <For each={learnings()}>
+                {(item, i) => (
+                  <div class="group flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
+                    <Circle size={14} class="text-base-content/15 shrink-0" />
+                    <span class="text-sm flex-1">{item}</span>
+                    <button
+                      onClick={() => removeLearning(i())}
+                      class="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-500/10 transition-all"
+                    >
+                      <Trash2 size={13} class="text-red-500/50" />
+                    </button>
+                  </div>
+                )}
+              </For>
+              <div class="flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/30 focus-within:bg-base-200/50 transition-all">
+                <Circle size={14} class="text-base-content/10 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Escribe un aprendizaje..."
+                  value={newLearning()}
+                  onInput={(e) => setNewLearning(e.currentTarget.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addLearning(newLearning()); }}
+                  class="flex-1 bg-transparent text-sm outline-none placeholder:text-base-content/20"
+                />
+              </div>
+              <button
+                onClick={() => { const el = document.querySelector<HTMLInputElement>('[placeholder="Escribe un aprendizaje..."]'); el?.focus(); }}
+                class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all"
+              >
                 <Plus size={14} />
                 Añadir nuevo aprendizaje...
               </button>
@@ -686,13 +890,35 @@ const ReportPage: Component<ReportPageProps> = (props) => {
               </div>
             </div>
             <div class="space-y-2">
-              <Show when={report()?.impediments}>
-                <div class="flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
-                  <Circle size={14} class="text-base-content/15 shrink-0" />
-                  <span class="text-sm">{report()!.impediments}</span>
-                </div>
-              </Show>
-              <button class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all">
+              <For each={impediments()}>
+                {(item, i) => (
+                  <div class="group flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
+                    <Circle size={14} class="text-base-content/15 shrink-0" />
+                    <span class="text-sm flex-1">{item}</span>
+                    <button
+                      onClick={() => removeImpediment(i())}
+                      class="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-500/10 transition-all"
+                    >
+                      <Trash2 size={13} class="text-red-500/50" />
+                    </button>
+                  </div>
+                )}
+              </For>
+              <div class="flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/30 focus-within:bg-base-200/50 transition-all">
+                <Circle size={14} class="text-base-content/10 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Escribe un impedimento..."
+                  value={newImpediment()}
+                  onInput={(e) => setNewImpediment(e.currentTarget.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addImpediment(newImpediment()); }}
+                  class="flex-1 bg-transparent text-sm outline-none placeholder:text-base-content/20"
+                />
+              </div>
+              <button
+                onClick={() => { const el = document.querySelector<HTMLInputElement>('[placeholder="Escribe un impedimento..."]'); el?.focus(); }}
+                class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all"
+              >
                 <Plus size={14} />
                 Añadir nuevo impedimento...
               </button>
@@ -840,16 +1066,11 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       {/* Undo delete toast */}
       <Show when={deletePending()}>
         {(pending) => (
-          <div class={`fixed bottom-[6rem] md:bottom-24 left-1/2 -translate-x-1/2 z-[110] max-w-sm w-[calc(100%-2rem)] sm:w-auto ${toastExiting() ? 'animate-toast-out' : 'animate-toast-in'}`}>
-            <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-base-300 border border-base-content/[0.08] shadow-xl shadow-black/20 backdrop-blur-xl">
-              <Trash2 size={14} class="text-red-500/60 shrink-0" />
-              <span class="text-sm text-base-content/70 whitespace-nowrap">{pending().goalId ? "Objetivo eliminado" : "Tarea eliminada"}</span>
-              <button
-                onClick={undoDelete}
-                class="text-sm font-semibold text-ios-blue-500 hover:text-ios-blue-400 transition-colors whitespace-nowrap"
-              >
-                Deshacer
-              </button>
+          <div class={`fixed bottom-[6rem] md:bottom-24 inset-x-0 z-[110] flex justify-center pointer-events-none ${toastExiting() ? 'animate-toast-out' : 'animate-toast-in'}`}>
+            <div class="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-base-300 border border-base-content/[0.08] shadow-xl shadow-black/20 backdrop-blur-xl">
+              <Trash2 size={13} class="text-red-500/60 shrink-0" />
+              <span class="text-[13px] text-base-content/70">{pending().goalId ? "Objetivo eliminado" : "Tarea eliminada"}</span>
+              <kbd class="text-[11px] text-base-content/40 font-medium ml-1">⌘Z</kbd>
             </div>
           </div>
         )}

@@ -1,5 +1,6 @@
 import { createSignal, Show, type Component } from 'solid-js';
 import { useAuth } from '../lib/auth';
+import dailyIcon from '../../assets/daily-icon.png';
 
 const LoginPage: Component = () => {
   const auth = useAuth();
@@ -27,9 +28,7 @@ const LoginPage: Component = () => {
       <div class="w-full max-w-sm space-y-8">
         {/* Logo */}
         <div class="flex flex-col items-center gap-3">
-          <div class="w-14 h-14 rounded-2xl bg-ios-blue-500 flex items-center justify-center text-white font-bold text-2xl shadow-lg">
-            D
-          </div>
+          <img src={dailyIcon} alt="Daily Check" class="w-14 h-14 rounded-2xl shadow-lg" />
           <div class="text-center">
             <h1 class="text-xl font-bold text-base-content">Daily Check</h1>
             <p class="text-sm text-base-content/60 mt-1">Inicia sesión para continuar</p>

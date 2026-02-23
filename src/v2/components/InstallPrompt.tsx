@@ -39,8 +39,8 @@ const InstallPrompt: Component = () => {
 
   return (
     <Show when={showPrompt()}>
-      <div class="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-[60] animate-toast-in">
-        <div class="flex items-center gap-3 bg-base-200/90 backdrop-blur-2xl border border-base-content/[0.08] rounded-2xl shadow-2xl shadow-black/30 px-4 py-3 max-w-sm">
+      <div class="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] inset-x-0 flex justify-center z-[60] animate-toast-in pointer-events-none">
+        <div class="pointer-events-auto flex items-center gap-3 bg-base-200/90 backdrop-blur-2xl border border-base-content/[0.08] rounded-2xl shadow-2xl shadow-black/30 px-4 py-3 max-w-sm">
           <div class="w-10 h-10 rounded-xl bg-ios-blue-500/15 flex items-center justify-center shrink-0">
             <Download size={20} class="text-ios-blue-500" />
           </div>

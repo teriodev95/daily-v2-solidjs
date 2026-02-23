@@ -99,9 +99,16 @@ const ShareReportModal: Component<ShareReportModalProps> = (props) => {
     lines.push('');
 
     // Learning
+    const parseItems = (raw: string | undefined | null): string[] => {
+      if (!raw) return [];
+      try { const arr = JSON.parse(raw); return Array.isArray(arr) ? arr : [raw]; }
+      catch { return raw.trim() ? [raw] : []; }
+    };
+
     lines.push('**📚 ¿QUÉ ESTOY APRENDIENDO?**');
-    if (props.report?.learning?.trim()) {
-      lines.push(`▪️ ${props.report.learning.trim()}`);
+    const learningItems = parseItems(props.report?.learning);
+    if (learningItems.length > 0) {
+      learningItems.forEach(item => lines.push(`▪️ ${item}`));
     } else {
       lines.push('▫️ Sin aprendizaje documentado');
     }
@@ -109,8 +116,9 @@ const ShareReportModal: Component<ShareReportModalProps> = (props) => {
 
     // Impediments
     lines.push('**🚧 ¿QUÉ IMPEDIMENTOS TENGO?**');
-    if (props.report?.impediments?.trim()) {
-      lines.push(`▪️ ${props.report.impediments.trim()}`);
+    const impedimentItems = parseItems(props.report?.impediments);
+    if (impedimentItems.length > 0) {
+      impedimentItems.forEach(item => lines.push(`▪️ ${item}`));
     } else {
       lines.push('▫️ Sin impedimentos identificados');
     }

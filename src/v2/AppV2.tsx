@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send } from 'lucide-solid';
+import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays } from 'lucide-solid';
+import dailyIcon from '../assets/daily-icon.png';
 import type { ReportCategory, Story } from './types';
 import { AuthProvider, useAuth } from './lib/auth';
 import { DataProvider, useData } from './lib/data';
@@ -10,6 +11,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import AdminPage from './pages/AdminPage';
 import CreateStoryModal from './components/CreateStoryModal';
 import SearchModal from './components/SearchModal';
+import CalendarModal from './components/CalendarModal';
 import StoryDetail from './components/StoryDetail';
 import InstallPrompt from './components/InstallPrompt';
 import UpdateToast from './components/UpdateToast';
@@ -28,6 +30,7 @@ const AppShell: Component = () => {
   const [showSearch, setShowSearch] = createSignal(false);
   const [searchSelectedStory, setSearchSelectedStory] = createSignal<Story | null>(null);
   const [shareRequested, setShareRequested] = createSignal(0);
+  const [showCalendar, setShowCalendar] = createSignal(false);
 
   const triggerShare = () => {
     if (activeTab() !== 'report') switchTab('report');
@@ -98,6 +101,7 @@ const AppShell: Component = () => {
         case 'p': e.preventDefault(); switchTab('projects'); break;
         case 'a': if (user()?.role === 'admin') { e.preventDefault(); switchTab('admin'); } break;
         case 't': e.preventDefault(); triggerShare(); break;
+        case 'c': e.preventDefault(); setShowCalendar(v => !v); break;
       }
     };
     document.addEventListener('keydown', handleKey);
@@ -114,10 +118,11 @@ const AppShell: Component = () => {
         <div class="max-w-5xl mx-auto flex items-center justify-between pointer-events-none">
           {/* Left Pill (Logo) */}
           <div class="pointer-events-auto h-12 px-4 flex items-center gap-2.5 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
-            <div class="w-7 h-7 rounded-lg bg-ios-blue-500 flex items-center justify-center text-white font-bold text-xs ring-1 ring-black/10">
-              D
+            <img src={dailyIcon} alt="Daily Check" class="w-7 h-7 rounded-lg ring-1 ring-black/10" />
+            <div class="flex flex-col">
+              <span class="font-semibold text-sm tracking-tight leading-tight">Daily Check</span>
+              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.4.0</span>
             </div>
-            <span class="font-semibold text-sm tracking-tight">Daily Check</span>
           </div>
 
           {/* Right Pill (Actions) */}
@@ -172,10 +177,11 @@ const AppShell: Component = () => {
         <div class="flex items-center justify-between pointer-events-none">
           {/* Left Pill (Logo) */}
           <div class="pointer-events-auto h-11 px-3.5 flex items-center gap-2 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-sm">
-            <div class="w-6 h-6 rounded-md bg-ios-blue-500 flex items-center justify-center text-white font-bold text-[10px] ring-1 ring-black/10">
-              D
+            <img src={dailyIcon} alt="Daily Check" class="w-6 h-6 rounded-md ring-1 ring-black/10" />
+            <div class="flex flex-col">
+              <span class="font-semibold text-sm tracking-tight text-base-content/90 leading-tight">Daily Check</span>
+              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.4.0</span>
             </div>
-            <span class="font-semibold text-sm tracking-tight text-base-content/90">Daily Check</span>
           </div>
 
           {/* Right Pill (Actions) */}
@@ -271,6 +277,23 @@ const AppShell: Component = () => {
           {/* Separator */}
           <div class="w-px h-6 bg-base-content/[0.1] mx-1 shrink-0 rounded-full" />
 
+          {/* Calendar */}
+          <button
+            onClick={() => setShowCalendar(v => !v)}
+            class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-[26px] transition-all duration-300 active:scale-95 group"
+            style={{ "-webkit-tap-highlight-color": "transparent" }}
+          >
+            <div class="absolute inset-0 rounded-[26px] transition-all duration-300 bg-transparent group-hover:bg-base-content/5" />
+            <div class="relative z-10 text-base-content/50 group-hover:text-base-content/80 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center group-hover:-translate-y-1 group-hover:scale-110">
+              <CalendarDays size={21} strokeWidth={2} />
+            </div>
+            <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
+              Calendario
+              <kbd class="ml-2 opacity-60 font-mono text-[9px]">C</kbd>
+              <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
+            </div>
+          </button>
+
           {/* Create FAB */}
           <button
             onClick={() => openCreateModal()}
@@ -281,7 +304,6 @@ const AppShell: Component = () => {
             <div class="relative z-10 text-ios-blue-500 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center group-hover:-translate-y-1 group-hover:scale-110">
               <Plus size={22} strokeWidth={2.5} />
             </div>
-            {/* macOS style tooltip */}
             <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
               Nueva HU
               <kbd class="ml-2 opacity-60 font-mono text-[9px]">N</kbd>
@@ -320,6 +342,15 @@ const AppShell: Component = () => {
 
           <div class="w-px h-6 bg-base-content/[0.1] mx-1 shrink-0 rounded-full" />
 
+          {/* Calendar (Mobile) */}
+          <button
+            onClick={() => setShowCalendar(v => !v)}
+            class="relative flex flex-col items-center justify-center w-10 h-12 shrink-0 rounded-[22px] transition-all duration-300 active:scale-90 text-base-content/40"
+            style={{ "-webkit-tap-highlight-color": "transparent" }}
+          >
+            <CalendarDays size={20} strokeWidth={2} />
+          </button>
+
           {/* Create FAB (Mobile) */}
           <button
             onClick={() => openCreateModal()}
@@ -347,6 +378,11 @@ const AppShell: Component = () => {
           onClose={() => setShowSearch(false)}
           onSelect={(story) => setSearchSelectedStory(story)}
         />
+      </Show>
+
+      {/* Calendar Modal */}
+      <Show when={showCalendar()}>
+        <CalendarModal onClose={() => setShowCalendar(false)} />
       </Show>
 
       {/* Story Detail from search */}

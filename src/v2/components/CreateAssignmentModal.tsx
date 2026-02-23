@@ -2,23 +2,27 @@ import { createSignal, For, Show, type Component } from 'solid-js';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
-import { X, Loader2, CalendarDays } from 'lucide-solid';
+import { X, Loader2, CalendarDays, XCircle } from 'lucide-solid';
+import type { Assignment } from '../types';
 
 interface CreateAssignmentModalProps {
+  assignment?: Assignment;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
 }
 
 const CreateAssignmentModal: Component<CreateAssignmentModalProps> = (props) => {
   const auth = useAuth();
   const data = useData();
+  const isEdit = () => !!props.assignment;
 
-  const [title, setTitle] = createSignal('');
-  const [description, setDescription] = createSignal('');
-  const [assignedTo, setAssignedTo] = createSignal('');
-  const [projectId, setProjectId] = createSignal('');
-  const [dueDate, setDueDate] = createSignal('');
+  const [title, setTitle] = createSignal(props.assignment?.title ?? '');
+  const [description, setDescription] = createSignal(props.assignment?.description ?? '');
+  const [assignedTo, setAssignedTo] = createSignal(props.assignment?.assigned_to ?? '');
+  const [projectId, setProjectId] = createSignal(props.assignment?.project_id ?? '');
+  const [dueDate, setDueDate] = createSignal(props.assignment?.due_date?.split('T')[0] ?? '');
   const [submitting, setSubmitting] = createSignal(false);
+  const [closing, setClosing] = createSignal(false);
   const [error, setError] = createSignal('');
 
   const activeMembers = () => data.users().filter(u => u.is_active && u.id !== auth.user()?.id);
@@ -32,29 +36,68 @@ const CreateAssignmentModal: Component<CreateAssignmentModalProps> = (props) => 
     setError('');
 
     try {
-      await api.assignments.create({
-        assigned_to: assignedTo(),
-        title: title().trim(),
-        description: description().trim() || undefined,
-        project_id: projectId() || undefined,
-        due_date: dueDate() || undefined,
-      });
-      props.onCreated();
+      if (isEdit()) {
+        await api.assignments.update(props.assignment!.id, {
+          title: title().trim(),
+          description: description().trim(),
+          assigned_to: assignedTo(),
+          project_id: projectId() || null,
+          due_date: dueDate() || null,
+        });
+      } else {
+        await api.assignments.create({
+          assigned_to: assignedTo(),
+          title: title().trim(),
+          description: description().trim() || undefined,
+          project_id: projectId() || undefined,
+          due_date: dueDate() || undefined,
+        });
+      }
+      props.onSaved();
       props.onClose();
     } catch (e: any) {
-      setError(e.message || 'Error al crear');
+      setError(e.message || 'Error al guardar');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Submit on Cmd+Enter
+  const handleClose = async () => {
+    if (!props.assignment || closing()) return;
+    setClosing(true);
+    try {
+      await api.assignments.update(props.assignment.id, { status: 'closed', closed_at: new Date().toISOString() });
+      props.onSaved();
+      props.onClose();
+    } catch (e: any) {
+      setError(e.message || 'Error al cerrar');
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    if (!props.assignment || closing()) return;
+    setClosing(true);
+    try {
+      await api.assignments.update(props.assignment.id, { status: 'open', closed_at: null });
+      props.onSaved();
+      props.onClose();
+    } catch (e: any) {
+      setError(e.message || 'Error al reabrir');
+    } finally {
+      setClosing(false);
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       handleSubmit();
     }
   };
+
+  const isClosed = () => props.assignment?.status === 'closed';
 
   return (
     <div
@@ -69,7 +112,10 @@ const CreateAssignmentModal: Component<CreateAssignmentModalProps> = (props) => 
             <div class="w-6 h-6 rounded-lg bg-purple-500/15 flex items-center justify-center">
               <div class="w-2 h-2 rounded-full bg-purple-500" />
             </div>
-            <h2 class="text-base font-semibold">Nueva encomienda</h2>
+            <h2 class="text-base font-semibold">{isEdit() ? 'Editar encomienda' : 'Nueva encomienda'}</h2>
+            <Show when={isClosed()}>
+              <span class="text-[9px] px-1.5 py-0.5 rounded-md font-medium bg-base-content/[0.06] text-base-content/30">Cerrada</span>
+            </Show>
           </div>
           <button onClick={props.onClose} class="p-1.5 rounded-lg hover:bg-base-content/5 text-base-content/40 transition-colors">
             <X size={18} />
@@ -139,7 +185,6 @@ const CreateAssignmentModal: Component<CreateAssignmentModalProps> = (props) => 
 
           {/* Project + Due date row */}
           <div class="grid grid-cols-2 gap-3">
-            {/* Project */}
             <div class="space-y-1.5">
               <label class="text-[10px] font-semibold uppercase text-base-content/30 tracking-wider">Proyecto <span class="text-base-content/15 normal-case">(opc.)</span></label>
               <select
@@ -154,7 +199,6 @@ const CreateAssignmentModal: Component<CreateAssignmentModalProps> = (props) => 
               </select>
             </div>
 
-            {/* Due date */}
             <div class="space-y-1.5">
               <label class="text-[10px] font-semibold uppercase text-base-content/30 tracking-wider flex items-center gap-1">
                 <CalendarDays size={9} />
@@ -179,7 +223,32 @@ const CreateAssignmentModal: Component<CreateAssignmentModalProps> = (props) => 
 
         {/* Footer */}
         <div class="flex items-center justify-between px-5 py-4 border-t border-base-content/[0.06]">
-          <kbd class="text-[9px] text-base-content/15 font-mono">⌘↵</kbd>
+          <div class="flex items-center gap-2">
+            <kbd class="text-[9px] text-base-content/15 font-mono">⌘↵</kbd>
+            <Show when={isEdit()}>
+              <Show
+                when={!isClosed()}
+                fallback={
+                  <button
+                    onClick={handleReopen}
+                    disabled={closing()}
+                    class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all"
+                  >
+                    Reabrir
+                  </button>
+                }
+              >
+                <button
+                  onClick={handleClose}
+                  disabled={closing()}
+                  class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-500/60 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                >
+                  <XCircle size={12} />
+                  Cerrar
+                </button>
+              </Show>
+            </Show>
+          </div>
           <div class="flex items-center gap-2">
             <button
               onClick={props.onClose}
@@ -195,7 +264,7 @@ const CreateAssignmentModal: Component<CreateAssignmentModalProps> = (props) => 
               <Show when={submitting()}>
                 <Loader2 size={13} class="animate-spin" />
               </Show>
-              {submitting() ? 'Creando...' : 'Crear encomienda'}
+              {submitting() ? 'Guardando...' : isEdit() ? 'Guardar cambios' : 'Crear encomienda'}
             </button>
           </div>
         </div>
