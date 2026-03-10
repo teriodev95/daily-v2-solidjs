@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
   Calendar, Target, FileText, HelpCircle, ClipboardCheck, Trash2,
-  Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban,
+  Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban, Archive,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
 import AttachmentSection from './AttachmentSection';
@@ -155,6 +155,7 @@ const StoryDetail: Component<Props> = (props) => {
   const [criteriaList, setCriteriaList] = createSignal<AcceptanceCriteria[]>([]);
   const [confirming, setConfirming] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
+  const [archiving, setArchiving] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal('');
   const [detailLoaded, setDetailLoaded] = createSignal(false);
 
@@ -229,6 +230,20 @@ const StoryDetail: Component<Props> = (props) => {
       setDeleteError(e.message || 'Error al eliminar');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const canArchive = () =>
+    props.story.is_active && props.story.status === 'done' && !props.story.frequency;
+
+  const handleArchive = async () => {
+    setArchiving(true);
+    try {
+      await api.stories.update(props.story.id, { is_active: false });
+      props.onUpdated?.(props.story.id, { is_active: false });
+      props.onClose();
+    } finally {
+      setArchiving(false);
     }
   };
 
@@ -328,16 +343,12 @@ const StoryDetail: Component<Props> = (props) => {
                             onClick={() => { setProjectId(p.id); setShowProjectPicker(false); saveImmediate({ project_id: p.id }); }}
                             class={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-semibold transition-all ${selected() ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/70'}`}
                           >
-                            <Show when={p.icon_url} fallback={
-                              <div
-                                class="w-6 h-6 rounded-lg shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
-                                style={{ "background-color": p.color }}
-                              >
-                                {p.prefix}
-                              </div>
-                            }>
-                              <img src={p.icon_url!} alt="" class="w-6 h-6 rounded-lg object-cover shadow-sm shrink-0" />
-                            </Show>
+                            <div
+                              class="w-6 h-6 rounded-lg shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
+                              style={{ "background-color": p.color }}
+                            >
+                              {p.prefix.slice(0, 2)}
+                            </div>
                             <span class="truncate">{p.name}</span>
                             <Show when={selected()}>
                               <Check size={12} class="text-ios-blue-500 ml-auto shrink-0" />
@@ -679,6 +690,22 @@ const StoryDetail: Component<Props> = (props) => {
 
           {/* Delete */}
           <div class="pt-6 mt-4 border-t border-base-content/[0.04]">
+            <Show when={canArchive()}>
+              <div class="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-base-content/[0.06] bg-base-content/[0.02] px-4 py-3">
+                <div class="min-w-0">
+                  <p class="text-[12px] font-semibold text-base-content/70">Ocultar del reporte y tableros</p>
+                  <p class="text-[11px] text-base-content/40">La tarea se conserva en base de datos, pero deja de aparecer en la app.</p>
+                </div>
+                <button
+                  onClick={handleArchive}
+                  disabled={archiving()}
+                  class="flex items-center gap-2 rounded-xl bg-base-content/[0.06] px-3 py-2 text-[12px] font-semibold text-base-content/70 transition-all hover:bg-base-content/[0.1] hover:text-base-content disabled:opacity-50"
+                >
+                  <Archive size={14} />
+                  {archiving() ? 'Ocultando...' : 'Ocultar'}
+                </button>
+              </div>
+            </Show>
             <Show when={deleteError()}>
               <p class="text-[13px] text-red-500 font-medium mb-3">{deleteError()}</p>
             </Show>

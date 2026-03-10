@@ -49,7 +49,7 @@ reports.get('/:date', async (c) => {
   const allStories = await db.select().from(schema.stories).where(eq(schema.stories.team_id, c.get('user').teamId));
 
   const userStories = allStories.filter(
-    s => s.assignee_id === userId || linkedStoryIds.has(s.id),
+    s => s.is_active && (s.assignee_id === userId || linkedStoryIds.has(s.id)),
   );
 
   const storyAssigneeLinks = await db.select().from(schema.storyAssignees);

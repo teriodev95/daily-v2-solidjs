@@ -51,7 +51,7 @@ const AdminPage: Component = () => {
   const [recurringList, { refetch: refetchRecurring }] = createResource(
     () => true,
     async () => {
-      const all = await api.stories.list();
+      const all = await api.stories.list({ include_inactive: 'true' });
       return (all as Story[]).filter(s => isRecurring(s));
     },
   );

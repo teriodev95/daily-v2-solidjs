@@ -19,9 +19,16 @@ npm run dev
 
 # Backend
 npm run dev:api
+
+# Frontend con URL .localhost estable vía Portless
+npm run dev:portless
 ```
 
 Frontend en `http://localhost:3000` — Backend en `http://localhost:8787`
+
+Con `portless`, el frontend se expone en una URL estable tipo
+`http://solidjs-daily-app.localhost:1355` y sigue usando el proxy de Vite
+hacia `http://localhost:8787` para `/api`.
 
 ## Estructura
 

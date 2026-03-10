@@ -445,7 +445,12 @@ const TasksPage: Component<TasksPageProps> = (props) => {
               setSelectedStory(null);
             }}
             onUpdated={(id, fields) => {
-              setLocalStories(prev => prev.map(s => s.id === id ? { ...s, ...fields } as Story : s));
+              setLocalStories(prev => {
+                if (fields.is_active === false) {
+                  return prev.filter(s => s.id !== id);
+                }
+                return prev.map(s => s.id === id ? { ...s, ...fields } as Story : s);
+              });
             }}
           />
         )}

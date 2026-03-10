@@ -1,11 +1,12 @@
 {
-  "name": "vite-template-solid",
+  "name": "daily",
   "version": "0.4.0",
   "description": "",
   "type": "module",
   "scripts": {
     "start": "vite",
     "dev": "vite",
+    "dev:portless": "pnpm dlx portless run vite",
     "dev:api": "wrangler dev",
     "build": "vite build",
     "serve": "vite preview",

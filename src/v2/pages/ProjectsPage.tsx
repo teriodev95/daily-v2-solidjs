@@ -183,9 +183,14 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
                     : 'bg-base-200/50 text-base-content/60 hover:bg-base-200 hover:text-base-content/90 border border-base-content/[0.04]'
                   }`}
               >
-                <Show when={project.icon_url}>
-                  <img src={project.icon_url!} alt="" class="w-4 h-4 rounded-md object-cover shadow-sm" />
-                </Show>
+                <div
+                  class={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-[9px] font-bold shadow-sm ${
+                    active() ? 'text-white' : 'text-white/95'
+                  }`}
+                  style={{ "background-color": project.color }}
+                >
+                  {project.prefix.slice(0, 2)}
+                </div>
                 <span>{project.name}</span>
                 <div class={`w-1.5 h-1.5 rounded-full shrink-0 transition-opacity ${active() ? 'opacity-100 ring-2 ring-base-100/30' : 'opacity-60 group-hover:opacity-100'}`} style={{ "background-color": project.color }} />
               </button>
@@ -338,7 +343,12 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
             onClose={() => setSelectedStory(null)}
             onDeleted={() => { setSelectedStory(null); refetch(); props.onStoryDeleted?.(); }}
             onUpdated={(id, fields) => {
-              setLocalStories(prev => prev.map(s => s.id === id ? { ...s, ...fields } as Story : s));
+              setLocalStories(prev => {
+                if (fields.is_active === false) {
+                  return prev.filter(s => s.id !== id);
+                }
+                return prev.map(s => s.id === id ? { ...s, ...fields } as Story : s);
+              });
             }}
           />
         )}
