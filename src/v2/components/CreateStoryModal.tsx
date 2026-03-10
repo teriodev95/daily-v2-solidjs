@@ -515,9 +515,12 @@ const CreateStoryModal: Component<Props> = (props) => {
                         ...(selected() ? { "box-shadow": `inset 0 0 0 1px ${proj.color}30` } : {}),
                       }}
                     >
-                      <Show when={proj.icon_url} fallback={<div class="w-2.5 h-2.5 rounded-full" style={{ "background-color": proj.color }} />}>
-                        <img src={proj.icon_url!} alt="" class="w-4 h-4 rounded-sm" />
-                      </Show>
+                      <div
+                        class="w-5 h-5 rounded-md shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
+                        style={{ "background-color": proj.color }}
+                      >
+                        {proj.prefix.slice(0, 2)}
+                      </div>
                       {proj.name}
                     </button>
                   );

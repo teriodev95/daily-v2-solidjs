@@ -327,18 +327,16 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       setLocalStories(prev => prev.filter(s => s.id !== story.id));
     }, 190);
 
-    // Show undo toast
-    setToastExiting(false);
-    setDeletePending({ story });
-
-    // Schedule actual delete after 4s
-    if (deleteTimer) clearTimeout(deleteTimer);
-    deleteTimer = setTimeout(() => {
-      dismissToast(() => {
-        api.stories.delete(story.id).catch(() => { });
-      });
-      deleteTimer = null;
-    }, 4000);
+    // Persist immediately so closing the app does not bring it back.
+    api.stories.update(story.id, { is_active: false }).catch(() => {
+      setDeletedIds(prev => { const n = new Set(prev); n.delete(story.id); return n; });
+      setEnteringIds(prev => new Set([...prev, story.id]));
+      setLocalStories(prev => [...prev, story]);
+      setTimeout(() => {
+        setEnteringIds(prev => { const n = new Set(prev); n.delete(story.id); return n; });
+      }, 260);
+      refetchStories();
+    });
   };
 
   const ctxDeleteGoal = (id: string, text: string) => {
@@ -1078,13 +1076,13 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                 {/* Separator */}
                 <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
 
-                {/* Delete (undo via toast) */}
+                {/* Hide from report/boards */}
                 <button
                   onClick={() => ctxDelete(s)}
-                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-red-500/60 hover:text-red-500 hover:bg-red-500/5 transition-colors"
+                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/55 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
                 >
-                  <Trash2 size={14} class="shrink-0" />
-                  Eliminar
+                  <Archive size={14} class="shrink-0" />
+                  Ocultar
                 </button>
               </div>
             );
@@ -1184,7 +1182,12 @@ const ReportPage: Component<ReportPageProps> = (props) => {
             onClose={() => setSelectedStory(null)}
             onDeleted={() => { setSelectedStory(null); props.onStoryDeleted?.(); }}
             onUpdated={(id, fields) => {
-              setLocalStories(prev => prev.map(s => s.id === id ? { ...s, ...fields } as Story : s));
+              setLocalStories(prev => {
+                if (fields.is_active === false) {
+                  return prev.filter(s => s.id !== id);
+                }
+                return prev.map(s => s.id === id ? { ...s, ...fields } as Story : s);
+              });
             }}
           />
         )}

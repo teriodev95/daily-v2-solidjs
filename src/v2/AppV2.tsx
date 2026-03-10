@@ -16,6 +16,7 @@ import CalendarModal from './components/CalendarModal';
 import StoryDetail from './components/StoryDetail';
 import InstallPrompt from './components/InstallPrompt';
 import UpdateToast from './components/UpdateToast';
+import MobileShell from './mobile/shell/MobileShell';
 
 type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks';
 
@@ -23,6 +24,7 @@ const AppShell: Component = () => {
   const auth = useAuth();
   // Default to 'tasks' on mobile, 'report' on desktop
   const isMobile = window.innerWidth < 640;
+  if (isMobile) return <MobileShell />;
   const [activeTab, setActiveTab] = createSignal<Tab>(isMobile ? 'tasks' : 'report');
   const savedTheme = localStorage.getItem('dc-theme') || 'ios-dark';
   const [isDark, setIsDark] = createSignal(savedTheme === 'ios-dark');

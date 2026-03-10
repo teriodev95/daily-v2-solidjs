@@ -28,6 +28,7 @@ stories.get('/search', async (c) => {
     .where(
       and(
         eq(schema.stories.team_id, user.teamId),
+        eq(schema.stories.is_active, true),
         or(
           like(schema.stories.title, pattern),
           like(schema.stories.description, pattern),
@@ -64,9 +65,11 @@ stories.get('/', async (c) => {
   const status = c.req.query('status');
   const assigneeId = c.req.query('assignee_id');
   const isShared = c.req.query('is_shared');
+  const includeInactive = c.req.query('include_inactive') === 'true';
 
   let rows = await db.select().from(schema.stories).where(eq(schema.stories.team_id, user.teamId));
 
+  if (!includeInactive) rows = rows.filter(s => s.is_active);
   if (projectId) rows = rows.filter(s => s.project_id === projectId);
   if (category) rows = rows.filter(s => s.category === category);
   if (status) rows = rows.filter(s => s.status === status);
@@ -127,6 +130,7 @@ stories.post('/', async (c) => {
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  const extraAssignees = [...new Set((body.assignees ?? []).filter(uid => uid && uid !== body.assignee_id))];
 
   await db.insert(schema.stories).values({
     id,
@@ -156,8 +160,8 @@ stories.post('/', async (c) => {
     updated_at: now,
   });
 
-  if (body.assignees?.length) {
-    for (const uid of body.assignees) {
+  if (extraAssignees.length) {
+    for (const uid of extraAssignees) {
       await db.insert(schema.storyAssignees).values({ story_id: id, user_id: uid });
     }
   }
@@ -206,6 +210,19 @@ stories.patch('/:id', async (c) => {
       .update(schema.stories)
       .set({ ...fields, updated_at: new Date().toISOString() } as any)
       .where(eq(schema.stories.id, id));
+  }
+
+  const [storyAfterFields] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
+
+  if (assignees !== undefined) {
+    const extraAssignees = Array.isArray(assignees)
+      ? [...new Set(assignees.filter((uid): uid is string => typeof uid === 'string' && uid && uid !== storyAfterFields?.assignee_id))]
+      : [];
+
+    await db.delete(schema.storyAssignees).where(eq(schema.storyAssignees.story_id, id));
+    for (const uid of extraAssignees) {
+      await db.insert(schema.storyAssignees).values({ story_id: id, user_id: uid });
+    }
   }
 
   const [updated] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
