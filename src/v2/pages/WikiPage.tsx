@@ -61,76 +61,89 @@ const WikiPage: Component<Props> = (props) => {
     return `hace ${Math.floor(days / 7)}sem`;
   };
 
+  const selectedProject = () => activeProjects().find(p => p.id === selectedProjectId());
+
   return (
-    <div class="max-w-4xl mx-auto px-4 sm:px-8 py-6">
-      {/* Header */}
-      <div class="flex items-center justify-between mb-6">
+    <div class="max-w-3xl mx-auto px-6 sm:px-8 py-8">
+
+      {/* Header — título + acciones alineados */}
+      <div class="flex items-center justify-between mb-8">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-full bg-purple-500/10 flex items-center justify-center">
-            <BookOpen size={18} class="text-purple-500" />
+          <div class="w-8 h-8 rounded-xl bg-purple-500/10 flex items-center justify-center">
+            <BookOpen size={16} class="text-purple-500" />
           </div>
-          <h1 class="text-lg font-bold">Wiki</h1>
+          <div>
+            <h1 class="text-base font-bold leading-tight">Wiki</h1>
+            <Show when={selectedProject()}>
+              <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25 leading-tight">{selectedProject()!.name}</p>
+            </Show>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5">
           <button
             onClick={() => setShowGraph(v => !v)}
-            class={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all ${
+            class={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
               showGraph()
-                ? 'bg-purple-500/15 text-purple-500 border border-purple-500/20'
-                : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08]'
+                ? 'bg-purple-500/15 text-purple-500'
+                : 'bg-base-content/[0.04] text-base-content/35 hover:bg-base-content/[0.07] hover:text-base-content/50'
             }`}
           >
-            <Network size={14} /> Grafo
+            <Network size={13} />
+            Grafo
           </button>
           <button
             onClick={createArticle}
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500 text-white text-[12px] font-bold hover:brightness-110 transition-all shadow-sm shadow-purple-500/20"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-500/10 text-purple-500 text-[11px] font-semibold hover:bg-purple-500/20 transition-all"
           >
-            <Plus size={14} /> Nuevo
+            <Plus size={13} />
+            Nuevo
           </button>
         </div>
       </div>
 
-      {/* Project selector */}
-      <div class="flex items-center gap-2 mb-4 flex-wrap">
+      {/* Project selector — compacto, horizontal */}
+      <div class="flex items-center gap-1.5 mb-5 overflow-x-auto pb-1">
         <For each={activeProjects()}>
-          {(p) => (
-            <button
-              onClick={() => { setSelectedProjectId(p.id); setSelectedTag(null); }}
-              class={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all ${
-                selectedProjectId() === p.id
-                  ? 'shadow-sm'
-                  : 'opacity-40 hover:opacity-70'
-              }`}
-              style={{
-                "background-color": selectedProjectId() === p.id ? `${p.color}15` : 'transparent',
-                color: p.color,
-                ...(selectedProjectId() === p.id ? { "box-shadow": `inset 0 0 0 1px ${p.color}30` } : {}),
-              }}
-            >
-              <div class="w-4 h-4 rounded shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ "background-color": p.color }}>
-                {p.prefix.slice(0, 2)}
-              </div>
-              {p.name}
-            </button>
-          )}
+          {(p) => {
+            const active = () => selectedProjectId() === p.id;
+            return (
+              <button
+                onClick={() => { setSelectedProjectId(p.id); setSelectedTag(null); }}
+                class={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0 ${
+                  active() ? '' : 'opacity-35 hover:opacity-60'
+                }`}
+                style={{
+                  "background-color": active() ? `${p.color}12` : 'transparent',
+                  color: p.color,
+                }}
+              >
+                <div
+                  class="w-3.5 h-3.5 rounded shrink-0 flex items-center justify-center text-[7px] font-bold text-white"
+                  style={{ "background-color": p.color }}
+                >
+                  {p.prefix.slice(0, 2)}
+                </div>
+                {p.name}
+              </button>
+            );
+          }}
         </For>
       </div>
 
-      {/* Search + tag filters */}
-      <div class="flex items-center gap-2 mb-4 flex-wrap">
-        <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-base-content/[0.04] flex-1 min-w-[200px] max-w-xs">
-          <Search size={13} class="text-base-content/30" />
+      {/* Search + tags — misma línea, proporcionado */}
+      <div class="flex items-center gap-3 mb-5">
+        <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-content/[0.03] border border-base-content/[0.05] w-full max-w-[280px]">
+          <Search size={13} class="text-base-content/25 shrink-0" />
           <input
             type="text"
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
-            placeholder="Buscar artículos..."
-            class="bg-transparent outline-none text-[12px] flex-1 placeholder:text-base-content/25"
+            placeholder="Buscar..."
+            class="bg-transparent outline-none text-[12px] flex-1 placeholder:text-base-content/20"
           />
           <Show when={searchQuery()}>
-            <button onClick={() => setSearchQuery('')} class="text-base-content/30 hover:text-base-content/60">
-              <X size={12} />
+            <button onClick={() => setSearchQuery('')} class="text-base-content/25 hover:text-base-content/50">
+              <X size={11} />
             </button>
           </Show>
         </div>
@@ -140,10 +153,10 @@ const WikiPage: Component<Props> = (props) => {
               {(tag) => (
                 <button
                   onClick={() => setSelectedTag(selectedTag() === tag ? null : tag)}
-                  class={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-all ${
+                  class={`text-[10px] font-semibold px-2 py-0.5 rounded transition-all ${
                     selectedTag() === tag
-                      ? 'bg-purple-500/20 text-purple-500'
-                      : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08]'
+                      ? 'bg-purple-500/15 text-purple-500'
+                      : 'bg-base-content/[0.04] text-base-content/30 hover:bg-base-content/[0.07] hover:text-base-content/50'
                   }`}
                 >
                   {tag}
@@ -156,7 +169,7 @@ const WikiPage: Component<Props> = (props) => {
 
       {/* Graph view */}
       <Show when={showGraph() && selectedProjectId()}>
-        <div class="mb-4 h-[500px]">
+        <div class="mb-6 h-[450px]">
           <WikiGraph
             projectId={selectedProjectId()}
             onSelectArticle={(id) => {
@@ -170,45 +183,46 @@ const WikiPage: Component<Props> = (props) => {
       </Show>
 
       {/* Articles list */}
-      <div class="space-y-2">
+      <div class="space-y-1.5">
         <For each={filteredArticles()}>
           {(article) => (
             <div
               onClick={() => setSelectedArticle(article)}
-              class="flex items-start gap-3 px-4 py-3 rounded-xl bg-base-200/60 hover:bg-base-200/90 cursor-pointer transition-all group"
+              class="flex items-center gap-3 px-4 py-3 rounded-xl bg-base-content/[0.02] hover:bg-base-content/[0.05] border border-transparent hover:border-base-content/[0.06] cursor-pointer transition-all"
             >
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold truncate">{article.title}</p>
+                <p class="text-[13px] font-semibold truncate text-base-content/80">{article.title}</p>
                 <div class="flex items-center gap-2 mt-1">
                   <Show when={article.tags.length > 0}>
                     <div class="flex items-center gap-1">
                       <For each={article.tags}>
                         {(tag) => (
-                          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500/70">{tag}</span>
+                          <span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-base-content/[0.04] text-base-content/30">{tag}</span>
                         )}
                       </For>
                     </div>
                   </Show>
-                  <span class="text-[10px] text-base-content/25">{timeAgo(article.updated_at)}</span>
+                  <span class="text-[10px] text-base-content/20">{timeAgo(article.updated_at)}</span>
                 </div>
               </div>
               <Show when={article.content}>
-                <span class="text-[10px] text-base-content/20 mt-1">📝</span>
+                <span class="text-[9px] text-base-content/15">📝</span>
               </Show>
             </div>
           )}
         </For>
+
         <Show when={!articles.loading && filteredArticles().length === 0}>
-          <div class="text-center py-12">
-            <BookOpen size={32} class="text-base-content/10 mx-auto mb-3" />
-            <p class="text-sm text-base-content/30">
+          <div class="text-center py-16">
+            <BookOpen size={28} class="text-base-content/8 mx-auto mb-3" />
+            <p class="text-[13px] text-base-content/25 mb-3">
               {searchQuery() || selectedTag() ? 'Sin resultados' : 'Sin artículos aún'}
             </p>
             <button
               onClick={createArticle}
-              class="mt-3 text-[12px] font-bold text-purple-500 hover:underline"
+              class="text-[11px] font-semibold text-purple-500/70 hover:text-purple-500 transition-colors"
             >
-              Crear el primero
+              Crear el primero →
             </button>
           </div>
         </Show>
