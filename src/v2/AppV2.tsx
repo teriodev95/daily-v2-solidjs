@@ -144,7 +144,7 @@ const AppShell: Component = () => {
             <img src={dailyIcon} alt="Daily Check" class="w-7 h-7 rounded-lg ring-1 ring-black/10" />
             <div class="flex flex-col">
               <span class="font-semibold text-sm tracking-tight leading-tight">Daily Check</span>
-              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.5.0</span>
+              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.6.0</span>
             </div>
           </div>
 
@@ -210,7 +210,7 @@ const AppShell: Component = () => {
             <img src={dailyIcon} alt="Daily Check" class="w-6 h-6 rounded-md ring-1 ring-black/10" />
             <div class="flex flex-col">
               <span class="font-semibold text-sm tracking-tight text-base-content/90 leading-tight">Daily Check</span>
-              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.5.0</span>
+              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.6.0</span>
             </div>
           </div>
 
