@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, Show, onCleanup, onMount } from 'solid-js';
+import { createSignal, createEffect, For, Show } from 'solid-js';
 import { ChevronLeft, ChevronRight } from 'lucide-solid';
 
 interface Props {
@@ -89,26 +89,6 @@ const DatePickerPopover = (props: Props) => {
   const isSelected = (dateStr: string) => props.value === dateStr;
 
   let popoverRef!: HTMLDivElement;
-
-  const onClickOutside = (e: MouseEvent) => {
-    if (popoverRef && !popoverRef.contains(e.target as Node) && props.triggerEl && !props.triggerEl.contains(e.target as Node)) {
-      props.onClose();
-    }
-  };
-
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') props.onClose();
-  };
-
-  onMount(() => {
-    document.addEventListener('mousedown', onClickOutside);
-    document.addEventListener('keydown', onKeyDown);
-  });
-
-  onCleanup(() => {
-    document.removeEventListener('mousedown', onClickOutside);
-    document.removeEventListener('keydown', onKeyDown);
-  });
 
   return (
     <div
