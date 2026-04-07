@@ -240,15 +240,17 @@ const WikiPage: Component<Props> = (props) => {
             }}
             onDeleted={() => { setSelectedArticle(null); refetch(); }}
             onNavigate={async (targetTitle) => {
+              // Unmount current → remount with new article (forces ContentEditor re-init)
+              setSelectedArticle(null);
               const list = (articles() ?? []) as WikiArticle[];
               const found = list.find(a => a.title.toLowerCase() === targetTitle.toLowerCase());
               if (found) {
-                setSelectedArticle(found);
+                queueMicrotask(() => setSelectedArticle(found));
               } else {
                 try {
                   const created = await api.wiki.create({ project_id: selectedProjectId(), title: targetTitle });
                   refetch();
-                  setSelectedArticle(created as WikiArticle);
+                  queueMicrotask(() => setSelectedArticle(created as WikiArticle));
                 } catch {}
               }
             }}

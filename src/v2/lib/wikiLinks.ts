@@ -1,19 +1,23 @@
 /**
  * Process wiki links in HTML content.
- * Converts [[Article Name]] to clickable links.
+ * Supports [[Article Name]] and [[Article Name|Display Text]].
  */
 export function processWikiLinks(html: string): string {
   return html.replace(
-    /\[\[(.+?)\]\]/g,
-    '<a class="wiki-link" data-wiki-link="$1" href="#" style="color: var(--purple-500, #a855f7); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">$1</a>'
+    /\[\[(.+?)(?:\|(.+?))?\]\]/g,
+    (_match, target, display) => {
+      const label = display || target;
+      return `<a class="wiki-link" data-wiki-link="${target}" href="#" style="color: var(--purple-500, #a855f7); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">${label}</a>`;
+    }
   );
 }
 
 /**
  * Extract all wiki link targets from markdown content.
+ * Returns only the target (before the pipe), not the display text.
  */
 export function extractWikiLinks(content: string): string[] {
-  const regex = /\[\[(.+?)\]\]/g;
+  const regex = /\[\[(.+?)(?:\|.+?)?\]\]/g;
   const links: string[] = [];
   let match;
   while ((match = regex.exec(content)) !== null) {
