@@ -112,10 +112,11 @@ export function ContentEditor(props: ContentEditorProps) {
           prose-img:rounded-lg prose-img:shadow-sm"
         onInput={handleInput}
         onPaste={handlePaste}
-        onClick={(e) => {
+        onMouseDown={(e) => {
           const link = (e.target as HTMLElement).closest('[data-wiki-link]');
           if (link && props.onLinkClick) {
             e.preventDefault();
+            e.stopPropagation();
             props.onLinkClick((link as HTMLElement).dataset.wikiLink!);
           }
         }}
