@@ -4,11 +4,12 @@ import { useData } from '../lib/data';
 import { api } from '../lib/api';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
-  Calendar, Target, FileText, HelpCircle, ClipboardCheck, Trash2,
+  Calendar, ClipboardCheck, Trash2,
   Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban, Archive,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
 import AttachmentSection from './AttachmentSection';
+import { ContentEditor } from './ContentEditor';
 import DatePickerPopover from './DatePickerPopover';
 
 const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
@@ -95,9 +96,18 @@ const StoryDetail: Component<Props> = (props) => {
 
   // Editable fields
   const [title, setTitle] = createSignal(props.story.title);
-  const [purpose, setPurpose] = createSignal(props.story.purpose || '');
-  const [description, setDescription] = createSignal(props.story.description || '');
-  const [objective, setObjective] = createSignal(props.story.objective || '');
+  const buildContent = () => {
+    const p = (props.story.purpose || '').trim();
+    const d = (props.story.description || '').trim();
+    const o = (props.story.objective || '').trim();
+    if (!p && !o) return d;
+    const parts: string[] = [];
+    if (p) parts.push(`## Para qué\n${p}`);
+    if (d) parts.push(d);
+    if (o) parts.push(`## Objetivo\n${o}`);
+    return parts.join('\n\n');
+  };
+  const [content, setContent] = createSignal(buildContent());
   const [dueDate, setDueDate] = createSignal(props.story.due_date || '');
   const [assigneeId, setAssigneeId] = createSignal(props.story.assignee_id || '');
   const [assigneeIds, setAssigneeIds] = createSignal<string[]>([]);
@@ -182,9 +192,18 @@ const StoryDetail: Component<Props> = (props) => {
       setCriteriaList(detail.criteria ?? []);
       setAssigneeIds(detail.assignees ?? []);
       setTitle(detail.title);
-      setPurpose(detail.purpose || '');
-      setDescription(detail.description || '');
-      setObjective(detail.objective || '');
+      // Rebuild content from fetched detail
+      const p = (detail.purpose || '').trim();
+      const d = (detail.description || '').trim();
+      const o = (detail.objective || '').trim();
+      if (!p && !o) { setContent(d); }
+      else {
+        const parts: string[] = [];
+        if (p) parts.push(`## Para qué\n${p}`);
+        if (d) parts.push(d);
+        if (o) parts.push(`## Objetivo\n${o}`);
+        setContent(parts.join('\n\n'));
+      }
       setDueDate(detail.due_date || '');
       setEstimate(detail.estimate || 0);
       setAssigneeId(detail.assignee_id || '');
@@ -576,62 +595,15 @@ const StoryDetail: Component<Props> = (props) => {
             </div>
           </div>
 
-          {/* Purpose */}
-          <section class="space-y-3 pt-2">
-            <div class="flex items-center gap-2 text-base-content/40">
-              <HelpCircle size={14} />
-              <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">¿Para qué?</h3>
-            </div>
-            <div class="relative group">
-              <textarea
-                value={purpose()}
-                rows={1}
-                class="w-full text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed bg-transparent resize-none outline-none rounded-xl px-4 py-3 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.02] hover:bg-base-content/[0.015] transition-all placeholder:text-base-content/20"
-                placeholder="Propósito de la historia..."
-                ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
-                onInput={(e) => { const val = e.currentTarget.value; setPurpose(val); autoResize(e.currentTarget); scheduleSave({ purpose: val }); }}
-              />
-              <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
-            </div>
-          </section>
-
-          {/* Description — always-visible box */}
-          <section class="space-y-3">
-            <div class="flex items-center gap-2 text-base-content/40">
-              <FileText size={14} />
-              <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">Descripción</h3>
-            </div>
-            <div class="relative group">
-              <textarea
-                value={description()}
-                rows={4}
-                class="w-full min-h-[120px] text-[15px] sm:text-[14px] text-base-content/80 leading-relaxed bg-base-content/[0.02] resize-none outline-none rounded-xl px-4 py-3 border border-base-content/[0.08] focus:border-base-content/15 focus:bg-base-content/[0.03] hover:border-base-content/12 transition-all placeholder:text-base-content/20"
-                placeholder="Descripción extendida..."
-                ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
-                onInput={(e) => { const val = e.currentTarget.value; setDescription(val); autoResize(e.currentTarget); scheduleSave({ description: val }); }}
-              />
-              <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
-            </div>
-          </section>
-
-          {/* Objective */}
-          <section class="space-y-3 pt-2">
-            <div class="flex items-center gap-2 text-base-content/40">
-              <Target size={14} />
-              <h3 class="text-[11px] font-bold uppercase tracking-[0.1em]">Objetivo</h3>
-            </div>
-            <div class="relative group">
-              <textarea
-                value={objective()}
-                rows={1}
-                class="w-full text-[16px] sm:text-[15px] font-medium text-base-content/90 leading-relaxed bg-transparent resize-none outline-none rounded-xl px-4 py-3 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.02] hover:bg-base-content/[0.015] transition-all placeholder:text-base-content/20"
-                placeholder="Objetivo principal..."
-                ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
-                onInput={(e) => { const val = e.currentTarget.value; setObjective(val); autoResize(e.currentTarget); scheduleSave({ objective: val }); }}
-              />
-              <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
-            </div>
-          </section>
+          {/* Content canvas */}
+          <ContentEditor
+            content={content()}
+            placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
+            onChange={(md) => {
+              setContent(md);
+              scheduleSave({ description: md, purpose: '', objective: '' });
+            }}
+          />
 
           {/* Acceptance Criteria */}
           <Show when={criteria().length > 0}>

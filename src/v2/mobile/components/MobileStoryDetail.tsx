@@ -10,9 +10,7 @@ import {
   CheckCircle,
   Circle,
   ClipboardCheck,
-  FileText,
   FolderKanban,
-  HelpCircle,
   Loader2,
   RefreshCw,
   Target,
@@ -22,6 +20,7 @@ import {
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../../lib/recurrence';
 import AttachmentSection from '../../components/AttachmentSection';
+import { ContentEditor } from '../../components/ContentEditor';
 
 interface MobileStoryDetailProps {
   story: Story;
@@ -56,9 +55,18 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   const data = useData();
 
   const [title, setTitle] = createSignal(props.story.title);
-  const [purpose, setPurpose] = createSignal(props.story.purpose || '');
-  const [description, setDescription] = createSignal(props.story.description || '');
-  const [objective, setObjective] = createSignal(props.story.objective || '');
+  const buildContent = () => {
+    const p = (props.story.purpose || '').trim();
+    const d = (props.story.description || '').trim();
+    const o = (props.story.objective || '').trim();
+    if (!p && !o) return d;
+    const parts: string[] = [];
+    if (p) parts.push(`## Para qué\n${p}`);
+    if (d) parts.push(d);
+    if (o) parts.push(`## Objetivo\n${o}`);
+    return parts.join('\n\n');
+  };
+  const [content, setContent] = createSignal(buildContent());
   const [dueDate, setDueDate] = createSignal(props.story.due_date || '');
   const [status, setStatus] = createSignal(props.story.status);
   const [projectId, setProjectId] = createSignal(props.story.project_id || '');
@@ -72,6 +80,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   const [deleting, setDeleting] = createSignal(false);
   const [archiving, setArchiving] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal('');
+
   let dateInputRef!: HTMLInputElement;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -135,9 +144,6 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
     try {
       const detail = await api.stories.get(props.story.id);
       setTitle(detail.title);
-      setPurpose(detail.purpose || '');
-      setDescription(detail.description || '');
-      setObjective(detail.objective || '');
       setDueDate(detail.due_date || '');
       setStatus(detail.status);
       setEstimate(detail.estimate || 0);
@@ -145,6 +151,20 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
       setAssigneeIds(detail.assignees ?? []);
       setProjectId((detail as Story).project_id || '');
       setCriteriaList(detail.criteria ?? []);
+      // Rebuild content canvas from fetched detail
+      {
+        const p = (detail.purpose || '').trim();
+        const d = (detail.description || '').trim();
+        const o = (detail.objective || '').trim();
+        if (!p && !o) { setContent(d); }
+        else {
+          const parts: string[] = [];
+          if (p) parts.push(`## Para qué\n${p}`);
+          if (d) parts.push(d);
+          if (o) parts.push(`## Objetivo\n${o}`);
+          setContent(parts.join('\n\n'));
+        }
+      }
     } catch {
       // Detail fetch is additive.
     }
@@ -594,62 +614,16 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
               </div>
             </section>
 
-            <section class="space-y-3">
-              <div class="flex items-center gap-2 text-base-content/45">
-                <HelpCircle size={14} />
-                <h3 class="text-[11px] font-bold uppercase tracking-[0.12em]">¿Para qué?</h3>
-              </div>
-              <textarea
-                value={purpose()}
-                rows={2}
-                class="w-full min-h-[96px] resize-none rounded-[28px] border border-base-content/[0.07] bg-base-content/[0.03] px-4 py-4 text-[15px] leading-6 text-base-content/82 outline-none placeholder:text-base-content/22"
-                placeholder="Propósito de la historia..."
-                ref={(element) => requestAnimationFrame(() => autoResize(element))}
-                onInput={(event) => {
-                  setPurpose(event.currentTarget.value);
-                  autoResize(event.currentTarget);
-                  scheduleSave({ purpose: event.currentTarget.value });
-                }}
-              />
-            </section>
-
-            <section class="space-y-3">
-              <div class="flex items-center gap-2 text-base-content/45">
-                <FileText size={14} />
-                <h3 class="text-[11px] font-bold uppercase tracking-[0.12em]">Descripción</h3>
-              </div>
-              <textarea
-                value={description()}
-                rows={4}
-                class="w-full min-h-[160px] resize-none rounded-[28px] border border-base-content/[0.07] bg-base-content/[0.03] px-4 py-4 text-[15px] leading-6 text-base-content/82 outline-none placeholder:text-base-content/22"
-                placeholder="Descripción extendida..."
-                ref={(element) => requestAnimationFrame(() => autoResize(element))}
-                onInput={(event) => {
-                  setDescription(event.currentTarget.value);
-                  autoResize(event.currentTarget);
-                  scheduleSave({ description: event.currentTarget.value });
-                }}
-              />
-            </section>
-
-            <section class="space-y-3">
-              <div class="flex items-center gap-2 text-base-content/45">
-                <Target size={14} />
-                <h3 class="text-[11px] font-bold uppercase tracking-[0.12em]">Objetivo</h3>
-              </div>
-              <textarea
-                value={objective()}
-                rows={2}
-                class="w-full min-h-[96px] resize-none rounded-[28px] border border-base-content/[0.07] bg-base-content/[0.03] px-4 py-4 text-[15px] leading-6 text-base-content/82 outline-none placeholder:text-base-content/22"
-                placeholder="Objetivo principal..."
-                ref={(element) => requestAnimationFrame(() => autoResize(element))}
-                onInput={(event) => {
-                  setObjective(event.currentTarget.value);
-                  autoResize(event.currentTarget);
-                  scheduleSave({ objective: event.currentTarget.value });
-                }}
-              />
-            </section>
+            {/* Content canvas */}
+            <ContentEditor
+              content={content()}
+              placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
+              onChange={(md) => {
+                setContent(md);
+                scheduleSave({ description: md, purpose: '', objective: '' });
+              }}
+              class="px-1"
+            />
 
             <Show when={criteriaList().length > 0}>
               <section class="space-y-3 rounded-[28px] border border-base-content/[0.07] bg-base-content/[0.03] p-4">
