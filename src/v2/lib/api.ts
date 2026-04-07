@@ -1,6 +1,6 @@
 import type {
   User, Team, Project, Story, AcceptanceCriteria,
-  DailyReport, WeekGoal, Assignment, Attachment, StoryCompletion, Learning,
+  DailyReport, WeekGoal, Assignment, Attachment, StoryCompletion, Learning, WikiArticle,
 } from '../types';
 
 export class ApiError extends Error {
@@ -193,6 +193,27 @@ export const api = {
       request<Learning>(`/api/learnings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<{ ok: boolean }>(`/api/learnings/${id}`, { method: 'DELETE' }),
+  },
+
+  wiki: {
+    list: (projectId: string, tag?: string) => {
+      const q = new URLSearchParams({ project_id: projectId });
+      if (tag) q.set('tag', tag);
+      return request<WikiArticle[]>(`/api/wiki?${q}`);
+    },
+    search: (query: string, projectId?: string) => {
+      const q = new URLSearchParams({ q: query });
+      if (projectId) q.set('project_id', projectId);
+      return request<WikiArticle[]>(`/api/wiki/search?${q}`);
+    },
+    graph: (projectId: string) => request(`/api/wiki/graph?project_id=${projectId}`),
+    create: (data: { project_id: string; title: string; content?: string; tags?: string[] }) =>
+      request<WikiArticle>('/api/wiki', { method: 'POST', body: JSON.stringify(data) }),
+    get: (id: string) => request<WikiArticle>(`/api/wiki/${id}`),
+    update: (id: string, data: Record<string, unknown>) =>
+      request<WikiArticle>(`/api/wiki/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<{ ok: boolean }>(`/api/wiki/${id}`, { method: 'DELETE' }),
   },
 
   admin: {

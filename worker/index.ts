@@ -14,6 +14,7 @@ import assignmentsRoutes from './routes/assignments';
 import attachmentsRoutes from './routes/attachments';
 import completionsRoutes from './routes/completions';
 import learningsRoutes from './routes/learnings';
+import wikiRoutes from './routes/wiki';
 import seedRoutes from './db/seed';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -62,6 +63,7 @@ app.use('/api/assignments/*', authMiddleware);
 app.use('/api/attachments/*', authMiddleware);
 app.use('/api/completions/*', authMiddleware);
 app.use('/api/learnings/*', authMiddleware);
+app.use('/api/wiki/*', authMiddleware);
 
 // Meta endpoint — discovery for agents
 app.get('/api/meta', async (c) => {
@@ -76,6 +78,7 @@ app.get('/api/meta', async (c) => {
       members: { list: 'GET /api/team/members' },
       attachments: { list: 'GET /api/attachments/story/:storyId', upload: 'POST /api/attachments/story/:storyId', download: 'GET /api/attachments/file/:id', delete: 'DELETE /api/attachments/:id' },
       learnings: { list: 'GET /api/learnings', create: 'POST /api/learnings', get: 'GET /api/learnings/:id', update: 'PATCH /api/learnings/:id', delete: 'DELETE /api/learnings/:id' },
+      wiki: { list: 'GET /api/wiki?project_id=X', search: 'GET /api/wiki/search?q=X', graph: 'GET /api/wiki/graph?project_id=X', create: 'POST /api/wiki', get: 'GET /api/wiki/:id', update: 'PATCH /api/wiki/:id', delete: 'DELETE /api/wiki/:id' },
       meta: { get: 'GET /api/meta' },
     },
   });
@@ -91,5 +94,6 @@ app.route('/api/assignments', assignmentsRoutes);
 app.route('/api/attachments', attachmentsRoutes);
 app.route('/api/completions', completionsRoutes);
 app.route('/api/learnings', learningsRoutes);
+app.route('/api/wiki', wikiRoutes);
 
 export default app;

@@ -1,5 +1,5 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays, ListChecks, Archive } from 'lucide-solid';
+import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays, ListChecks, Archive, BookOpen } from 'lucide-solid';
 import dailyIcon from '../assets/daily-icon.png';
 import type { ReportCategory, Story } from './types';
 import { AuthProvider, useAuth } from './lib/auth';
@@ -10,6 +10,7 @@ import TeamPage from './pages/TeamPage';
 import ProjectsPage from './pages/ProjectsPage';
 import AdminPage from './pages/AdminPage';
 import TasksPage from './pages/TasksPage';
+import WikiPage from './pages/WikiPage';
 import CreateStoryModal from './components/CreateStoryModal';
 import SearchModal from './components/SearchModal';
 import CalendarModal from './components/CalendarModal';
@@ -18,7 +19,7 @@ import InstallPrompt from './components/InstallPrompt';
 import UpdateToast from './components/UpdateToast';
 import MobileShell from './mobile/shell/MobileShell';
 
-type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks';
+type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki';
 
 const AppShell: Component = () => {
   const auth = useAuth();
@@ -78,6 +79,7 @@ const AppShell: Component = () => {
     { id: 'report', label: 'Reporte', icon: ClipboardList, key: 'R' },
     { id: 'team', label: 'Equipo', icon: Users, key: 'E' },
     { id: 'projects', label: 'Proyectos', icon: FolderKanban, key: 'P' },
+    { id: 'wiki' as Tab, label: 'Wiki', icon: BookOpen, key: 'W' },
   ];
 
   const tabs = () => {
@@ -124,6 +126,7 @@ const AppShell: Component = () => {
         case 'p': e.preventDefault(); switchTab('projects'); break;
         case 'a': if (user()?.role === 'admin') { e.preventDefault(); switchTab('admin'); } break;
         case 't': e.preventDefault(); triggerShare(); break;
+        case 'w': e.preventDefault(); switchTab('wiki'); break;
         case 'c': e.preventDefault(); setShowCalendar(v => !v); break;
       }
     };
@@ -144,7 +147,7 @@ const AppShell: Component = () => {
             <img src={dailyIcon} alt="Daily Check" class="w-7 h-7 rounded-lg ring-1 ring-black/10" />
             <div class="flex flex-col">
               <span class="font-semibold text-sm tracking-tight leading-tight">Daily Check</span>
-              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.6.1</span>
+              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.7.0</span>
             </div>
           </div>
 
@@ -210,7 +213,7 @@ const AppShell: Component = () => {
             <img src={dailyIcon} alt="Daily Check" class="w-6 h-6 rounded-md ring-1 ring-black/10" />
             <div class="flex flex-col">
               <span class="font-semibold text-sm tracking-tight text-base-content/90 leading-tight">Daily Check</span>
-              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.6.1</span>
+              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.7.0</span>
             </div>
           </div>
 
@@ -270,6 +273,9 @@ const AppShell: Component = () => {
         {/* Tasks — mobile only page, but mounted always (hidden via display) */}
         <div class={activeTab() === 'tasks' ? 'stagger-in' : ''} style={{ display: activeTab() === 'tasks' ? undefined : 'none' }}>
           <TasksPage refreshKey={refreshKey()} />
+        </div>
+        <div class={activeTab() === 'wiki' ? 'stagger-in' : ''} style={{ display: activeTab() === 'wiki' ? undefined : 'none' }}>
+          <WikiPage refreshKey={refreshKey()} />
         </div>
       </main>
 

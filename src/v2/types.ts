@@ -144,3 +144,15 @@ export interface Learning {
   updated_at: string;
 }
 
+export interface WikiArticle {
+  id: string;
+  project_id: string;
+  team_id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+

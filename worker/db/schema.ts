@@ -146,3 +146,15 @@ export const learnings = sqliteTable('learnings', {
   created_at: text('created_at').notNull(),
   updated_at: text('updated_at').notNull(),
 });
+
+export const wikiArticles = sqliteTable('wiki_articles', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id').notNull().references(() => projects.id),
+  team_id: text('team_id').notNull().references(() => teams.id),
+  title: text('title').notNull(),
+  content: text('content').notNull().default(''),
+  tags: text('tags').notNull().default('[]'),
+  created_by: text('created_by').notNull().references(() => users.id),
+  created_at: text('created_at').notNull(),
+  updated_at: text('updated_at').notNull(),
+});
