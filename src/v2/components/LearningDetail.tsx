@@ -7,7 +7,7 @@ import { ContentEditor } from './ContentEditor';
 interface Props {
   learning: Learning;
   onClose: () => void;
-  onUpdated?: () => void;
+  onUpdated?: (id: string, fields: Record<string, unknown>) => void;
   onDeleted?: () => void;
 }
 
@@ -40,7 +40,7 @@ const LearningDetail: Component<Props> = (props) => {
       try {
         await api.learnings.update(props.learning.id, fields);
         setSaveStatus('saved');
-        props.onUpdated?.();
+        props.onUpdated?.(props.learning.id, fields);
         clearTimeout(savedTimer);
         savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
@@ -56,7 +56,7 @@ const LearningDetail: Component<Props> = (props) => {
     try {
       await api.learnings.update(props.learning.id, { status: next });
       setSaveStatus('saved');
-      props.onUpdated?.();
+      props.onUpdated?.(props.learning.id, { status: next });
       clearTimeout(savedTimer);
       savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
     } catch {

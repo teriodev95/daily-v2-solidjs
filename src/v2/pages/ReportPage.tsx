@@ -1272,8 +1272,10 @@ const ReportPage: Component<ReportPageProps> = (props) => {
         {(learning) => (
           <LearningDetail
             learning={learning()}
-            onClose={() => setSelectedLearning(null)}
-            onUpdated={() => refetchLearnings()}
+            onClose={() => { setSelectedLearning(null); refetchLearnings(); }}
+            onUpdated={(id, fields) => {
+              setSelectedLearning(prev => prev ? { ...prev, ...fields } as Learning : prev);
+            }}
             onDeleted={() => { setSelectedLearning(null); refetchLearnings(); }}
           />
         )}
