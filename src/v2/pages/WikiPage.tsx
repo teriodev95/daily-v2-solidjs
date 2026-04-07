@@ -2,8 +2,9 @@ import { createSignal, createResource, For, Show, type Component } from 'solid-j
 import type { WikiArticle } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
-import { BookOpen, Plus, Search, X } from 'lucide-solid';
+import { BookOpen, Plus, Search, X, Network } from 'lucide-solid';
 import WikiArticleDetail from '../components/WikiArticleDetail';
+import WikiGraph from '../components/WikiGraph';
 
 interface Props {
   refreshKey?: number;
@@ -17,6 +18,7 @@ const WikiPage: Component<Props> = (props) => {
   const [selectedTag, setSelectedTag] = createSignal<string | null>(null);
   const [selectedArticle, setSelectedArticle] = createSignal<WikiArticle | null>(null);
   const [searchQuery, setSearchQuery] = createSignal('');
+  const [showGraph, setShowGraph] = createSignal(false);
 
   const [articles, { refetch }] = createResource(
     () => ({ pid: selectedProjectId(), tag: selectedTag(), _r: props.refreshKey }),
@@ -69,12 +71,24 @@ const WikiPage: Component<Props> = (props) => {
           </div>
           <h1 class="text-lg font-bold">Wiki</h1>
         </div>
-        <button
-          onClick={createArticle}
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500 text-white text-[12px] font-bold hover:brightness-110 transition-all shadow-sm shadow-purple-500/20"
-        >
-          <Plus size={14} /> Nuevo
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            onClick={() => setShowGraph(v => !v)}
+            class={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all ${
+              showGraph()
+                ? 'bg-purple-500/15 text-purple-500 border border-purple-500/20'
+                : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08]'
+            }`}
+          >
+            <Network size={14} /> Grafo
+          </button>
+          <button
+            onClick={createArticle}
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500 text-white text-[12px] font-bold hover:brightness-110 transition-all shadow-sm shadow-purple-500/20"
+          >
+            <Plus size={14} /> Nuevo
+          </button>
+        </div>
       </div>
 
       {/* Project selector */}
@@ -140,6 +154,21 @@ const WikiPage: Component<Props> = (props) => {
         </Show>
       </div>
 
+      {/* Graph view */}
+      <Show when={showGraph() && selectedProjectId()}>
+        <div class="mb-4 h-[500px]">
+          <WikiGraph
+            projectId={selectedProjectId()}
+            onSelectArticle={(id) => {
+              const list = (articles() ?? []) as WikiArticle[];
+              const found = list.find(a => a.id === id);
+              if (found) setSelectedArticle(found);
+            }}
+            onClose={() => setShowGraph(false)}
+          />
+        </div>
+      </Show>
+
       {/* Articles list */}
       <div class="space-y-2">
         <For each={filteredArticles()}>
@@ -195,6 +224,19 @@ const WikiPage: Component<Props> = (props) => {
               setSelectedArticle(prev => prev ? { ...prev, ...fields, tags: fields.tags ?? prev.tags } as WikiArticle : prev);
             }}
             onDeleted={() => { setSelectedArticle(null); refetch(); }}
+            onNavigate={async (targetTitle) => {
+              const list = (articles() ?? []) as WikiArticle[];
+              const found = list.find(a => a.title.toLowerCase() === targetTitle.toLowerCase());
+              if (found) {
+                setSelectedArticle(found);
+              } else {
+                try {
+                  const created = await api.wiki.create({ project_id: selectedProjectId(), title: targetTitle });
+                  refetch();
+                  setSelectedArticle(created as WikiArticle);
+                } catch {}
+              }
+            }}
           />
         )}
       </Show>

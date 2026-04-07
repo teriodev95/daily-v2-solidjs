@@ -144,6 +144,13 @@ export interface Learning {
   updated_at: string;
 }
 
+export interface WikiHistoryEntry {
+  at: string;
+  by: string;
+  title: string;
+  preview: string;
+}
+
 export interface WikiArticle {
   id: string;
   project_id: string;
@@ -151,6 +158,7 @@ export interface WikiArticle {
   title: string;
   content: string;
   tags: string[];
+  history: WikiHistoryEntry[];
   created_by: string;
   created_at: string;
   updated_at: string;

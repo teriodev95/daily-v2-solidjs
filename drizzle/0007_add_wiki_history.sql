@@ -1,0 +1,1 @@
+ALTER TABLE wiki_articles ADD COLUMN history TEXT NOT NULL DEFAULT '[]';

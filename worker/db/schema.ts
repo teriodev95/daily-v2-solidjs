@@ -154,6 +154,7 @@ export const wikiArticles = sqliteTable('wiki_articles', {
   title: text('title').notNull(),
   content: text('content').notNull().default(''),
   tags: text('tags').notNull().default('[]'),
+  history: text('history').notNull().default('[]'),
   created_by: text('created_by').notNull().references(() => users.id),
   created_at: text('created_at').notNull(),
   updated_at: text('updated_at').notNull(),

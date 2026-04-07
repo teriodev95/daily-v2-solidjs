@@ -1,14 +1,16 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
 import type { WikiArticle } from '../types';
 import { api } from '../lib/api';
-import { X, Check, Loader2, Trash2, BookOpen, Tag } from 'lucide-solid';
+import { X, Check, Loader2, Trash2, BookOpen, Tag, Clock } from 'lucide-solid';
 import { ContentEditor } from './ContentEditor';
+import { processWikiLinks } from '../lib/wikiLinks';
 
 interface Props {
   article: WikiArticle;
   onClose: () => void;
   onUpdated?: (id: string, fields: Record<string, unknown>) => void;
   onDeleted?: () => void;
+  onNavigate?: (articleTitle: string) => void;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
@@ -20,6 +22,7 @@ const WikiArticleDetail: Component<Props> = (props) => {
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>('idle');
   const [confirming, setConfirming] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
+  const [showHistory, setShowHistory] = createSignal(false);
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -149,8 +152,39 @@ const WikiArticleDetail: Component<Props> = (props) => {
             content={props.article.content || ''}
             placeholder="Escribe aquí... soporta **markdown** y [[wiki links]]"
             onChange={(md) => scheduleSave({ content: md })}
+            processHtml={processWikiLinks}
+            onLinkClick={(target) => props.onNavigate?.(target)}
           />
         </div>
+
+        {/* History */}
+        <Show when={(props.article as any).history?.length > 0}>
+          <div class="px-5 sm:px-6 py-3 border-t border-base-content/[0.04]">
+            <button
+              onClick={() => setShowHistory(v => !v)}
+              class="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/30 hover:text-base-content/50 transition-colors"
+            >
+              <Clock size={12} />
+              {showHistory() ? 'Ocultar historial' : `Historial (${(props.article as any).history.length})`}
+            </button>
+            <Show when={showHistory()}>
+              <div class="mt-2 space-y-1 max-h-[200px] overflow-y-auto">
+                <For each={[...(props.article as any).history].reverse()}>
+                  {(entry: any) => (
+                    <div class="flex items-start gap-2 px-2 py-1.5 rounded-lg text-[10px]">
+                      <span class="text-base-content/25 shrink-0 font-mono">
+                        {new Date(entry.at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                        {' '}
+                        {new Date(entry.at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span class="text-base-content/40 truncate">{entry.preview || entry.title}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+        </Show>
 
         {/* Delete */}
         <div class="px-5 sm:px-6 py-4 border-t border-base-content/[0.04]">

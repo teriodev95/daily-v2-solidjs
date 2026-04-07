@@ -14,6 +14,8 @@ interface ContentEditorProps {
   content: string;
   placeholder?: string;
   onChange: (markdown: string) => void;
+  processHtml?: (html: string) => string;
+  onLinkClick?: (target: string) => void;
   class?: string;
 }
 
@@ -28,7 +30,9 @@ export function ContentEditor(props: ContentEditorProps) {
 
   const toHtml = (md: string): string => {
     if (!md.trim()) return '';
-    return marked.parse(md) as string;
+    let html = marked.parse(md) as string;
+    if (props.processHtml) html = props.processHtml(html);
+    return html;
   };
 
   onMount(() => {
@@ -108,6 +112,13 @@ export function ContentEditor(props: ContentEditorProps) {
           prose-img:rounded-lg prose-img:shadow-sm"
         onInput={handleInput}
         onPaste={handlePaste}
+        onClick={(e) => {
+          const link = (e.target as HTMLElement).closest('[data-wiki-link]');
+          if (link && props.onLinkClick) {
+            e.preventDefault();
+            props.onLinkClick((link as HTMLElement).dataset.wikiLink!);
+          }
+        }}
       />
     </div>
   );
