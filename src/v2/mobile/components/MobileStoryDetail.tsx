@@ -595,7 +595,6 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
               content={content()}
               placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
               onChange={(md) => {
-                setContent(md);
                 scheduleSave({ description: md });
               }}
               class="px-1"

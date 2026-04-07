@@ -1043,6 +1043,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   value={newLearning()}
                   onInput={(e) => setNewLearning(e.currentTarget.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') addLearning(newLearning()); }}
+                  onBlur={() => { if (newLearning().trim()) addLearning(newLearning()); }}
                   class="flex-1 bg-transparent text-sm outline-none placeholder:text-base-content/20"
                 />
               </div>

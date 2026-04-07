@@ -154,7 +154,6 @@ const LearningDetail: Component<Props> = (props) => {
             content={content()}
             placeholder="Escribe aquí tus notas... soporta **markdown**"
             onChange={(md) => {
-              setContent(md);
               scheduleSave({ content: md });
             }}
           />

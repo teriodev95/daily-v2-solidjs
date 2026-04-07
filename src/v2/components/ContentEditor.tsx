@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onMount } from 'solid-js';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 
@@ -35,16 +35,6 @@ export function ContentEditor(props: ContentEditorProps) {
     lastContent = props.content || '';
     editorRef.innerHTML = toHtml(lastContent);
     setHasContent(!!lastContent.trim());
-  });
-
-  // Sync external content changes (e.g., API fetch updates content after mount)
-  createEffect(() => {
-    const incoming = props.content || '';
-    if (incoming !== lastContent && editorRef) {
-      lastContent = incoming;
-      editorRef.innerHTML = toHtml(incoming);
-      setHasContent(!!incoming.trim());
-    }
   });
 
   const handleInput = () => {
