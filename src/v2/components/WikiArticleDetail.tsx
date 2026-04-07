@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
 import type { WikiArticle } from '../types';
 import { api } from '../lib/api';
-import { X, Check, Loader2, Trash2, BookOpen, Clock, ArrowLeft } from 'lucide-solid';
+import { X, Check, Loader2, Trash2, BookOpen, Clock, ArrowLeft, AlertCircle } from 'lucide-solid';
 import { ContentEditor } from './ContentEditor';
 import { processWikiLinks } from '../lib/wikiLinks';
 
@@ -13,7 +13,7 @@ interface Props {
   onNavigate?: (articleTitle: string) => void;
 }
 
-type SaveStatus = 'idle' | 'saving' | 'saved';
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const WikiArticleDetail: Component<Props> = (props) => {
   const [title, setTitle] = createSignal(props.article.title);
@@ -50,7 +50,7 @@ const WikiArticleDetail: Component<Props> = (props) => {
         props.onUpdated?.(props.article.id, fields);
         clearTimeout(savedTimer);
         savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
-      } catch { setSaveStatus('idle'); }
+      } catch { setSaveStatus('error'); }
     }, 800);
   };
 
@@ -136,6 +136,12 @@ const WikiArticleDetail: Component<Props> = (props) => {
           <Show when={saveStatus() !== 'idle'}>
             <Show when={saveStatus() === 'saving'}><Loader2 size={12} class="text-base-content/40 animate-spin" /></Show>
             <Show when={saveStatus() === 'saved'}><Check size={12} class="text-ios-green-500" /></Show>
+            <Show when={saveStatus() === 'error'}>
+              <span class="flex items-center gap-1 text-red-500" title="Error al guardar — verifica tu conexión">
+                <AlertCircle size={12} />
+                <span class="text-[9px] font-semibold">Sin guardar</span>
+              </span>
+            </Show>
           </Show>
 
           <Show when={(props.article.history ?? []).length > 0}>

@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup, Show, type Component } from 'solid-js';
 import type { Learning } from '../types';
 import { api } from '../lib/api';
-import { X, Check, Loader2, Trash2, BookOpen } from 'lucide-solid';
+import { X, Check, Loader2, Trash2, BookOpen, AlertCircle } from 'lucide-solid';
 import { ContentEditor } from './ContentEditor';
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
   onDeleted?: () => void;
 }
 
-type SaveStatus = 'idle' | 'saving' | 'saved';
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const LearningDetail: Component<Props> = (props) => {
   const [title, setTitle] = createSignal(props.learning.title);
@@ -44,7 +44,7 @@ const LearningDetail: Component<Props> = (props) => {
         clearTimeout(savedTimer);
         savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
-        setSaveStatus('idle');
+        setSaveStatus('error');
       }
     }, 800);
   };
@@ -61,7 +61,7 @@ const LearningDetail: Component<Props> = (props) => {
       savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
     } catch {
       setStatus(status() === 'active' ? 'done' : 'active');
-      setSaveStatus('idle');
+      setSaveStatus('error');
     }
   };
 
@@ -119,6 +119,12 @@ const LearningDetail: Component<Props> = (props) => {
                   </Show>
                   <Show when={saveStatus() === 'saved'}>
                     <Check size={12} class="text-ios-green-500" />
+                  </Show>
+                  <Show when={saveStatus() === 'error'}>
+                    <span class="flex items-center gap-1 text-red-500" title="Error al guardar">
+                      <AlertCircle size={12} />
+                      <span class="text-[9px] font-semibold">Sin guardar</span>
+                    </span>
                   </Show>
                 </span>
               </Show>

@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
   ClipboardCheck, Trash2,
-  Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban, Archive,
+  Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban, Archive, AlertCircle,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
 import AttachmentSection from './AttachmentSection';
@@ -89,7 +89,7 @@ interface Props {
   zIndex?: number;
 }
 
-type SaveStatus = 'idle' | 'saving' | 'saved';
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const StoryDetail: Component<Props> = (props) => {
   const data = useData();
@@ -134,7 +134,7 @@ const StoryDetail: Component<Props> = (props) => {
         clearTimeout(savedTimer);
         savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
-        setSaveStatus('idle');
+        setSaveStatus('error');
       }
     }, 800);
   };
@@ -148,7 +148,7 @@ const StoryDetail: Component<Props> = (props) => {
       clearTimeout(savedTimer);
       savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
     } catch {
-      setSaveStatus('idle');
+      setSaveStatus('error');
     }
   };
 
@@ -569,6 +569,12 @@ const StoryDetail: Component<Props> = (props) => {
                   </Show>
                   <Show when={saveStatus() === 'saved'}>
                     <Check size={12} class="text-ios-green-500" />
+                  </Show>
+                  <Show when={saveStatus() === 'error'}>
+                    <span class="flex items-center gap-1 text-red-500" title="Error al guardar">
+                      <AlertCircle size={12} />
+                      <span class="text-[9px] font-semibold">Sin guardar</span>
+                    </span>
                   </Show>
                 </span>
               </Show>

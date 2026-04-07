@@ -1,15 +1,23 @@
 /**
  * Process wiki links in HTML content.
  * Supports [[Article Name]] and [[Article Name|Display Text]].
+ * Skips content inside <code> and <pre> blocks.
  */
 export function processWikiLinks(html: string): string {
-  return html.replace(
-    /\[\[(.+?)(?:\|(.+?))?\]\]/g,
-    (_match, target, display) => {
-      const label = display || target;
-      return `<a class="wiki-link" data-wiki-link="${target}" href="#" style="color: var(--purple-500, #a855f7); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">${label}</a>`;
-    }
-  );
+  // Split HTML by code/pre blocks to avoid processing inside them
+  const parts = html.split(/(<(?:code|pre)[^>]*>[\s\S]*?<\/(?:code|pre)>)/gi);
+  return parts.map((part, i) => {
+    // Odd indices are code/pre blocks — leave untouched
+    if (i % 2 === 1) return part;
+    return part.replace(
+      /\[\[(.+?)(?:\|(.+?))?\]\]/g,
+      (_match, target, display) => {
+        const label = display || target;
+        const safeTarget = target.replace(/"/g, '&quot;');
+        return `<a class="wiki-link" data-wiki-link="${safeTarget}" href="#" style="color: var(--purple-500, #a855f7); text-decoration: underline; text-decoration-style: dotted; cursor: pointer;">${label}</a>`;
+      }
+    );
+  }).join('');
 }
 
 /**

@@ -297,6 +297,9 @@ wiki.delete('/:id', async (c) => {
   const db = c.get('db');
   const id = c.req.param('id');
 
+  const [article] = await db.select().from(schema.wikiArticles).where(eq(schema.wikiArticles.id, id)).limit(1);
+  if (!article) return c.json({ error: 'Not found' }, 404);
+
   await db.delete(schema.wikiArticles).where(eq(schema.wikiArticles.id, id));
   return c.json({ ok: true });
 });
