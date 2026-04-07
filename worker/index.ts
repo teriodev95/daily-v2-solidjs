@@ -21,7 +21,7 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 app.use('/api/*', cors({
   origin: (origin) => origin ?? '*',
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type'],
+  allowHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
 
@@ -46,6 +46,23 @@ app.get('/api/avatars/:key{.+}', async (c) => {
     headers: {
       'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
       'Cache-Control': 'public, max-age=86400',
+    },
+  });
+});
+
+// Meta endpoint — discovery for agents
+app.use('/api/meta', authMiddleware);
+app.get('/api/meta', async (c) => {
+  return c.json({
+    priorities: ['low', 'medium', 'high', 'critical'],
+    statuses: ['backlog', 'todo', 'in_progress', 'done'],
+    categories: ['yesterday', 'today', 'backlog'],
+    frequencies: ['daily', 'weekly', 'monthly'],
+    endpoints: {
+      stories: { list: 'GET /api/stories', create: 'POST /api/stories', get: 'GET /api/stories/:id', update: 'PATCH /api/stories/:id', delete: 'DELETE /api/stories/:id' },
+      projects: { list: 'GET /api/projects' },
+      members: { list: 'GET /api/team/members' },
+      meta: { get: 'GET /api/meta' },
     },
   });
 });

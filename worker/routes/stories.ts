@@ -82,6 +82,12 @@ stories.get('/', async (c) => {
     rows = rows.filter(s => s.assignee_id === assigneeId || linkedStoryIds.has(s.id));
   }
 
+  // Pagination
+  const total = rows.length;
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 200);
+  const offset = parseInt(c.req.query('offset') ?? '0');
+  rows = rows.slice(offset, offset + limit);
+
   // Attach assignees array to each story
   const allAssignees = await db.select().from(schema.storyAssignees);
   const assigneeMap = new Map<string, string[]>();
@@ -96,6 +102,10 @@ stories.get('/', async (c) => {
     assignees: assigneeMap.get(s.id) ?? [],
   }));
 
+  const isPaginated = c.req.query('limit') !== undefined || c.req.query('offset') !== undefined;
+  if (isPaginated) {
+    return c.json({ data: result, total, limit, offset });
+  }
   return c.json(result);
 });
 
@@ -123,6 +133,23 @@ stories.post('/', async (c) => {
     recurrence_days?: number[];
     recurring_parent_id?: string;
   }>();
+
+  // Validation
+  if (!body.title?.trim()) {
+    return c.json({ error: 'title is required', field: 'title' }, 400);
+  }
+  const validPriorities = ['low', 'medium', 'high', 'critical'];
+  if (body.priority && !validPriorities.includes(body.priority)) {
+    return c.json({ error: `priority must be one of: ${validPriorities.join(', ')}`, field: 'priority' }, 400);
+  }
+  const validStatuses = ['backlog', 'todo', 'in_progress', 'done'];
+  if (body.status && !validStatuses.includes(body.status)) {
+    return c.json({ error: `status must be one of: ${validStatuses.join(', ')}`, field: 'status' }, 400);
+  }
+  const validFrequencies = ['daily', 'weekly', 'monthly'];
+  if (body.frequency && !validFrequencies.includes(body.frequency)) {
+    return c.json({ error: `frequency must be one of: ${validFrequencies.join(', ')}`, field: 'frequency' }, 400);
+  }
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -198,6 +225,21 @@ stories.patch('/:id', async (c) => {
   const { assignees, ...fields } = body;
   delete (fields as any).purpose;
   delete (fields as any).objective;
+
+  // Validate known fields
+  if (fields.priority !== undefined) {
+    const validPriorities = ['low', 'medium', 'high', 'critical'];
+    if (!validPriorities.includes(fields.priority as string)) {
+      return c.json({ error: `priority must be one of: ${validPriorities.join(', ')}`, field: 'priority' }, 400);
+    }
+  }
+  if (fields.status !== undefined) {
+    const validStatuses = ['backlog', 'todo', 'in_progress', 'done'];
+    if (!validStatuses.includes(fields.status as string)) {
+      return c.json({ error: `status must be one of: ${validStatuses.join(', ')}`, field: 'status' }, 400);
+    }
+  }
+
   if (fields.recurrence_days !== undefined) {
     fields.recurrence_days = fields.recurrence_days ? JSON.stringify(fields.recurrence_days) : null;
   }
