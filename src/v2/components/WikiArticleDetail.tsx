@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
 import type { WikiArticle } from '../types';
 import { api } from '../lib/api';
-import { X, Check, Loader2, Trash2, BookOpen, Tag, Clock } from 'lucide-solid';
+import { X, Check, Loader2, Trash2, BookOpen, Clock, ArrowLeft } from 'lucide-solid';
 import { ContentEditor } from './ContentEditor';
 import { processWikiLinks } from '../lib/wikiLinks';
 
@@ -26,7 +26,14 @@ const WikiArticleDetail: Component<Props> = (props) => {
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
-  onMount(() => { document.body.style.overflow = 'hidden'; });
+  onMount(() => {
+    document.body.style.overflow = 'hidden';
+    // Snapshot current state once when opening (not on every save)
+    if (props.article.content?.trim()) {
+      api.wiki.snapshot(props.article.id).catch(() => {});
+    }
+  });
+
   onCleanup(() => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
@@ -75,43 +82,88 @@ const WikiArticleDetail: Component<Props> = (props) => {
   document.addEventListener('keydown', handleKeyDown);
   onCleanup(() => document.removeEventListener('keydown', handleKeyDown));
 
+  const formatHistoryDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return `${d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} ${d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`;
+    } catch { return dateStr; }
+  };
+
   return (
-    <div
-      class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center z-[100] animate-in fade-in duration-200"
-      onClick={() => props.onClose()}
-    >
-      <div
-        class="story-detail-modal bg-base-100/95 shadow-2xl shadow-black w-full sm:max-w-2xl sm:rounded-[24px] rounded-t-[32px] mt-auto sm:mt-0 max-h-[92vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden relative flex flex-col"
-        style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div class="sticky top-0 bg-base-100/80 backdrop-blur-xl z-20 px-5 sm:px-6 py-3 border-b border-base-content/[0.04]">
-          <div class="flex items-center gap-2">
-            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-500">
-              <BookOpen size={12} />
-              <span class="text-[11px] font-bold">Wiki</span>
-            </div>
-            <div class="flex items-center gap-1 ml-auto">
-              <Show when={saveStatus() !== 'idle'}>
-                <Show when={saveStatus() === 'saving'}><Loader2 size={12} class="text-base-content/40 animate-spin" /></Show>
-                <Show when={saveStatus() === 'saved'}><Check size={12} class="text-ios-green-500" /></Show>
-              </Show>
-              <button onClick={() => props.onClose()} class="p-1.5 rounded-full hover:bg-base-content/10 transition-colors group">
-                <X size={18} class="text-base-content/40 group-hover:text-base-content/80" />
-              </button>
-            </div>
-          </div>
+    <div class="fixed inset-0 z-[100] bg-base-100 flex flex-col animate-in fade-in duration-200">
+
+      {/* Header — sticky bar */}
+      <div class="shrink-0 px-6 sm:px-10 py-3 border-b border-base-content/[0.04] flex items-center gap-3">
+        <button
+          onClick={() => props.onClose()}
+          class="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/40 hover:text-base-content/70 transition-colors"
+        >
+          <ArrowLeft size={14} />
+          Volver
+        </button>
+
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-500">
+          <BookOpen size={11} />
+          <span class="text-[10px] font-bold">Wiki</span>
         </div>
 
-        {/* Body */}
-        <div class="px-5 sm:px-6 py-5 space-y-4 flex-1">
+        {/* Tags inline */}
+        <div class="flex items-center gap-1 flex-wrap flex-1 min-w-0">
+          <For each={tags()}>
+            {(tag) => (
+              <span class="flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-base-content/[0.04] text-base-content/40">
+                {tag}
+                <button onClick={() => removeTag(tag)} class="hover:text-red-400 transition-colors">
+                  <X size={8} />
+                </button>
+              </span>
+            )}
+          </For>
+          <input
+            type="text"
+            value={newTag()}
+            onInput={(e) => setNewTag(e.currentTarget.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+            onBlur={() => { if (newTag().trim()) addTag(); }}
+            placeholder="+ tag"
+            class="text-[10px] bg-transparent outline-none w-12 text-base-content/30 placeholder:text-base-content/15"
+          />
+        </div>
+
+        {/* Right actions */}
+        <div class="flex items-center gap-2 shrink-0">
+          <Show when={saveStatus() !== 'idle'}>
+            <Show when={saveStatus() === 'saving'}><Loader2 size={12} class="text-base-content/40 animate-spin" /></Show>
+            <Show when={saveStatus() === 'saved'}><Check size={12} class="text-ios-green-500" /></Show>
+          </Show>
+
+          <Show when={(props.article.history ?? []).length > 0}>
+            <button
+              onClick={() => setShowHistory(v => !v)}
+              class={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-all ${
+                showHistory()
+                  ? 'bg-base-content/[0.06] text-base-content/50'
+                  : 'text-base-content/25 hover:text-base-content/40'
+              }`}
+            >
+              <Clock size={11} />
+              {(props.article.history ?? []).length}
+            </button>
+          </Show>
+        </div>
+      </div>
+
+      {/* Body — scrollable, centered, max-width for readability */}
+      <div class="flex-1 overflow-y-auto" style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}>
+        <div class="max-w-3xl mx-auto px-6 sm:px-10 py-8">
+
           {/* Title */}
-          <div class="overflow-hidden">
+          <div class="overflow-hidden mb-6">
             <textarea
               value={title()}
               rows={1}
-              class="w-full text-xl sm:text-[24px] font-extrabold leading-tight text-base-content bg-transparent resize-none outline-none overflow-hidden px-1 py-1 placeholder:text-base-content/20"
+              class="w-full text-2xl sm:text-3xl font-extrabold leading-tight text-base-content bg-transparent resize-none outline-none overflow-hidden py-1 placeholder:text-base-content/15"
               placeholder="Título del artículo"
               ref={(el) => { requestAnimationFrame(() => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }); }}
               onInput={(e) => {
@@ -124,30 +176,26 @@ const WikiArticleDetail: Component<Props> = (props) => {
             />
           </div>
 
-          {/* Tags */}
-          <div class="flex items-center gap-1.5 flex-wrap px-1">
-            <For each={tags()}>
-              {(tag) => (
-                <span class="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-500">
-                  {tag}
-                  <button onClick={() => removeTag(tag)} class="hover:text-red-400 transition-colors">
-                    <X size={10} />
-                  </button>
-                </span>
-              )}
-            </For>
-            <input
-              type="text"
-              value={newTag()}
-              onInput={(e) => setNewTag(e.currentTarget.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-              onBlur={() => { if (newTag().trim()) addTag(); }}
-              placeholder="+ tag"
-              class="text-[11px] bg-transparent outline-none w-16 text-base-content/40 placeholder:text-base-content/20"
-            />
-          </div>
+          {/* History panel (inline, collapsible) */}
+          <Show when={showHistory()}>
+            <div class="mb-6 rounded-xl border border-base-content/[0.06] bg-base-content/[0.02] p-4">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-base-content/25 mb-3">Historial de cambios</p>
+              <div class="space-y-1 max-h-[200px] overflow-y-auto">
+                <For each={[...(props.article.history ?? [])].reverse()}>
+                  {(entry: any) => (
+                    <div class="flex items-start gap-3 py-1.5 text-[11px]">
+                      <span class="text-base-content/30 shrink-0 font-mono text-[10px]">
+                        {formatHistoryDate(entry.at)}
+                      </span>
+                      <span class="text-base-content/40 truncate flex-1">{entry.preview || entry.title}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
 
-          {/* Content */}
+          {/* Content — full width editor */}
           <ContentEditor
             content={props.article.content || ''}
             placeholder="Escribe aquí... soporta **markdown** y [[wiki links]]"
@@ -156,50 +204,23 @@ const WikiArticleDetail: Component<Props> = (props) => {
             onLinkClick={(target) => props.onNavigate?.(target)}
           />
         </div>
+      </div>
 
-        {/* History */}
-        <Show when={(props.article as any).history?.length > 0}>
-          <div class="px-5 sm:px-6 py-3 border-t border-base-content/[0.04]">
-            <button
-              onClick={() => setShowHistory(v => !v)}
-              class="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/30 hover:text-base-content/50 transition-colors"
-            >
-              <Clock size={12} />
-              {showHistory() ? 'Ocultar historial' : `Historial (${(props.article as any).history.length})`}
-            </button>
-            <Show when={showHistory()}>
-              <div class="mt-2 space-y-1 max-h-[200px] overflow-y-auto">
-                <For each={[...(props.article as any).history].reverse()}>
-                  {(entry: any) => (
-                    <div class="flex items-start gap-2 px-2 py-1.5 rounded-lg text-[10px]">
-                      <span class="text-base-content/25 shrink-0 font-mono">
-                        {new Date(entry.at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                        {' '}
-                        {new Date(entry.at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <span class="text-base-content/40 truncate">{entry.preview || entry.title}</span>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </div>
-        </Show>
-
-        {/* Delete */}
-        <div class="px-5 sm:px-6 py-4 border-t border-base-content/[0.04]">
+      {/* Footer — delete action */}
+      <div class="shrink-0 px-6 sm:px-10 py-3 border-t border-base-content/[0.04]">
+        <div class="max-w-3xl mx-auto">
           <Show
             when={confirming()}
             fallback={
-              <button onClick={() => setConfirming(true)} class="flex items-center gap-2 text-[12px] font-semibold text-base-content/30 hover:text-red-500 hover:bg-red-500/10 px-3 py-1.5 rounded-lg transition-all">
-                <Trash2 size={14} /> Eliminar
+              <button onClick={() => setConfirming(true)} class="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/20 hover:text-red-500 hover:bg-red-500/10 px-2.5 py-1.5 rounded-lg transition-all">
+                <Trash2 size={12} /> Eliminar artículo
               </button>
             }
           >
             <div class="flex items-center gap-3">
-              <span class="text-[12px] font-medium text-red-500">¿Eliminar este artículo?</span>
-              <button onClick={() => setConfirming(false)} disabled={deleting()} class="text-[12px] font-medium px-4 py-2 rounded-xl bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/10 transition-all">Cancelar</button>
-              <button onClick={handleDelete} disabled={deleting()} class="text-[12px] font-medium px-4 py-2 rounded-xl bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-all disabled:opacity-50">
+              <span class="text-[11px] font-medium text-red-500">¿Eliminar?</span>
+              <button onClick={() => setConfirming(false)} disabled={deleting()} class="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/10 transition-all">Cancelar</button>
+              <button onClick={handleDelete} disabled={deleting()} class="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-all disabled:opacity-50">
                 {deleting() ? 'Eliminando...' : 'Sí, eliminar'}
               </button>
             </div>

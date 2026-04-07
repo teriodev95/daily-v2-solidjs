@@ -214,6 +214,8 @@ export const api = {
       request<WikiArticle>(`/api/wiki/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<{ ok: boolean }>(`/api/wiki/${id}`, { method: 'DELETE' }),
+    snapshot: (id: string) =>
+      request<{ ok: boolean }>(`/api/wiki/${id}/snapshot`, { method: 'POST' }),
   },
 
   admin: {

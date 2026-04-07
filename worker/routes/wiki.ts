@@ -145,34 +145,16 @@ wiki.get('/:id', async (c) => {
   return c.json({ ...article, tags: JSON.parse(article.tags || '[]'), history: JSON.parse(article.history || '[]') });
 });
 
-// Update article (with history snapshot on content changes)
+// Update article (no automatic history — use POST /:id/snapshot explicitly)
 wiki.patch('/:id', async (c) => {
   const db = c.get('db');
-  const user = c.get('user');
   const id = c.req.param('id');
   const body = await c.req.json<Record<string, unknown>>();
-
-  const [current] = await db.select().from(schema.wikiArticles).where(eq(schema.wikiArticles.id, id)).limit(1);
-  if (!current) return c.json({ error: 'Not found' }, 404);
 
   const allowed: Record<string, unknown> = {};
   if (body.title !== undefined) allowed.title = body.title;
   if (body.content !== undefined) allowed.content = body.content;
   if (body.tags !== undefined) allowed.tags = JSON.stringify(body.tags);
-
-  // Save history snapshot when content or title changes
-  if (body.content !== undefined && body.content !== current.content) {
-    const history = JSON.parse(current.history || '[]');
-    history.push({
-      at: new Date().toISOString(),
-      by: user.userId,
-      title: current.title,
-      preview: (current.content || '').slice(0, 200),
-    });
-    // Keep last 50 snapshots
-    if (history.length > 50) history.splice(0, history.length - 50);
-    allowed.history = JSON.stringify(history);
-  }
 
   if (Object.keys(allowed).length > 0) {
     await db
@@ -182,7 +164,35 @@ wiki.patch('/:id', async (c) => {
   }
 
   const [updated] = await db.select().from(schema.wikiArticles).where(eq(schema.wikiArticles.id, id)).limit(1);
+  if (!updated) return c.json({ error: 'Not found' }, 404);
   return c.json({ ...updated, tags: JSON.parse(updated.tags || '[]'), history: JSON.parse(updated.history || '[]') });
+});
+
+// Save a snapshot of the current state (called once when opening for edit)
+wiki.post('/:id/snapshot', async (c) => {
+  const db = c.get('db');
+  const user = c.get('user');
+  const id = c.req.param('id');
+
+  const [article] = await db.select().from(schema.wikiArticles).where(eq(schema.wikiArticles.id, id)).limit(1);
+  if (!article) return c.json({ error: 'Not found' }, 404);
+  if (!article.content?.trim()) return c.json({ ok: true, skipped: true });
+
+  const history = JSON.parse(article.history || '[]');
+  history.push({
+    at: new Date().toISOString(),
+    by: user.userId,
+    title: article.title,
+    preview: article.content.slice(0, 200),
+  });
+  if (history.length > 50) history.splice(0, history.length - 50);
+
+  await db
+    .update(schema.wikiArticles)
+    .set({ history: JSON.stringify(history) } as any)
+    .where(eq(schema.wikiArticles.id, id));
+
+  return c.json({ ok: true });
 });
 
 // Delete article
