@@ -92,8 +92,6 @@ export function ContentEditor(props: ContentEditorProps) {
         ref={editorRef}
         contentEditable={true}
         class="outline-none min-h-[200px] px-3 py-3 text-[15px] leading-relaxed
-          rounded-xl transition-all duration-150
-          focus:bg-base-content/[0.02] focus:ring-1 focus:ring-base-content/[0.08]
           prose prose-sm max-w-none
           prose-headings:text-base-content prose-headings:font-semibold
           prose-headings:mt-4 prose-headings:mb-2 prose-headings:first:mt-0
