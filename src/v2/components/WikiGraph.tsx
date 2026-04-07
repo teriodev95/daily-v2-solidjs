@@ -44,6 +44,9 @@ const WikiGraph: Component<Props> = (props) => {
     const initGraph = () => {
       if (!containerRef || graphInstance) return;
 
+      // Detect theme for colors
+      const isDark = () => document.documentElement.getAttribute('data-theme')?.includes('dark') ?? true;
+
       graphInstance = ForceGraph()(containerRef)
         .graphData({ nodes: [], links: [] })
         .nodeLabel('name')
@@ -53,10 +56,10 @@ const WikiGraph: Component<Props> = (props) => {
           if (tags.includes('credencial')) return '#ef4444';
           if (tags.includes('procedimiento')) return '#3b82f6';
           if (tags.includes('snippet')) return '#22c55e';
-          return '#6b7280';
+          return isDark() ? '#9ca3af' : '#6b7280';
         })
         .nodeVal((node: GraphNode) => node.val ?? 3)
-        .linkColor(() => 'rgba(255,255,255,0.08)')
+        .linkColor(() => isDark() ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)')
         .linkWidth(1.5)
         .backgroundColor('transparent')
         .onNodeClick((node: GraphNode) => {
@@ -94,7 +97,7 @@ const WikiGraph: Component<Props> = (props) => {
           ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
-          ctx.fillStyle = 'rgba(255,255,255,0.7)';
+          ctx.fillStyle = isDark() ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
           ctx.fillText(label, node.x, node.y + nodeSize + 2);
         }
       });
