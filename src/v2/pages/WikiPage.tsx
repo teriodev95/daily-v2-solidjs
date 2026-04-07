@@ -2,7 +2,7 @@ import { createSignal, createResource, For, Show, type Component } from 'solid-j
 import type { WikiArticle } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
-import { BookOpen, Plus, Search, X, Network, ChevronDown } from 'lucide-solid';
+import { BookOpen, Plus, Search, X, Network } from 'lucide-solid';
 import WikiArticleDetail from '../components/WikiArticleDetail';
 import WikiGraph from '../components/WikiGraph';
 
@@ -10,7 +10,7 @@ interface Props {
   refreshKey?: number;
 }
 
-const MAX_VISIBLE_TAGS = 8;
+const MAX_VISIBLE_TAGS = 6;
 
 const WikiPage: Component<Props> = (props) => {
   const data = useData();
@@ -70,24 +70,22 @@ const WikiPage: Component<Props> = (props) => {
   const selectedProject = () => activeProjects().find(p => p.id === selectedProjectId());
 
   return (
-    <div class="px-6 sm:px-10 py-6 pb-24">
-
-      {/* ── Row 1: Header — icon, title, search, actions ── */}
-      <div class="flex items-center gap-4 mb-5">
-        <div class="flex items-center gap-2.5 shrink-0">
+    <>
+      {/* ── Row 1: Header ── */}
+      <div class="flex items-center gap-3 mb-4">
+        <div class="flex items-center gap-2 shrink-0">
           <div class="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center">
             <BookOpen size={14} class="text-purple-500" />
           </div>
-          <div class="leading-none">
-            <span class="text-[13px] font-bold">Wiki</span>
-            <Show when={selectedProject()}>
-              <span class="text-[10px] font-semibold text-base-content/25 ml-1.5">· {selectedProject()!.name}</span>
-            </Show>
-          </div>
+          <span class="text-[13px] font-bold">Wiki</span>
+          <Show when={selectedProject()}>
+            <span class="text-[10px] font-semibold text-base-content/25">· {selectedProject()!.name}</span>
+          </Show>
         </div>
 
-        <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-base-content/[0.03] border border-base-content/[0.04] flex-1 max-w-[240px]">
-          <Search size={12} class="text-base-content/20 shrink-0" />
+        {/* Search */}
+        <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-base-content/[0.03] border border-base-content/[0.04] max-w-[200px] flex-1">
+          <Search size={11} class="text-base-content/20 shrink-0" />
           <input
             type="text"
             value={searchQuery()}
@@ -100,7 +98,8 @@ const WikiPage: Component<Props> = (props) => {
           </Show>
         </div>
 
-        <div class="flex items-center gap-1.5 ml-auto shrink-0">
+        {/* Actions — right aligned */}
+        <div class="flex items-center gap-1 ml-auto shrink-0">
           <button
             onClick={() => setShowGraph(v => !v)}
             class={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all ${
@@ -118,76 +117,65 @@ const WikiPage: Component<Props> = (props) => {
         </div>
       </div>
 
-      {/* ── Row 2: Projects + tags — single line ── */}
-      <div class="flex items-center gap-3 mb-5">
+      {/* ── Row 2: Projects | Tags ── */}
+      <div class="flex items-center gap-2 mb-4 overflow-x-auto">
         {/* Projects */}
-        <div class="flex items-center gap-1 shrink-0 overflow-x-auto">
-          <For each={activeProjects()}>
-            {(p) => {
-              const active = () => selectedProjectId() === p.id;
-              return (
-                <button
-                  onClick={() => { setSelectedProjectId(p.id); setSelectedTag(null); setShowAllTags(false); }}
-                  class={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-all shrink-0 ${
-                    active() ? '' : 'opacity-30 hover:opacity-60'
-                  }`}
-                  style={{ "background-color": active() ? `${p.color}10` : 'transparent', color: p.color }}
-                >
-                  <div class="w-3 h-3 rounded-sm shrink-0 flex items-center justify-center text-[6px] font-bold text-white" style={{ "background-color": p.color }}>
-                    {p.prefix.slice(0, 2)}
-                  </div>
-                  {p.name}
-                </button>
-              );
-            }}
-          </For>
-        </div>
+        <For each={activeProjects()}>
+          {(p) => {
+            const active = () => selectedProjectId() === p.id;
+            return (
+              <button
+                onClick={() => { setSelectedProjectId(p.id); setSelectedTag(null); setShowAllTags(false); }}
+                class={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-all shrink-0 ${
+                  active() ? '' : 'opacity-30 hover:opacity-60'
+                }`}
+                style={{ "background-color": active() ? `${p.color}10` : 'transparent', color: p.color }}
+              >
+                <div class="w-3 h-3 rounded-sm shrink-0 flex items-center justify-center text-[6px] font-bold text-white" style={{ "background-color": p.color }}>
+                  {p.prefix.slice(0, 2)}
+                </div>
+                {p.name}
+              </button>
+            );
+          }}
+        </For>
 
-        {/* Divider */}
         <Show when={allTags().length > 0}>
-          <div class="w-px h-4 bg-base-content/[0.06] shrink-0" />
+          <div class="w-px h-3.5 bg-base-content/[0.06] shrink-0" />
         </Show>
 
-        {/* Tags — compact, max visible */}
+        {/* Tags */}
         <Show when={allTags().length > 0}>
-          <div class="flex items-center gap-1 flex-wrap min-w-0">
-            <For each={visibleTags()}>
-              {(tag) => (
-                <button
-                  onClick={() => setSelectedTag(selectedTag() === tag ? null : tag)}
-                  class={`text-[9px] font-semibold px-1.5 py-0.5 rounded transition-all ${
-                    selectedTag() === tag
-                      ? 'bg-purple-500/15 text-purple-500'
-                      : 'bg-base-content/[0.03] text-base-content/25 hover:text-base-content/40'
-                  }`}
-                >
-                  {tag}
-                </button>
-              )}
-            </For>
-            <Show when={hiddenTagCount() > 0 && !showAllTags()}>
+          <For each={visibleTags()}>
+            {(tag) => (
               <button
-                onClick={() => setShowAllTags(true)}
-                class="text-[9px] font-semibold text-base-content/20 hover:text-base-content/40 px-1"
+                onClick={() => setSelectedTag(selectedTag() === tag ? null : tag)}
+                class={`text-[9px] font-semibold px-1.5 py-0.5 rounded transition-all shrink-0 ${
+                  selectedTag() === tag
+                    ? 'bg-purple-500/15 text-purple-500'
+                    : 'bg-base-content/[0.03] text-base-content/25 hover:text-base-content/40'
+                }`}
               >
-                +{hiddenTagCount()}
+                {tag}
               </button>
-            </Show>
-            <Show when={showAllTags() && hiddenTagCount() > 0}>
-              <button
-                onClick={() => setShowAllTags(false)}
-                class="text-[9px] font-semibold text-base-content/20 hover:text-base-content/40 px-1"
-              >
-                menos
-              </button>
-            </Show>
-          </div>
+            )}
+          </For>
+          <Show when={hiddenTagCount() > 0 && !showAllTags()}>
+            <button onClick={() => setShowAllTags(true)} class="text-[9px] font-semibold text-base-content/20 hover:text-base-content/40 shrink-0">
+              +{hiddenTagCount()}
+            </button>
+          </Show>
+          <Show when={showAllTags() && hiddenTagCount() > 0}>
+            <button onClick={() => setShowAllTags(false)} class="text-[9px] font-semibold text-base-content/20 hover:text-base-content/40 shrink-0">
+              menos
+            </button>
+          </Show>
         </Show>
       </div>
 
-      {/* ── Graph (toggle, full width within container) ── */}
+      {/* ── Graph ── */}
       <Show when={showGraph() && selectedProjectId()}>
-        <div class="mb-5 h-[calc(100vh-220px)] min-h-[300px]">
+        <div class="mb-4 h-[calc(100vh-220px)] min-h-[300px]">
           <WikiGraph
             projectId={selectedProjectId()}
             onSelectArticle={(id) => {
@@ -200,9 +188,9 @@ const WikiPage: Component<Props> = (props) => {
         </div>
       </Show>
 
-      {/* ── Articles list ── */}
+      {/* ── Articles ── */}
       <Show when={!showGraph()}>
-        <div class="space-y-1">
+        <div class="space-y-0.5">
           <For each={filteredArticles()}>
             {(article) => (
               <div
@@ -267,7 +255,7 @@ const WikiPage: Component<Props> = (props) => {
           />
         )}
       </Show>
-    </div>
+    </>
   );
 };
 

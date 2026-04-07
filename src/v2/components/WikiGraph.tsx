@@ -70,14 +70,19 @@ const WikiGraph: Component<Props> = (props) => {
         })
         .width(containerRef.clientWidth)
         .height(containerRef.clientHeight)
-        .cooldownTicks(60)
-        .d3AlphaDecay(0.05)
-        .d3VelocityDecay(0.3);
+        .cooldownTicks(100)
+        .d3AlphaDecay(0.02)
+        .d3VelocityDecay(0.15);
+
+      // Spread nodes apart — increase charge repulsion
+      graphInstance.d3Force('charge').strength(-300).distanceMax(400);
+      graphInstance.d3Force('link').distance(120);
+      graphInstance.d3Force('center').strength(0.05);
 
       // Custom node rendering with labels
       graphInstance.nodeCanvasObject((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
         const label = node.name;
-        const fontSize = Math.max(10 / globalScale, 3);
+        const fontSize = Math.max(11 / globalScale, 3);
         const nodeSize = node.val ?? 3;
 
         // Node circle
@@ -120,7 +125,7 @@ const WikiGraph: Component<Props> = (props) => {
         }
         const nodes = (data.nodes as GraphNode[]).map(n => ({
           ...n,
-          val: 2 + (connectionCount.get(n.id) ?? 0) * 1.5,
+          val: 1.5 + (connectionCount.get(n.id) ?? 0) * 0.8,
         }));
         graphInstance.graphData({ nodes, links: data.links });
         clearInterval(checkData);
