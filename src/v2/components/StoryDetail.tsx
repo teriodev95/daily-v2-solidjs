@@ -448,7 +448,7 @@ const StoryDetail: Component<Props> = (props) => {
               </button>
               <Show when={showDatePicker()}>
                 <div class="fixed inset-0 z-20" onClick={() => setShowDatePicker(false)} />
-                <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-3 backdrop-blur-md min-w-[280px]">
+                <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-3 backdrop-blur-md min-w-[280px]" onClick={(e) => e.stopPropagation()}>
                   <div class="flex flex-wrap gap-1.5 mb-3">
                     <For each={[btnHoy(), btnManana(), btnPasado(), btnSemana()]}>
                       {(btn) => {
