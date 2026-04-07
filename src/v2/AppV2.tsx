@@ -1,5 +1,5 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays, ListChecks } from 'lucide-solid';
+import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays, ListChecks, Archive } from 'lucide-solid';
 import dailyIcon from '../assets/daily-icon.png';
 import type { ReportCategory, Story } from './types';
 import { AuthProvider, useAuth } from './lib/auth';
@@ -35,11 +35,17 @@ const AppShell: Component = () => {
   const [showSearch, setShowSearch] = createSignal(false);
   const [searchSelectedStory, setSearchSelectedStory] = createSignal<Story | null>(null);
   const [shareRequested, setShareRequested] = createSignal(0);
+  const [hiddenRequested, setHiddenRequested] = createSignal(0);
   const [showCalendar, setShowCalendar] = createSignal(false);
 
   const triggerShare = () => {
     if (activeTab() !== 'report') switchTab('report');
     setShareRequested(k => k + 1);
+  };
+
+  const triggerHiddenStories = () => {
+    if (activeTab() !== 'report') switchTab('report');
+    setHiddenRequested(k => k + 1);
   };
 
   const openCreateModal = (category?: ReportCategory, projectId?: string) => {
@@ -162,6 +168,13 @@ const AppShell: Component = () => {
               <Send size={15} />
             </button>
             <button
+              onClick={triggerHiddenStories}
+              class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
+              title="Ver ocultadas"
+            >
+              <Archive size={15} />
+            </button>
+            <button
               onClick={toggleTheme}
               class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
             >
@@ -241,7 +254,7 @@ const AppShell: Component = () => {
       {/* Content — all pages mounted, toggle visibility to avoid refetch flicker */}
       <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
         <div class={activeTab() === 'report' ? 'stagger-in' : ''} style={{ display: activeTab() === 'report' ? undefined : 'none' }}>
-          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} shareRequested={shareRequested()} />
+          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} shareRequested={shareRequested()} hiddenRequested={hiddenRequested()} />
         </div>
         <div class={activeTab() === 'team' ? 'stagger-in' : ''} style={{ display: activeTab() === 'team' ? undefined : 'none' }}>
           <TeamPage />

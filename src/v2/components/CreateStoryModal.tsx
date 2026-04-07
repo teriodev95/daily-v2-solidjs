@@ -1,11 +1,11 @@
-import { createSignal, For, Show, onCleanup, type Component } from 'solid-js';
+import { createSignal, For, Show, onMount, onCleanup, type Component } from 'solid-js';
 import type { Priority, StoryStatus, ReportCategory } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import { toLocalDateStr } from '../lib/recurrence';
 import {
-  X, ChevronDown, ChevronUp, Check,
+  X, Check,
   Flame, ArrowUp, ArrowRight, ArrowDown,
   Calendar, UserPlus, Braces, ClipboardPaste,
   ClipboardCheck, AlertCircle, Trash2, Sparkles,
@@ -97,15 +97,20 @@ const CreateStoryModal: Component<Props> = (props) => {
   const [priority, setPriority] = createSignal<Priority>('medium');
   const [assigneeId, setAssigneeId] = createSignal<string | null>(auth.user()?.id ?? null);
   const [involucrados, setInvolucrados] = createSignal<Set<string>>(new Set());
-  const [showDetails, setShowDetails] = createSignal(false);
   const [status, setStatus] = createSignal<StoryStatus>(defaultStatus);
   const [description, setDescription] = createSignal('');
-  const [purpose, setPurpose] = createSignal('');
-  const [objective, setObjective] = createSignal('');
   const [estimate, setEstimate] = createSignal<number>(0);
   const [dueDate, setDueDate] = createSignal('');
   const [showDatePicker, setShowDatePicker] = createSignal(false);
   let dateTriggerRef!: HTMLButtonElement;
+
+  // ─── Picker toggles ───
+  const [showProjectPicker, setShowProjectPicker] = createSignal(false);
+  const [showPriorityPicker, setShowPriorityPicker] = createSignal(false);
+  const [showStatusPicker, setShowStatusPicker] = createSignal(false);
+  const [showEstimatePicker, setShowEstimatePicker] = createSignal(false);
+  const [showAssigneePicker, setShowAssigneePicker] = createSignal(false);
+  const [showInvolucradosPicker, setShowInvolucradosPicker] = createSignal(false);
 
   // ─── Queued files (uploaded after story creation) ───
   const [queuedFiles, setQueuedFiles] = createSignal<QueuedFile[]>([]);
@@ -127,8 +132,15 @@ const CreateStoryModal: Component<Props> = (props) => {
     });
   };
 
+  onMount(() => {
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose(); };
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => document.removeEventListener('keydown', handleKeyDown));
+  });
+
   onCleanup(() => {
-    // Clean up object URLs
+    document.body.style.overflow = '';
     for (const f of queuedFiles()) {
       if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
     }
@@ -214,9 +226,12 @@ const CreateStoryModal: Component<Props> = (props) => {
   // ─── Apply JSON object to form fields ───
   const applyJson = (obj: Record<string, any>) => {
     if (obj.title) setTitle(obj.title);
-    if (obj.description) setDescription(obj.description);
-    if (obj.purpose) setPurpose(obj.purpose);
-    if (obj.objective) setObjective(obj.objective);
+    const parts: string[] = [];
+    if (obj.purpose) parts.push(`## Para qué\n${obj.purpose}`);
+    if (obj.description) parts.push(obj.description);
+    if (obj.objective) parts.push(`## Objetivo\n${obj.objective}`);
+    const desc = parts.join('\n\n').trim();
+    if (desc) setDescription(desc);
     if (obj.priority && ['low', 'medium', 'high', 'critical'].includes(obj.priority)) {
       setPriority(obj.priority as Priority);
     }
@@ -233,9 +248,6 @@ const CreateStoryModal: Component<Props> = (props) => {
       ));
     }
 
-    if (obj.purpose || obj.objective || rawCriteria.length > 0) {
-      setShowDetails(true);
-    }
 
     // Flash notification
     setJsonAppliedFlash(true);
@@ -314,8 +326,6 @@ const CreateStoryModal: Component<Props> = (props) => {
       };
 
       if (description()) payload.description = description();
-      if (purpose()) payload.purpose = purpose();
-      if (objective()) payload.objective = objective();
       if (estimate() > 0) payload.estimate = estimate();
       if (dueDate()) payload.due_date = dueDate();
 
@@ -410,8 +420,324 @@ const CreateStoryModal: Component<Props> = (props) => {
           </div>
         </div>
 
+        {/* Property chips bar */}
+        <div class="shrink-0 px-4 sm:px-6 py-2.5 border-b border-base-content/[0.04] flex items-center gap-1.5 flex-wrap">
+
+          {/* Project chip */}
+          <div class="relative">
+            <button
+              onClick={() => setShowProjectPicker(v => !v)}
+              class={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all ${
+                projectId() && activeProjects().find(p => p.id === projectId())
+                  ? 'hover:opacity-80'
+                  : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08]'
+              }`}
+              style={(() => {
+                const p = activeProjects().find(pr => pr.id === projectId());
+                return p ? { "background-color": `${p.color}15`, color: p.color } : undefined;
+              })()}
+            >
+              {(() => {
+                const p = activeProjects().find(pr => pr.id === projectId());
+                return p ? p.name : <span>Proyecto</span>;
+              })()}
+            </button>
+            <Show when={showProjectPicker()}>
+              <div class="fixed inset-0 z-20" onClick={() => setShowProjectPicker(false)} />
+              <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[200px] backdrop-blur-md">
+                <button
+                  onClick={() => { setProjectId(null); setShowProjectPicker(false); }}
+                  class={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all ${!projectId() ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/50'}`}
+                >
+                  Ninguno
+                </button>
+                <For each={activeProjects()}>
+                  {(p) => (
+                    <button
+                      onClick={() => { setProjectId(p.id); setShowProjectPicker(false); }}
+                      class={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all ${projectId() === p.id ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/70'}`}
+                    >
+                      <div class="w-5 h-5 rounded-md shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ "background-color": p.color }}>
+                        {p.prefix.slice(0, 2)}
+                      </div>
+                      <span class="truncate">{p.name}</span>
+                      <Show when={projectId() === p.id}>
+                        <Check size={11} class="text-ios-blue-500 ml-auto shrink-0" />
+                      </Show>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+
+          {/* Status chip */}
+          <div class="relative">
+            <button
+              onClick={() => setShowStatusPicker(v => !v)}
+              class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-base-content/[0.04] hover:bg-base-content/[0.07] transition-all"
+            >
+              <span class={`w-2 h-2 rounded-full ${statusOptions.find(s => s.id === status())?.dot ?? 'bg-base-content/20'}`} />
+              <span class="text-[11px] font-semibold text-base-content/60">{statusOptions.find(s => s.id === status())?.label ?? status()}</span>
+            </button>
+            <Show when={showStatusPicker()}>
+              <div class="fixed inset-0 z-20" onClick={() => setShowStatusPicker(false)} />
+              <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[150px] backdrop-blur-md">
+                <For each={statusOptions}>
+                  {(opt) => (
+                    <button
+                      onClick={() => { setStatus(opt.id); setShowStatusPicker(false); }}
+                      class={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all ${status() === opt.id ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/60'}`}
+                    >
+                      <span class={`w-2.5 h-2.5 rounded-full ${opt.dot}`} />
+                      {opt.label}
+                      <Show when={status() === opt.id}>
+                        <Check size={11} class="text-ios-blue-500 ml-auto" />
+                      </Show>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+
+          {/* Priority chip */}
+          <div class="relative">
+            {(() => {
+              const curr = () => priorityOptions.find(p => p.id === priority()) || priorityOptions[1];
+              const Icon = () => curr().icon;
+              return (
+                <>
+                  <button
+                    onClick={() => setShowPriorityPicker(v => !v)}
+                    class={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all hover:opacity-80 ${curr().color} ${priority() !== 'medium' ? curr().selectedBg : 'bg-base-content/[0.04]'}`}
+                  >
+                    <Icon size={11} strokeWidth={2.5} />
+                    {curr().label}
+                  </button>
+                  <Show when={showPriorityPicker()}>
+                    <div class="fixed inset-0 z-20" onClick={() => setShowPriorityPicker(false)} />
+                    <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[150px] backdrop-blur-md">
+                      <For each={priorityOptions}>
+                        {(opt) => {
+                          const PIcon = opt.icon;
+                          return (
+                            <button
+                              onClick={() => { setPriority(opt.id); setShowPriorityPicker(false); }}
+                              class={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all ${priority() === opt.id ? `${opt.selectedBg} ${opt.color}` : 'hover:bg-base-content/5 text-base-content/60'}`}
+                            >
+                              <PIcon size={13} strokeWidth={2.5} />
+                              {opt.label}
+                              <Show when={priority() === opt.id}>
+                                <Check size={11} class="text-ios-blue-500 ml-auto" />
+                              </Show>
+                            </button>
+                          );
+                        }}
+                      </For>
+                    </div>
+                  </Show>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Separator */}
+          <div class="w-px h-4 bg-base-content/[0.06] mx-0.5" />
+
+          {/* Date chip */}
+          <div class="relative">
+            <button
+              ref={dateTriggerRef}
+              onClick={() => setShowDatePicker(!showDatePicker())}
+              class={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                dueDate()
+                  ? 'bg-ios-blue-500/10 text-ios-blue-500 hover:bg-ios-blue-500/15'
+                  : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.07]'
+              }`}
+            >
+              <Calendar size={11} />
+              <span>{dueDate() ? dueDate().split('-').reverse().join('/') : 'Fecha'}</span>
+            </button>
+            <Show when={showDatePicker()}>
+              <div class="fixed inset-0 z-20" onClick={() => setShowDatePicker(false)} />
+              <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-3 backdrop-blur-md min-w-[280px]">
+                <div class="flex flex-wrap gap-1.5 mb-3">
+                  <For each={[btnHoy(), btnManana(), btnPasado(), btnSemana()]}>
+                    {(btn) => {
+                      const selected = () => dueDate() === btn.dateStr;
+                      return (
+                        <button
+                          onClick={() => { setDueDate(btn.dateStr); setShowDatePicker(false); }}
+                          class={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                            selected() ? 'bg-ios-blue-500/15 text-ios-blue-500' : 'bg-base-content/[0.05] text-base-content/50 hover:bg-base-content/[0.1]'
+                          }`}
+                        >
+                          {btn.label} <span class="opacity-50 ml-0.5">{btn.sub}</span>
+                        </button>
+                      );
+                    }}
+                  </For>
+                </div>
+                <DatePickerPopover
+                  value={dueDate()}
+                  onSelect={(val) => { setDueDate(val); setShowDatePicker(false); }}
+                  onClear={() => { setDueDate(''); setShowDatePicker(false); }}
+                  onClose={() => setShowDatePicker(false)}
+                  triggerEl={dateTriggerRef}
+                />
+                <Show when={dueDate()}>
+                  <button
+                    onClick={() => { setDueDate(''); setShowDatePicker(false); }}
+                    class="mt-2 text-[10px] font-bold text-base-content/25 hover:text-red-400 transition-colors uppercase tracking-wider"
+                  >
+                    Quitar fecha
+                  </button>
+                </Show>
+              </div>
+            </Show>
+          </div>
+
+          {/* Estimate chip */}
+          <div class="relative">
+            <button
+              onClick={() => setShowEstimatePicker(v => !v)}
+              class={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                estimate() > 0
+                  ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/15'
+                  : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.07]'
+              }`}
+            >
+              {estimate() > 0 ? estimate() : 'Est.'}
+            </button>
+            <Show when={showEstimatePicker()}>
+              <div class="fixed inset-0 z-20" onClick={() => setShowEstimatePicker(false)} />
+              <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-2 backdrop-blur-md">
+                <div class="flex gap-1">
+                  <For each={fibonacciPoints}>
+                    {(pts) => (
+                      <button
+                        onClick={() => { setEstimate(estimate() === pts ? 0 : pts); setShowEstimatePicker(false); }}
+                        class={`w-9 h-9 rounded-xl text-[13px] font-bold transition-all ${
+                          estimate() === pts ? 'bg-ios-blue-500 text-white shadow-sm' : 'hover:bg-base-content/5 text-base-content/60'
+                        }`}
+                      >
+                        {pts}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+          </div>
+
+          {/* Separator */}
+          <div class="w-px h-4 bg-base-content/[0.06] mx-0.5" />
+
+          {/* Assignee chip */}
+          <div class="relative">
+            <button
+              onClick={() => setShowAssigneePicker(v => !v)}
+              class="flex items-center gap-1 px-2 py-1 rounded-lg bg-base-content/[0.04] hover:bg-base-content/[0.07] transition-all"
+            >
+              {(() => {
+                const m = members().find(u => u.id === assigneeId());
+                return m ? (
+                  <>
+                    <img src={m.avatar_url!} alt="" class="w-5 h-5 rounded-full object-cover" />
+                    <span class="text-[11px] font-medium text-base-content/60">{m.name.split(' ')[0]}</span>
+                  </>
+                ) : (
+                  <span class="text-[11px] font-medium text-base-content/40">Encargado</span>
+                );
+              })()}
+            </button>
+            <Show when={showAssigneePicker()}>
+              <div class="fixed inset-0 z-20" onClick={() => setShowAssigneePicker(false)} />
+              <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[180px] backdrop-blur-md">
+                <For each={members()}>
+                  {(member) => (
+                    <button
+                      onClick={() => {
+                        setAssigneeId(member.id);
+                        setInvolucrados(prev => { const next = new Set(prev); next.delete(member.id); return next; });
+                        setShowAssigneePicker(false);
+                      }}
+                      class={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all ${assigneeId() === member.id ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/60'}`}
+                    >
+                      <Show when={member.avatar_url} fallback={<div class="w-5 h-5 rounded-full bg-base-content/10 flex items-center justify-center text-[9px] font-bold">{member.name.charAt(0)}</div>}>
+                        <img src={member.avatar_url!} alt="" class="w-5 h-5 rounded-full object-cover" />
+                      </Show>
+                      {member.name.split(' ')[0]}
+                      <Show when={assigneeId() === member.id}>
+                        <Check size={11} class="text-ios-blue-500 ml-auto" />
+                      </Show>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+
+          {/* Involucrados chip */}
+          <div class="relative">
+            <button
+              onClick={() => setShowInvolucradosPicker(v => !v)}
+              class={`w-6 h-6 rounded-full flex items-center justify-center transition-all border border-dashed ${
+                involucrados().size > 0
+                  ? 'bg-ios-blue-500/10 text-ios-blue-500 border-ios-blue-500/30'
+                  : 'text-base-content/30 border-base-content/15 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 hover:border-ios-blue-500/30'
+              }`}
+              title="Involucrados"
+            >
+              <Show when={involucrados().size > 0} fallback={<UserPlus size={11} />}>
+                <span class="text-[10px] font-bold">{involucrados().size}</span>
+              </Show>
+            </button>
+            <Show when={showInvolucradosPicker()}>
+              <div class="fixed inset-0 z-20" onClick={() => setShowInvolucradosPicker(false)} />
+              <div class="absolute top-[calc(100%+6px)] right-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[180px] backdrop-blur-md">
+                <For each={availableInvolucrados()}>
+                  {(member) => {
+                    const selected = () => involucrados().has(member.id);
+                    return (
+                      <button
+                        onClick={() => toggleInvolucrado(member.id)}
+                        class={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all ${selected() ? 'bg-ios-blue-500/10 text-ios-blue-500' : 'hover:bg-base-content/5 text-base-content/60'}`}
+                      >
+                        <Show when={member.avatar_url} fallback={<div class="w-5 h-5 rounded-full bg-base-content/10 flex items-center justify-center text-[9px] font-bold">{member.name.charAt(0)}</div>}>
+                          <img src={member.avatar_url!} alt="" class="w-5 h-5 rounded-full object-cover" />
+                        </Show>
+                        {member.name.split(' ')[0]}
+                        <Show when={selected()}>
+                          <Check size={11} class="text-ios-blue-500 ml-auto" />
+                        </Show>
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
+            </Show>
+          </div>
+
+          {/* Attach button */}
+          <button
+            onClick={() => fileInput.click()}
+            class={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+              queuedFiles().length > 0
+                ? 'bg-base-content/[0.06] text-base-content/60'
+                : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.07]'
+            }`}
+          >
+            <Paperclip size={11} />
+            <Show when={queuedFiles().length > 0}>
+              <span>{queuedFiles().length}</span>
+            </Show>
+          </button>
+        </div>
+
         {/* Scrollable body */}
-        <div class="flex-1 overflow-y-auto px-5 sm:px-8 py-5 sm:py-6 space-y-7 sm:space-y-8 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-8">
+        <div class="flex-1 overflow-y-auto px-5 sm:px-8 py-5 sm:py-6 space-y-4 sm:space-y-5 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-8">
 
           {/* JSON paste area (inline, collapsible) */}
           <Show when={showJsonPaste()}>
@@ -486,244 +812,6 @@ const CreateStoryModal: Component<Props> = (props) => {
               rows={4}
               class="w-full min-h-[120px] bg-base-content/[0.02] border border-base-content/[0.08] rounded-2xl px-4 py-3 text-[14px] font-medium outline-none resize-none placeholder:text-base-content/20 focus:bg-base-content/[0.03] focus:border-base-content/15 hover:border-base-content/12 focus:ring-1 focus:ring-ios-blue-500/30 transition-all leading-relaxed"
             />
-          </fieldset>
-
-          {/* Project chips */}
-          <fieldset>
-            <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">Proyecto</legend>
-            <div class="flex flex-wrap gap-2 px-1">
-              <button
-                onClick={() => setProjectId(null)}
-                class={`px-3.5 py-2 rounded-xl text-[12px] font-bold transition-all duration-200 ${projectId() === null
-                  ? 'bg-base-content/[0.04] text-base-content shadow-sm border border-base-content/[0.08]'
-                  : 'text-base-content/40 hover:bg-base-content/5 border border-transparent'
-                  }`}
-              >
-                Ninguno
-              </button>
-              <For each={activeProjects()}>
-                {(proj) => {
-                  const selected = () => projectId() === proj.id;
-                  return (
-                    <button
-                      onClick={() => setProjectId(proj.id)}
-                      class={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-[12px] font-bold transition-all duration-200 ${selected() ? 'shadow-sm border border-transparent hover:brightness-110' : 'hover:bg-base-content/[0.04] border border-transparent'
-                        }`}
-                      style={{
-                        "background-color": selected() ? `${proj.color}15` : 'transparent',
-                        color: proj.color,
-                        ...(selected() ? { "box-shadow": `inset 0 0 0 1px ${proj.color}30` } : {}),
-                      }}
-                    >
-                      <div
-                        class="w-5 h-5 rounded-md shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
-                        style={{ "background-color": proj.color }}
-                      >
-                        {proj.prefix.slice(0, 2)}
-                      </div>
-                      {proj.name}
-                    </button>
-                  );
-                }}
-              </For>
-            </div>
-          </fieldset>
-
-          {/* Priority + Encargado */}
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-8 sm:gap-6">
-            <fieldset>
-              <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">Prioridad</legend>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 px-1">
-                <For each={priorityOptions}>
-                  {(opt) => {
-                    const Icon = opt.icon;
-                    const selected = () => priority() === opt.id;
-                    return (
-                      <button
-                        onClick={() => setPriority(opt.id)}
-                        class={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-[18px] text-[12px] font-bold transition-all duration-200 ${selected() ? `${opt.selectedBg} ${opt.color} scale-[1.02]` : `${opt.bg} text-base-content/30 hover:text-base-content/50`
-                          }`}
-                      >
-                        <Icon size={16} strokeWidth={2.5} class="mb-0.5" />
-                        <span>{opt.label}</span>
-                      </button>
-                    );
-                  }}
-                </For>
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">Encargado</legend>
-              <div class="flex flex-wrap gap-x-4 gap-y-3 px-1">
-                <For each={members()}>
-                  {(member) => {
-                    const selected = () => assigneeId() === member.id;
-                    return (
-                      <button
-                        onClick={() => {
-                          setAssigneeId(member.id);
-                          setInvolucrados(prev => { const next = new Set(prev); next.delete(member.id); return next; });
-                        }}
-                        class={`group flex flex-col items-center gap-2 transition-all duration-200 cursor-pointer ${selected() ? 'opacity-100 scale-[1.05]' : 'opacity-40 hover:opacity-80'}`}
-                      >
-                        <div class={`rounded-full transition-all duration-200 p-0.5 ${selected() ? 'ring-2 ring-ios-blue-500 shadow-sm' : 'group-hover:ring-2 group-hover:ring-base-content/20'}`}>
-                          <Show
-                            when={member.avatar_url}
-                            fallback={
-                              <div class="w-10 h-10 rounded-full bg-base-content/10 flex items-center justify-center text-[13px] font-bold text-base-content/40">
-                                {member.name.charAt(0)}
-                              </div>
-                            }
-                          >
-                            <img src={member.avatar_url!} alt={member.name} class="w-10 h-10 rounded-full object-cover" />
-                          </Show>
-                        </div>
-                        <span class={`text-[10px] font-bold max-w-[48px] truncate leading-none transition-colors ${selected() ? 'text-base-content/80' : 'text-base-content/50'}`}>{member.name.split(' ')[0]}</span>
-                      </button>
-                    );
-                  }}
-                </For>
-              </div>
-            </fieldset>
-          </div>
-
-          {/* Involucrados */}
-          <fieldset>
-            <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">
-              <span class="flex items-center gap-2">
-                <UserPlus size={12} strokeWidth={2.5} />
-                Involucrados
-              </span>
-            </legend>
-            <div class="flex flex-wrap gap-2 px-1">
-              <For each={availableInvolucrados()}>
-                {(member) => {
-                  const selected = () => involucrados().has(member.id);
-                  return (
-                    <button
-                      onClick={() => toggleInvolucrado(member.id)}
-                      class={`flex items-center gap-2.5 pl-1.5 pr-4 py-1.5 rounded-full text-[13px] font-bold transition-all duration-200 ${selected()
-                        ? 'bg-base-content/[0.04] text-base-content shadow-sm border border-base-content/[0.08]'
-                        : 'bg-transparent text-base-content/40 border border-transparent hover:bg-base-content/[0.04]'
-                        }`}
-                    >
-                      <div class="relative">
-                        <Show
-                          when={member.avatar_url}
-                          fallback={
-                            <div class="w-7 h-7 rounded-full bg-base-content/10 flex items-center justify-center text-[10px] font-bold">
-                              {member.name.charAt(0)}
-                            </div>
-                          }
-                        >
-                          <img src={member.avatar_url!} alt="" class="w-7 h-7 rounded-full object-cover" />
-                        </Show>
-                        <Show when={selected()}>
-                          <div class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-ios-blue-500 border-2 border-base-100 flex items-center justify-center shadow-sm">
-                            <Check size={8} class="text-white" strokeWidth={3.5} />
-                          </div>
-                        </Show>
-                      </div>
-                      {member.name.split(' ')[0]}
-                    </button>
-                  );
-                }}
-              </For>
-            </div>
-          </fieldset>
-
-          {/* Estado + Estimación */}
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-8 sm:gap-6">
-            <fieldset>
-              <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">Estado</legend>
-              <div class="grid grid-cols-2 gap-2 px-1">
-                <For each={statusOptions}>
-                  {(opt) => (
-                    <button
-                      onClick={() => setStatus(opt.id)}
-                      class={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-[12px] font-bold transition-all duration-200 ${status() === opt.id
-                        ? 'bg-base-content/[0.04] text-base-content shadow-sm border border-base-content/[0.08]'
-                        : 'text-base-content/40 hover:bg-base-content/5 border border-transparent'
-                        }`}
-                    >
-                      <div class={`w-2 h-2 rounded-full ${opt.dot}`} />
-                      {opt.label}
-                    </button>
-                  )}
-                </For>
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">Estimación</legend>
-              <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 px-1">
-                <For each={fibonacciPoints}>
-                  {(pts) => (
-                    <button
-                      onClick={() => setEstimate(estimate() === pts ? 0 : pts)}
-                      class={`h-10 sm:h-9 rounded-xl text-[13px] font-bold transition-all duration-200 ${estimate() === pts
-                        ? 'bg-ios-blue-500 text-white shadow-sm shadow-ios-blue-500/20 scale-[1.02]'
-                        : 'bg-base-content/[0.02] text-base-content/40 hover:bg-base-content/[0.06] hover:text-base-content/70'
-                        }`}
-                    >
-                      {pts}
-                    </button>
-                  )}
-                </For>
-              </div>
-            </fieldset>
-          </div>
-
-          {/* Fecha límite */}
-          <fieldset>
-            <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">Fecha límite</legend>
-            <div class="flex flex-wrap items-center gap-2 px-1">
-              <For each={[btnHoy(), btnManana(), btnPasado(), btnSemana()]}>
-                {(btn) => {
-                  const selected = () => dueDate() === btn.dateStr;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => setDueDate(btn.dateStr)}
-                      class={`flex flex-col items-center px-3.5 py-2 rounded-xl transition-all duration-200 min-w-[72px] ${selected()
-                        ? 'bg-base-content/[0.06] text-base-content shadow-sm border border-base-content/[0.08]'
-                        : 'bg-transparent text-base-content/40 hover:bg-base-content/[0.04] border border-transparent'
-                        }`}
-                    >
-                      <span class="text-[12px] font-bold leading-tight">{btn.label}</span>
-                      <span class={`text-[9px] font-semibold leading-tight mt-0.5 ${selected() ? 'text-base-content/50' : 'text-base-content/25'}`}>{btn.sub}</span>
-                    </button>
-                  );
-                }}
-              </For>
-
-              <div class="flex items-center ml-auto relative">
-                <button
-                  ref={dateTriggerRef}
-                  type="button"
-                  onClick={() => setShowDatePicker(!showDatePicker())}
-                  class={`relative bg-base-content/[0.03] rounded-xl pl-9 pr-4 py-2 text-[12px] font-bold outline-none text-base-content/60 focus:ring-2 focus:ring-ios-blue-500/20 hover:bg-base-content/[0.05] transition-all flex items-center min-w-[130px] justify-start ${showDatePicker() ? 'ring-2 ring-ios-blue-500/50 bg-base-content/[0.05]' : ''}`}
-                >
-                  <Calendar size={14} strokeWidth={2.5} class={`absolute left-3.5 z-10 transition-colors ${showDatePicker() || dueDate() ? 'text-ios-blue-500' : 'text-base-content/30'}`} />
-                  {dueDate() ? dueDate().split('-').reverse().join('/') : "Seleccionar"}
-                </button>
-                <Show when={showDatePicker()}>
-                  <DatePickerPopover
-                    value={dueDate()}
-                    onSelect={(val) => { setDueDate(val); setShowDatePicker(false); }}
-                    onClear={() => { setDueDate(''); setShowDatePicker(false); }}
-                    onClose={() => setShowDatePicker(false)}
-                    triggerEl={dateTriggerRef}
-                  />
-                </Show>
-              </div>
-            </div>
-            <Show when={dueDate()}>
-              <button onClick={() => setDueDate('')} class="px-2 mt-2 text-[10px] font-bold text-base-content/25 hover:text-base-content/50 transition-colors uppercase tracking-wider">
-                Quitar fecha
-              </button>
-            </Show>
           </fieldset>
 
           {/* Acceptance Criteria preview (from JSON) */}
@@ -826,58 +914,6 @@ const CreateStoryModal: Component<Props> = (props) => {
             </fieldset>
           </Show>
 
-          {/* Attach button when no files queued */}
-          <Show when={queuedFiles().length === 0 && !dragOver()}>
-            <button
-              onClick={() => fileInput.click()}
-              class="flex items-center gap-2 text-[12px] font-bold text-base-content/40 hover:text-base-content/70 transition-colors mx-1"
-            >
-              <Paperclip size={14} strokeWidth={2.5} />
-              Adjuntar archivos
-            </button>
-          </Show>
-
-          {/* Divider + Toggle details */}
-          <div class="pt-6">
-            <button
-              onClick={() => setShowDetails(!showDetails())}
-              class="flex items-center gap-2 text-[12px] font-bold text-base-content/40 hover:text-base-content/70 transition-colors mx-1"
-            >
-              <Show when={showDetails()} fallback={<ChevronDown size={14} strokeWidth={2.5} />}>
-                <ChevronUp size={14} strokeWidth={2.5} />
-              </Show>
-              {showDetails() ? 'Menos detalles' : 'Más detalles'}
-            </button>
-          </div>
-
-          {/* Expandable details — only text fields */}
-          <Show when={showDetails()}>
-            <div class="space-y-6 pt-4 px-1 animate-in fade-in slide-in-from-top-4 duration-300">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <fieldset>
-                  <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">¿Para qué?</legend>
-                  <textarea
-                    value={purpose()}
-                    onInput={(e) => setPurpose(e.currentTarget.value)}
-                    placeholder="¿Qué valor aporta?"
-                    rows={2}
-                    class="w-full bg-base-content/[0.03] rounded-2xl px-4 py-3 text-[14px] font-medium outline-none resize-none placeholder:text-base-content/20 focus:bg-base-content/[0.05] focus:ring-1 focus:ring-ios-blue-500/30 transition-all leading-relaxed"
-                  />
-                </fieldset>
-
-                <fieldset>
-                  <legend class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30 mb-3 px-1">Objetivo</legend>
-                  <textarea
-                    value={objective()}
-                    onInput={(e) => setObjective(e.currentTarget.value)}
-                    placeholder="¿Resultado esperado?"
-                    rows={2}
-                    class="w-full bg-base-content/[0.03] rounded-2xl px-4 py-3 text-[14px] font-medium outline-none resize-none placeholder:text-base-content/20 focus:bg-base-content/[0.05] focus:ring-1 focus:ring-ios-blue-500/30 transition-all leading-relaxed"
-                  />
-                </fieldset>
-              </div>
-            </div>
-          </Show>
         </div>
 
         {/* Footer */}

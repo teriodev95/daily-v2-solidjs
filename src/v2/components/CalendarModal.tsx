@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import { isRecurringOnDate, isRecurring, frequencyLabel, toLocalDateStr } from '../lib/recurrence';
-import { X, Calendar, ChevronRight, RefreshCw } from 'lucide-solid';
+import { X, Calendar, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-solid';
 import StoryDetail from './StoryDetail';
 
 // ─── Helpers ────────────────────────────────────
@@ -17,12 +17,17 @@ const toDateKey = (d: Date) => toLocalDateStr(d);
 const isSameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
-const buildWeek = (): Date[] => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+const buildWeek = (offset: number): Date[] => {
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  base.setDate(base.getDate() + offset * 7);
+  // Start from Monday of that week
+  const day = base.getDay();
+  const monday = new Date(base);
+  monday.setDate(base.getDate() - ((day === 0 ? 7 : day) - 1));
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
     return d;
   });
 };
@@ -66,7 +71,8 @@ const CalendarModal: Component<Props> = (props) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const week = buildWeek();
+  const [weekOffset, setWeekOffset] = createSignal(0);
+  const week = () => buildWeek(weekOffset());
   const [selectedDay, setSelectedDay] = createSignal<Date>(today);
   const [detailStory, setDetailStory] = createSignal<Story | null>(null);
   const [isDetailExiting, setIsDetailExiting] = createSignal(false);
@@ -81,8 +87,9 @@ const CalendarModal: Component<Props> = (props) => {
 
   // Load completions for the visible week range
   const weekRange = () => {
-    const from = toDateKey(week[0]);
-    const to = toDateKey(week[week.length - 1]);
+    const w = week();
+    const from = toDateKey(w[0]);
+    const to = toDateKey(w[w.length - 1]);
     return { from, to, uid: userId() };
   };
 
@@ -106,7 +113,7 @@ const CalendarModal: Component<Props> = (props) => {
     const all = stories() ?? [];
     const map = new Map<string, CalendarStoryItem[]>();
 
-    for (const d of week) {
+    for (const d of week()) {
       const dateKey = toDateKey(d);
       const items: CalendarStoryItem[] = [];
 
@@ -184,11 +191,17 @@ const CalendarModal: Component<Props> = (props) => {
     }
   };
   document.addEventListener('keydown', handleKey);
-  onCleanup(() => document.removeEventListener('keydown', handleKey));
+  document.body.style.overflow = 'hidden';
+  onCleanup(() => { document.removeEventListener('keydown', handleKey); document.body.style.overflow = ''; });
 
   const formatHeader = () => {
-    const d = today;
-    return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}. ${d.getFullYear()}`;
+    const w = week();
+    const first = w[0];
+    const last = w[w.length - 1];
+    if (first.getMonth() === last.getMonth()) {
+      return `${first.getDate()} – ${last.getDate()} ${MONTH_NAMES[first.getMonth()]}. ${first.getFullYear()}`;
+    }
+    return `${first.getDate()} ${MONTH_NAMES[first.getMonth()]} – ${last.getDate()} ${MONTH_NAMES[last.getMonth()]}. ${last.getFullYear()}`;
   };
 
   /** Animated close for StoryDetail — fade out then unmount. */
@@ -206,14 +219,14 @@ const CalendarModal: Component<Props> = (props) => {
     <>
       {/* ── Calendar backdrop + panel ── */}
       <div
-        class="fixed inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-end sm:items-start sm:justify-center sm:pt-[12vh] animate-in fade-in duration-200"
+        class="fixed inset-0 z-[200] bg-black/60 sm:bg-base-100 backdrop-blur-md sm:backdrop-blur-none flex items-end sm:items-stretch animate-in fade-in duration-200"
         onClick={() => {
           if (hasDetail()) { closeDetail(); } else { props.onClose(); }
         }}
       >
         {/* Calendar card — scales back subtly when detail is open */}
         <div
-          class="w-full sm:max-w-md bg-base-100 rounded-t-[24px] sm:rounded-[24px] shadow-2xl shadow-black/50 border border-base-content/[0.06] overflow-hidden animate-in slide-in-from-bottom-8 sm:zoom-in-95 duration-300"
+          class="w-full sm:w-full sm:max-w-4xl sm:mx-auto bg-base-100 rounded-t-[24px] sm:rounded-none shadow-2xl sm:shadow-none shadow-black/50 border border-base-content/[0.06] sm:border-0 overflow-hidden flex flex-col animate-in slide-in-from-bottom-8 sm:fade-in duration-300"
           style={{
             transform: hasDetail() ? 'scale(0.97) translateY(6px)' : 'scale(1) translateY(0)',
             opacity: hasDetail() ? '0.6' : '1',
@@ -224,22 +237,46 @@ const CalendarModal: Component<Props> = (props) => {
           onClick={(e) => e.stopPropagation()}
         >
           {/* ── Header ── */}
-          <div class="relative px-6 pt-5 pb-3">
-            <button
-              onClick={props.onClose}
-              class="absolute top-4 right-4 p-1.5 rounded-full text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
-            >
-              <X size={16} strokeWidth={2.5} />
-            </button>
-            <p class="text-center text-lg font-bold tracking-tight text-base-content/90">
-              {formatHeader()}
-            </p>
+          <div class="relative px-6 sm:px-10 pt-5 sm:pt-8 pb-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <p class="text-lg sm:text-2xl font-bold tracking-tight text-base-content/90">
+                {formatHeader()}
+              </p>
+              <Show when={weekOffset() !== 0}>
+                <button
+                  onClick={() => { setWeekOffset(0); setSelectedDay(today); }}
+                  class="text-[11px] font-bold text-ios-blue-500 bg-ios-blue-500/10 px-2.5 py-1 rounded-lg hover:bg-ios-blue-500/15 transition-all"
+                >
+                  Hoy
+                </button>
+              </Show>
+            </div>
+            <div class="flex items-center gap-1">
+              <button
+                onClick={() => setWeekOffset(v => v - 1)}
+                class="p-2 rounded-full text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5 transition-all"
+              >
+                <ChevronLeft size={18} strokeWidth={2.5} />
+              </button>
+              <button
+                onClick={() => setWeekOffset(v => v + 1)}
+                class="p-2 rounded-full text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5 transition-all"
+              >
+                <ChevronRight size={18} strokeWidth={2.5} />
+              </button>
+              <button
+                onClick={props.onClose}
+                class="p-2 rounded-full text-base-content/30 hover:text-base-content/60 hover:bg-base-content/5 transition-all ml-2"
+              >
+                <X size={18} strokeWidth={2.5} />
+              </button>
+            </div>
           </div>
 
           {/* ── Week strip ── */}
-          <div class="px-4 pb-4">
-            <div class="flex items-end justify-between px-2">
-              <For each={week}>
+          <div class="px-4 sm:px-10 pb-4 sm:pb-6">
+            <div class="flex items-end justify-between sm:justify-around px-2">
+              <For each={week()}>
                 {(d) => {
                   const isToday = isSameDay(d, today);
                   const isSelected = () => isSameDay(d, selectedDay());
@@ -248,7 +285,7 @@ const CalendarModal: Component<Props> = (props) => {
                   return (
                     <button
                       onClick={() => setSelectedDay(d)}
-                      class="flex flex-col items-center gap-1 py-1 px-1 sm:px-2 group transition-all"
+                      class="flex flex-col items-center gap-1 py-1 px-1 sm:px-4 group transition-all"
                     >
                       <span class={`text-[11px] font-bold uppercase tracking-wider ${isToday ? 'text-red-500' : 'text-base-content/35'}`}>
                         {dayLabel(d)}
@@ -284,7 +321,7 @@ const CalendarModal: Component<Props> = (props) => {
           <div class="h-px bg-base-content/[0.06]" />
 
           {/* ── Story list ── */}
-          <div class="max-h-[45vh] overflow-y-auto">
+          <div class="max-h-[45vh] sm:max-h-none sm:flex-1 overflow-y-auto">
             <Show when={stories.loading}>
               <div class="px-6 py-8 text-center">
                 <div class="w-5 h-5 border-2 border-ios-blue-500/30 border-t-ios-blue-500 rounded-full animate-spin mx-auto" />
@@ -383,7 +420,7 @@ const CalendarModal: Component<Props> = (props) => {
                                 <span class="text-[10px] font-bold text-red-500">Vencida</span>
                               </Show>
                               <Show when={story.due_date && !item.isRecurring}>
-                                <span class="text-[10px] font-medium text-base-content/25">
+                                <span class={`text-[10px] font-medium ${isOverdue() ? 'text-red-500' : 'text-base-content/30'}`}>
                                   vence {new Date(story.due_date!).getDate()} {MONTH_NAMES[new Date(story.due_date!).getMonth()]}
                                 </span>
                               </Show>
@@ -413,7 +450,7 @@ const CalendarModal: Component<Props> = (props) => {
                   </span>
                 </div>
                 <div class="px-3 pb-4">
-                  <For each={undatedStories().slice(0, 5)}>
+                  <For each={undatedStories()}>
                     {(story) => {
                       const proj = story.project_id ? data.getProjectById(story.project_id) : null;
                       return (
@@ -437,11 +474,6 @@ const CalendarModal: Component<Props> = (props) => {
                       );
                     }}
                   </For>
-                  <Show when={undatedStories().length > 5}>
-                    <p class="text-[11px] font-bold text-base-content/20 text-center py-2">
-                      +{undatedStories().length - 5} más
-                    </p>
-                  </Show>
                 </div>
               </Show>
             </Show>
@@ -449,7 +481,7 @@ const CalendarModal: Component<Props> = (props) => {
 
           {/* Footer */}
           <div class="h-px bg-base-content/[0.06]" />
-          <div class="px-6 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 flex items-center justify-between">
+          <div class="px-6 sm:px-10 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-4 flex items-center justify-between">
             <span class="text-[10px] font-bold text-base-content/20 tracking-wide">
               HUs propias + asignadas
             </span>

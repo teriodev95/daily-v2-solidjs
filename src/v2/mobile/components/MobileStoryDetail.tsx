@@ -55,18 +55,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   const data = useData();
 
   const [title, setTitle] = createSignal(props.story.title);
-  const buildContent = () => {
-    const p = (props.story.purpose || '').trim();
-    const d = (props.story.description || '').trim();
-    const o = (props.story.objective || '').trim();
-    if (!p && !o) return d;
-    const parts: string[] = [];
-    if (p) parts.push(`## Para qué\n${p}`);
-    if (d) parts.push(d);
-    if (o) parts.push(`## Objetivo\n${o}`);
-    return parts.join('\n\n');
-  };
-  const [content, setContent] = createSignal(buildContent());
+  const [content, setContent] = createSignal(props.story.description || '');
   const [dueDate, setDueDate] = createSignal(props.story.due_date || '');
   const [status, setStatus] = createSignal(props.story.status);
   const [projectId, setProjectId] = createSignal(props.story.project_id || '');
@@ -151,20 +140,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
       setAssigneeIds(detail.assignees ?? []);
       setProjectId((detail as Story).project_id || '');
       setCriteriaList(detail.criteria ?? []);
-      // Rebuild content canvas from fetched detail
-      {
-        const p = (detail.purpose || '').trim();
-        const d = (detail.description || '').trim();
-        const o = (detail.objective || '').trim();
-        if (!p && !o) { setContent(d); }
-        else {
-          const parts: string[] = [];
-          if (p) parts.push(`## Para qué\n${p}`);
-          if (d) parts.push(d);
-          if (o) parts.push(`## Objetivo\n${o}`);
-          setContent(parts.join('\n\n'));
-        }
-      }
+      setContent(detail.description || '');
     } catch {
       // Detail fetch is additive.
     }
@@ -620,7 +596,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
               placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
               onChange={(md) => {
                 setContent(md);
-                scheduleSave({ description: md, purpose: '', objective: '' });
+                scheduleSave({ description: md });
               }}
               class="px-1"
             />

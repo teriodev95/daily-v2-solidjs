@@ -11,7 +11,7 @@ const parseRecurrenceDays = (s: any) => ({
   recurrence_days: s.recurrence_days ? JSON.parse(s.recurrence_days) : null,
 });
 
-// Full-text search across title, description, purpose, objective, code
+// Full-text search across title, description, code
 stories.get('/search', async (c) => {
   const user = c.get('user');
   const db = c.get('db');
@@ -32,8 +32,6 @@ stories.get('/search', async (c) => {
         or(
           like(schema.stories.title, pattern),
           like(schema.stories.description, pattern),
-          like(schema.stories.purpose, pattern),
-          like(schema.stories.objective, pattern),
           like(schema.stories.code, pattern),
         ),
       ),
@@ -108,9 +106,7 @@ stories.post('/', async (c) => {
     project_id?: string;
     code?: string;
     title: string;
-    purpose?: string;
     description?: string;
-    objective?: string;
     priority?: string;
     estimate?: number;
     status?: string;
@@ -138,9 +134,7 @@ stories.post('/', async (c) => {
     team_id: user.teamId,
     code: body.code ?? null,
     title: body.title,
-    purpose: body.purpose ?? '',
     description: body.description ?? '',
-    objective: body.objective ?? '',
     priority: body.priority as any ?? 'medium',
     estimate: body.estimate ?? 0,
     status: body.status as any ?? 'backlog',
@@ -202,6 +196,8 @@ stories.patch('/:id', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
 
   const { assignees, ...fields } = body;
+  delete (fields as any).purpose;
+  delete (fields as any).objective;
   if (fields.recurrence_days !== undefined) {
     fields.recurrence_days = fields.recurrence_days ? JSON.stringify(fields.recurrence_days) : null;
   }

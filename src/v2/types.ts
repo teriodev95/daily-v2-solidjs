@@ -43,9 +43,7 @@ export interface Story {
   team_id: string;
   code: string | null;
   title: string;
-  purpose: string;
   description: string;
-  objective: string;
   priority: Priority;
   estimate: number;
   status: StoryStatus;

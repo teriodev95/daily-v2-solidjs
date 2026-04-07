@@ -88,8 +88,6 @@ const SearchModal: Component<Props> = (props) => {
     const lower = q.toLowerCase();
     if (story.title.toLowerCase().includes(lower)) return null; // already shown
     if (story.description?.toLowerCase().includes(lower)) return story.description;
-    if (story.purpose?.toLowerCase().includes(lower)) return story.purpose;
-    if (story.objective?.toLowerCase().includes(lower)) return story.objective;
     return null;
   };
 

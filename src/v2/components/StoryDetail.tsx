@@ -4,7 +4,7 @@ import { useData } from '../lib/data';
 import { api } from '../lib/api';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
-  Calendar, ClipboardCheck, Trash2,
+  ClipboardCheck, Trash2,
   Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban, Archive,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
@@ -96,18 +96,7 @@ const StoryDetail: Component<Props> = (props) => {
 
   // Editable fields
   const [title, setTitle] = createSignal(props.story.title);
-  const buildContent = () => {
-    const p = (props.story.purpose || '').trim();
-    const d = (props.story.description || '').trim();
-    const o = (props.story.objective || '').trim();
-    if (!p && !o) return d;
-    const parts: string[] = [];
-    if (p) parts.push(`## Para qué\n${p}`);
-    if (d) parts.push(d);
-    if (o) parts.push(`## Objetivo\n${o}`);
-    return parts.join('\n\n');
-  };
-  const [content, setContent] = createSignal(buildContent());
+  const [content, setContent] = createSignal(props.story.description || '');
   const [dueDate, setDueDate] = createSignal(props.story.due_date || '');
   const [assigneeId, setAssigneeId] = createSignal(props.story.assignee_id || '');
   const [assigneeIds, setAssigneeIds] = createSignal<string[]>([]);
@@ -117,6 +106,10 @@ const StoryDetail: Component<Props> = (props) => {
   const [showDatePicker, setShowDatePicker] = createSignal(false);
   const [projectId, setProjectId] = createSignal(props.story.project_id || '');
   const [showProjectPicker, setShowProjectPicker] = createSignal(false);
+  const [priority, setPriority] = createSignal(props.story.priority || 'medium');
+  const [status, setStatus] = createSignal(props.story.status);
+  const [showPriorityPicker, setShowPriorityPicker] = createSignal(false);
+  const [showStatusPicker, setShowStatusPicker] = createSignal(false);
   let dateTriggerRef!: HTMLButtonElement;
   // Save state
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>('idle');
@@ -126,6 +119,7 @@ const StoryDetail: Component<Props> = (props) => {
   onCleanup(() => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
+    document.body.style.overflow = '';
   });
 
   const scheduleSave = (fields: Record<string, unknown>) => {
@@ -170,6 +164,9 @@ const StoryDetail: Component<Props> = (props) => {
   const [detailLoaded, setDetailLoaded] = createSignal(false);
 
   onMount(async () => {
+    // Lock body scroll while modal is open
+    document.body.style.overflow = 'hidden';
+
     // Paste handler for file uploads
     const handlePaste = (e: ClipboardEvent) => {
       if (!e.clipboardData?.items) return;
@@ -185,29 +182,22 @@ const StoryDetail: Component<Props> = (props) => {
       }
     };
     document.addEventListener('paste', handlePaste);
-    onCleanup(() => document.removeEventListener('paste', handlePaste));
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose(); };
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => { document.removeEventListener('paste', handlePaste); document.removeEventListener('keydown', handleKeyDown); });
 
     try {
       const detail = await api.stories.get(props.story.id);
       setCriteriaList(detail.criteria ?? []);
       setAssigneeIds(detail.assignees ?? []);
       setTitle(detail.title);
-      // Rebuild content from fetched detail
-      const p = (detail.purpose || '').trim();
-      const d = (detail.description || '').trim();
-      const o = (detail.objective || '').trim();
-      if (!p && !o) { setContent(d); }
-      else {
-        const parts: string[] = [];
-        if (p) parts.push(`## Para qué\n${p}`);
-        if (d) parts.push(d);
-        if (o) parts.push(`## Objetivo\n${o}`);
-        setContent(parts.join('\n\n'));
-      }
+      setContent(detail.description || '');
       setDueDate(detail.due_date || '');
       setEstimate(detail.estimate || 0);
       setAssigneeId(detail.assignee_id || '');
       setProjectId((detail as any).project_id || '');
+      if (detail.priority) setPriority(detail.priority);
+      if (detail.status) setStatus(detail.status);
     } catch { /* story detail is supplementary */ }
     setDetailLoaded(true);
   });
@@ -233,10 +223,10 @@ const StoryDetail: Component<Props> = (props) => {
   const btnPasado = () => getRelativeDateInfo('pasado');
   const btnSemana = () => getRelativeDateInfo('semana');
 
-  const prio = () => priorityConfig[props.story.priority];
-  const stat = () => statusConfig[props.story.status];
+  const prio = () => priorityConfig[priority()] || priorityConfig['medium'];
+  const stat = () => statusConfig[status()] || statusConfig['backlog'];
   const metCount = () => criteria().filter(c => c.is_met).length;
-  const isRich = () => !!props.story.code;
+  const isRich = () => !!priority();
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -318,86 +308,262 @@ const StoryDetail: Component<Props> = (props) => {
       onClick={() => props.onClose()}
     >
       <div
-        class="bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl shadow-black w-full sm:max-w-3xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[92vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 scrollbar-none hover:scrollbar-thin hover:scrollbar-thumb-base-content/10 relative"
+        class="story-detail-modal bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl shadow-black w-full sm:max-w-3xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[92vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 relative"
+        style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header bar */}
-        <div class="sticky top-0 bg-base-100/80 backdrop-blur-xl z-20 px-5 sm:px-8 pt-4 pb-3 sm:pt-5 sm:pb-4 border-b border-base-content/[0.04]">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3 min-w-0 flex-1 flex-wrap">
-              <Show when={props.story.code}>
-                <span class="text-[13px] font-mono font-bold text-base-content/50">{props.story.code}</span>
+        {/* Unified property bar */}
+        <div class="sticky top-0 bg-base-100/80 backdrop-blur-xl z-20 px-4 sm:px-6 py-3 border-b border-base-content/[0.04]">
+          <div class="flex items-center gap-1.5 flex-wrap">
+
+            {/* Project chip */}
+            <div class="relative">
+              <button
+                onClick={() => setShowProjectPicker(v => !v)}
+                class={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all ${project()
+                  ? 'hover:opacity-80'
+                  : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08]'
+                }`}
+                style={project() ? {
+                  "background-color": `${project()!.color}15`,
+                  color: project()!.color,
+                } : undefined}
+              >
+                <Show when={project()} fallback={<><FolderKanban size={11} /><span>Proyecto</span></>}>
+                  {project()!.name}
+                </Show>
+              </button>
+              <Show when={showProjectPicker()}>
+                <div class="fixed inset-0 z-20" onClick={() => setShowProjectPicker(false)} />
+                <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[200px] backdrop-blur-md">
+                  <button
+                    onClick={() => { setProjectId(''); setShowProjectPicker(false); saveImmediate({ project_id: null }); }}
+                    class={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-all ${!projectId() ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/50'}`}
+                  >
+                    <div class="w-5 h-5 rounded-md border border-dashed border-base-content/20 shrink-0" />
+                    Sin proyecto
+                  </button>
+                  <For each={activeProjects()}>
+                    {(p) => {
+                      const selected = () => projectId() === p.id;
+                      return (
+                        <button
+                          onClick={() => { setProjectId(p.id); setShowProjectPicker(false); saveImmediate({ project_id: p.id }); }}
+                          class={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-semibold transition-all ${selected() ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/70'}`}
+                        >
+                          <div class="w-5 h-5 rounded-md shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ "background-color": p.color }}>
+                            {p.prefix.slice(0, 2)}
+                          </div>
+                          <span class="truncate">{p.name}</span>
+                          <Show when={selected()}>
+                            <Check size={11} class="text-ios-blue-500 ml-auto shrink-0" />
+                          </Show>
+                        </button>
+                      );
+                    }}
+                  </For>
+                </div>
               </Show>
-              <div class="relative">
-                <button
-                  onClick={() => setShowProjectPicker(v => !v)}
-                  class={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md transition-all ${project()
-                      ? 'hover:opacity-80'
-                      : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08] hover:text-base-content/60'
-                    }`}
-                  style={project() ? {
-                    "background-color": `${project()!.color}15`,
-                    color: project()!.color,
-                  } : undefined}
-                >
-                  <Show when={project()} fallback={<><FolderKanban size={12} /> Proyecto</>}>
-                    {project()!.name}
-                  </Show>
-                </button>
-                <Show when={showProjectPicker()}>
-                  <div class="fixed inset-0 z-20" onClick={() => setShowProjectPicker(false)} />
-                  <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[200px] backdrop-blur-md">
-                    <button
-                      onClick={() => { setProjectId(''); setShowProjectPicker(false); saveImmediate({ project_id: null }); }}
-                      class={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-all ${!projectId() ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/50'}`}
-                    >
-                      <div class="w-6 h-6 rounded-lg border border-dashed border-base-content/20 shrink-0" />
-                      Sin proyecto
-                    </button>
-                    <For each={activeProjects()}>
-                      {(p) => {
-                        const selected = () => projectId() === p.id;
+            </div>
+
+            {/* Status chip (clickable) */}
+            <div class="relative">
+              <button
+                onClick={() => setShowStatusPicker(v => !v)}
+                class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-base-content/[0.04] hover:bg-base-content/[0.07] transition-all"
+              >
+                <span class={`w-2 h-2 rounded-full ${stat().color}`} />
+                <span class="text-[11px] font-semibold text-base-content/60">{stat().label}</span>
+              </button>
+              <Show when={showStatusPicker()}>
+                <div class="fixed inset-0 z-20" onClick={() => setShowStatusPicker(false)} />
+                <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[160px] backdrop-blur-md">
+                  <For each={Object.entries(statusConfig)}>
+                    {([key, cfg]) => (
+                      <button
+                        onClick={() => { setStatus(key as any); setShowStatusPicker(false); saveImmediate({ status: key }); props.onUpdated?.(props.story.id, { status: key }); }}
+                        class={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all ${status() === key ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/60'}`}
+                      >
+                        <span class={`w-2.5 h-2.5 rounded-full ${cfg.color}`} />
+                        {cfg.label}
+                        <Show when={status() === key}>
+                          <Check size={11} class="text-ios-blue-500 ml-auto" />
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+
+            {/* Priority chip (clickable) */}
+            <div class="relative">
+              <button
+                onClick={() => setShowPriorityPicker(v => !v)}
+                class={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all ${prio().bg} ${prio().color} hover:opacity-80`}
+              >
+                {(() => { const PIcon = prio().icon; return <PIcon size={11} strokeWidth={2.5} />; })()}
+                {prio().label}
+              </button>
+              <Show when={showPriorityPicker()}>
+                <div class="fixed inset-0 z-20" onClick={() => setShowPriorityPicker(false)} />
+                <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[160px] backdrop-blur-md">
+                  <For each={Object.entries(priorityConfig)}>
+                    {([key, cfg]) => {
+                      const Icon = cfg.icon;
+                      return (
+                        <button
+                          onClick={() => { setPriority(key as any); setShowPriorityPicker(false); saveImmediate({ priority: key }); }}
+                          class={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all ${priority() === key ? `${cfg.bg} ${cfg.color}` : 'hover:bg-base-content/5 text-base-content/60'}`}
+                        >
+                          <Icon size={13} strokeWidth={2.5} />
+                          {cfg.label}
+                          <Show when={priority() === key}>
+                            <Check size={11} class="text-ios-blue-500 ml-auto" />
+                          </Show>
+                        </button>
+                      );
+                    }}
+                  </For>
+                </div>
+              </Show>
+            </div>
+
+            {/* Separator */}
+            <div class="w-px h-4 bg-base-content/[0.06] mx-0.5" />
+
+            {/* Date chip */}
+            <div class="relative">
+              <button
+                ref={dateTriggerRef}
+                onClick={() => setShowDatePicker(!showDatePicker())}
+                class={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                  dueDate()
+                    ? 'bg-ios-blue-500/10 text-ios-blue-500 hover:bg-ios-blue-500/15'
+                    : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.07]'
+                }`}
+              >
+                <CalendarDays size={11} />
+                <span>{dueDate() ? formatDateDisplay(dueDate()) : 'Fecha'}</span>
+              </button>
+              <Show when={showDatePicker()}>
+                <div class="fixed inset-0 z-20" onClick={() => setShowDatePicker(false)} />
+                <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-3 backdrop-blur-md min-w-[280px]">
+                  <div class="flex flex-wrap gap-1.5 mb-3">
+                    <For each={[btnHoy(), btnManana(), btnPasado(), btnSemana()]}>
+                      {(btn) => {
+                        const selected = () => dueDate() === btn.dateStr;
                         return (
                           <button
-                            onClick={() => { setProjectId(p.id); setShowProjectPicker(false); saveImmediate({ project_id: p.id }); }}
-                            class={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-semibold transition-all ${selected() ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/70'}`}
+                            onClick={() => { setDueDate(btn.dateStr); saveImmediate({ due_date: btn.dateStr }); setShowDatePicker(false); }}
+                            class={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                              selected()
+                                ? 'bg-ios-blue-500/15 text-ios-blue-500'
+                                : 'bg-base-content/[0.05] text-base-content/50 hover:bg-base-content/[0.1]'
+                            }`}
                           >
-                            <div
-                              class="w-6 h-6 rounded-lg shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm"
-                              style={{ "background-color": p.color }}
-                            >
-                              {p.prefix.slice(0, 2)}
-                            </div>
-                            <span class="truncate">{p.name}</span>
-                            <Show when={selected()}>
-                              <Check size={12} class="text-ios-blue-500 ml-auto shrink-0" />
-                            </Show>
+                            {btn.label} <span class="opacity-50 ml-0.5">{btn.sub}</span>
                           </button>
                         );
                       }}
                     </For>
                   </div>
-                </Show>
-              </div>
-              <Show when={isRich()}>
-                {(() => {
-                  const PIcon = prio().icon;
-                  return (
-                    <span class={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md ${prio().bg} ${prio().color}`}>
-                      <PIcon size={12} strokeWidth={2.5} />
-                      {prio().label}
-                    </span>
-                  );
-                })()}
+                  <DatePickerPopover
+                    value={dueDate()}
+                    onSelect={(val) => { setDueDate(val); setShowDatePicker(false); saveImmediate({ due_date: val }); }}
+                    onClear={() => { setDueDate(''); setShowDatePicker(false); saveImmediate({ due_date: null }); }}
+                    onClose={() => setShowDatePicker(false)}
+                    triggerEl={dateTriggerRef}
+                  />
+                  <Show when={dueDate()}>
+                    <button
+                      onClick={() => { setDueDate(''); saveImmediate({ due_date: null }); setShowDatePicker(false); }}
+                      class="mt-2 text-[10px] font-bold text-base-content/25 hover:text-red-400 transition-colors uppercase tracking-wider"
+                    >
+                      Quitar fecha
+                    </button>
+                  </Show>
+                </div>
               </Show>
-              <span class="flex items-center gap-2 px-2.5 py-1 rounded-md bg-base-content/[0.03]">
-                <span class={`w-2 h-2 rounded-full ${stat().color}`} />
-                <span class="text-[11px] font-semibold text-base-content/60">{stat().label}</span>
-              </span>
+            </div>
 
-              {/* Save indicator */}
+            {/* Estimate chip */}
+            <div class="relative">
+              <button
+                onClick={() => setShowEstimatePicker(!showEstimatePicker())}
+                class={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                  estimate() > 0
+                    ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/15'
+                    : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.07]'
+                }`}
+              >
+                <Show when={estimate() > 0 && getEstimate(estimate())} fallback={<span>Est.</span>}>
+                  {(() => { const e = getEstimate(estimate())!; return <><span>{e.emoji}</span><span>{e.value}</span></>; })()}
+                </Show>
+              </button>
+              <Show when={showEstimatePicker()}>
+                <div class="fixed inset-0 z-20" onClick={() => setShowEstimatePicker(false)} />
+                <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-2 w-[180px] grid grid-cols-2 gap-1 backdrop-blur-md">
+                  <For each={estimates}>
+                    {(e) => (
+                      <button
+                        onClick={() => { setEstimate(e.value); setShowEstimatePicker(false); saveImmediate({ estimate: e.value }); }}
+                        class={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium transition-all ${
+                          estimate() === e.value
+                            ? 'bg-amber-500/20 text-amber-500 shadow-sm'
+                            : 'hover:bg-base-content/5 text-base-content/70 hover:text-base-content'
+                        }`}
+                      >
+                        <span class="text-base">{e.emoji}</span>
+                        <span class="font-mono">{e.value}</span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+
+            {/* Separator */}
+            <div class="w-px h-4 bg-base-content/[0.06] mx-0.5" />
+
+            {/* Assignee chip */}
+            <Show when={currentAssignee()}>
+              <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-base-content/[0.04]">
+                <img src={currentAssignee()!.avatar_url!} alt="" class="w-5 h-5 rounded-full object-cover" title={currentAssignee()!.name} />
+                <span class="text-[11px] font-medium text-base-content/60">{currentAssignee()!.name.split(' ')[0]}</span>
+              </div>
+            </Show>
+
+            {/* Extra assignees */}
+            <Show when={extraAssigneeUsers().length > 0}>
+              <div class="flex -space-x-1">
+                <For each={extraAssigneeUsers()}>
+                  {(u) => <img src={u.avatar_url!} alt="" class="w-5 h-5 rounded-full ring-2 ring-base-100 object-cover" title={u.name} />}
+                </For>
+              </div>
+            </Show>
+
+            {/* Add assignee */}
+            <button
+              onClick={() => setShowAssigneePicker(!showAssigneePicker())}
+              class="w-6 h-6 rounded-full flex items-center justify-center text-base-content/30 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all border border-dashed border-base-content/15 hover:border-ios-blue-500/30"
+              title="Asignar"
+            >
+              <UserPlus size={11} />
+            </button>
+
+            {/* Recurring badge */}
+            <Show when={props.story.frequency}>
+              <div class="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/[0.08] text-purple-500/70">
+                <RefreshCw size={10} />
+                <span class="text-[10px] font-bold">{frequencyLabel(props.story)}</span>
+              </div>
+            </Show>
+
+            {/* Spacer + save + close */}
+            <div class="flex items-center gap-1 ml-auto">
               <Show when={saveStatus() !== 'idle'}>
-                <span class="flex items-center gap-1.5 ml-auto mr-2">
+                <span class="flex items-center gap-1">
                   <Show when={saveStatus() === 'saving'}>
                     <Loader2 size={12} class="text-base-content/40 animate-spin" />
                   </Show>
@@ -406,21 +572,49 @@ const StoryDetail: Component<Props> = (props) => {
                   </Show>
                 </span>
               </Show>
+              <button onClick={() => props.onClose()} class="p-1.5 rounded-full hover:bg-base-content/10 transition-colors group">
+                <X size={18} class="text-base-content/40 group-hover:text-base-content/80 transition-colors" />
+              </button>
             </div>
-            <button onClick={() => props.onClose()} class="p-2 -mr-3 rounded-full hover:bg-base-content/10 transition-colors shrink-0 ml-4 group">
-              <X size={20} class="text-base-content/40 group-hover:text-base-content/80 transition-colors" />
-            </button>
           </div>
+
+          {/* Assignee picker (shown below bar) */}
+          <Show when={showAssigneePicker()}>
+            <div class="fixed inset-0 z-10" onClick={() => setShowAssigneePicker(false)} />
+            <div class="relative z-20 mt-2 rounded-xl border border-base-content/[0.06] bg-base-content/[0.02] p-1 flex flex-wrap gap-0.5">
+              <For each={activeMembers()}>
+                {(member) => {
+                  const isAssigned = () => allAssignedIds().has(member.id);
+                  return (
+                    <button
+                      onClick={() => toggleAssignee(member.id)}
+                      class={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                        isAssigned()
+                          ? 'bg-ios-blue-500/10 text-ios-blue-500'
+                          : 'hover:bg-base-content/5 text-base-content/50'
+                      }`}
+                    >
+                      <img src={member.avatar_url!} alt="" class="w-5 h-5 rounded-full" />
+                      <span class="font-medium">{member.name.split(' ')[0]}</span>
+                      <Show when={isAssigned()}>
+                        <Check size={11} class="text-ios-blue-500" />
+                      </Show>
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
         </div>
 
-        <div class="px-5 sm:px-8 py-5 sm:py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-8 space-y-6 sm:space-y-8">
+        <div class="px-5 sm:px-8 py-5 sm:py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-8 space-y-4 sm:space-y-5">
 
-          {/* Title — editable */}
-          <div class="relative group">
+          {/* Title */}
+          <div class="overflow-hidden">
             <textarea
               value={title()}
               rows={1}
-              class="w-full text-xl sm:text-[26px] font-extrabold leading-tight text-base-content bg-transparent resize-none outline-none rounded-xl px-3 py-2 -mx-3 border border-transparent focus:border-base-content/10 focus:bg-base-content/[0.03] transition-colors placeholder:text-base-content/20"
+              class="w-full text-xl sm:text-[26px] font-extrabold leading-tight text-base-content bg-transparent resize-none outline-none overflow-hidden px-1 py-1 placeholder:text-base-content/20"
               placeholder="Título de la historia"
               ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
               onInput={(e) => {
@@ -430,169 +624,6 @@ const StoryDetail: Component<Props> = (props) => {
                 if (val.trim()) scheduleSave({ title: val });
               }}
             />
-            <div class="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-base-content/20 rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
-          </div>
-
-          {/* Recurring badge */}
-          <Show when={props.story.frequency}>
-            <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/[0.06] border border-purple-500/10 w-fit">
-              <RefreshCw size={11} class="text-purple-500/60" />
-              <span class="text-[11px] font-bold text-purple-500/70">{frequencyLabel(props.story)}</span>
-            </div>
-          </Show>
-
-          {/* Meta section: date + estimate + assignees */}
-          <div class="space-y-5 pb-2 border-b border-base-content/[0.03]">
-
-            {/* Row 1: Quick date buttons + calendar */}
-            <div>
-              <div class="flex items-center gap-2 text-base-content/40 mb-3">
-                <CalendarDays size={14} />
-                <span class="text-[10px] font-bold uppercase tracking-[0.1em]">Fecha límite</span>
-              </div>
-              <div class="flex flex-wrap items-center gap-2">
-                <For each={[btnHoy(), btnManana(), btnPasado(), btnSemana()]}>
-                  {(btn) => {
-                    const selected = () => dueDate() === btn.dateStr;
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => { setDueDate(btn.dateStr); saveImmediate({ due_date: btn.dateStr }); }}
-                        class={`flex flex-col items-center px-3.5 py-2 rounded-xl transition-all duration-200 min-w-[72px] ${selected()
-                          ? 'bg-base-content/[0.06] text-base-content shadow-sm border border-base-content/[0.08]'
-                          : 'bg-transparent text-base-content/40 hover:bg-base-content/[0.04] border border-transparent'
-                          }`}
-                      >
-                        <span class="text-[12px] font-bold leading-tight">{btn.label}</span>
-                        <span class={`text-[9px] font-semibold leading-tight mt-0.5 ${selected() ? 'text-base-content/50' : 'text-base-content/25'}`}>{btn.sub}</span>
-                      </button>
-                    );
-                  }}
-                </For>
-
-                <div class="flex items-center ml-auto relative">
-                  <button
-                    ref={dateTriggerRef}
-                    type="button"
-                    onClick={() => setShowDatePicker(!showDatePicker())}
-                    class={`relative bg-base-content/[0.03] rounded-xl pl-9 pr-4 py-2 text-[12px] font-bold outline-none text-base-content/60 focus:ring-2 focus:ring-ios-blue-500/20 hover:bg-base-content/[0.05] transition-all flex items-center min-w-[130px] justify-start ${showDatePicker() ? 'ring-2 ring-ios-blue-500/50 bg-base-content/[0.05]' : ''}`}
-                  >
-                    <Calendar size={14} strokeWidth={2.5} class={`absolute left-3.5 z-10 transition-colors ${showDatePicker() || dueDate() ? 'text-ios-blue-500' : 'text-base-content/30'}`} />
-                    {dueDate() ? formatDateDisplay(dueDate()) : "Calendario"}
-                  </button>
-                  <Show when={showDatePicker()}>
-                    <DatePickerPopover
-                      value={dueDate()}
-                      onSelect={(val) => { setDueDate(val); setShowDatePicker(false); saveImmediate({ due_date: val }); }}
-                      onClear={() => { setDueDate(''); setShowDatePicker(false); saveImmediate({ due_date: null }); }}
-                      onClose={() => setShowDatePicker(false)}
-                      triggerEl={dateTriggerRef}
-                    />
-                  </Show>
-                </div>
-              </div>
-              <Show when={dueDate()}>
-                <button
-                  onClick={() => { setDueDate(''); saveImmediate({ due_date: null }); }}
-                  class="px-2 mt-2 text-[10px] font-bold text-base-content/25 hover:text-base-content/50 transition-colors uppercase tracking-wider"
-                >
-                  Quitar fecha
-                </button>
-              </Show>
-            </div>
-
-            {/* Row 2: Estimate + Assignees */}
-            <div class="flex items-start gap-6 sm:gap-8 flex-wrap">
-
-              {/* Estimate */}
-              <div class="relative">
-                <button
-                  onClick={() => setShowEstimatePicker(!showEstimatePicker())}
-                  class={`flex items-center gap-2 text-[12px] sm:text-[13px] px-3.5 py-2 rounded-xl transition-all font-medium ${estimate() > 0 ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20' : 'bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/[0.08] hover:text-base-content/80'
-                    }`}
-                >
-                  <Show when={estimate() > 0 && getEstimate(estimate())} fallback={<span class="text-base-content/30 tracking-wide">Estimar</span>}>
-                    {(() => { const e = getEstimate(estimate())!; return <><span>{e.emoji}</span><span>{e.value}</span></>; })()}
-                  </Show>
-                </button>
-                <Show when={showEstimatePicker()}>
-                  <div class="absolute top-[calc(100%+8px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-2 w-[180px] grid grid-cols-2 gap-1 backdrop-blur-md">
-                    <For each={estimates}>
-                      {(e) => (
-                        <button
-                          onClick={() => { setEstimate(e.value); setShowEstimatePicker(false); saveImmediate({ estimate: e.value }); }}
-                          class={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium transition-all ${estimate() === e.value ? 'bg-amber-500/20 text-amber-500 shadow-sm' : 'hover:bg-base-content/5 text-base-content/70 hover:text-base-content'
-                            }`}
-                        >
-                          <span class="text-base">{e.emoji}</span>
-                          <span class="font-mono">{e.value}</span>
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                </Show>
-              </div>
-
-              {/* Assignees */}
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-3">
-                  {/* Encargado */}
-                  <Show when={currentAssignee()}>
-                    <div class="flex items-center gap-2">
-                      <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30">Encargado</span>
-                      <img src={currentAssignee()!.avatar_url!} alt="" class="w-7 h-7 rounded-full ring-2 ring-base-100 object-cover shadow-sm" title={currentAssignee()!.name} />
-                      <span class="text-[12px] font-medium text-base-content/60">{currentAssignee()!.name.split(' ')[0]}</span>
-                    </div>
-                  </Show>
-
-                  {/* Involucrados */}
-                  <Show when={extraAssigneeUsers().length > 0}>
-                    <div class="flex items-center gap-2">
-                      <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/30">Involucrados</span>
-                      <div class="flex items-center -space-x-1.5">
-                        <For each={extraAssigneeUsers()}>
-                          {(u) => (
-                            <img src={u.avatar_url!} alt="" class="w-6 h-6 rounded-full ring-2 ring-base-100 object-cover shadow-sm" title={u.name} />
-                          )}
-                        </For>
-                      </div>
-                    </div>
-                  </Show>
-
-                  <button
-                    onClick={() => setShowAssigneePicker(!showAssigneePicker())}
-                    class="w-8 h-8 rounded-full flex items-center justify-center text-base-content/40 hover:text-ios-blue-500 bg-base-content/[0.02] hover:bg-ios-blue-500/10 transition-all border border-dashed border-base-content/20 hover:border-ios-blue-500/30 shadow-sm ml-1"
-                    title="Asignar"
-                  >
-                    <UserPlus size={14} />
-                  </button>
-                </div>
-
-                {/* Assignee picker — collapsible */}
-                <Show when={showAssigneePicker()}>
-                  <div class="mt-3 rounded-xl border border-base-content/[0.06] bg-base-content/[0.02] p-1 flex flex-wrap gap-0.5">
-                    <For each={activeMembers()}>
-                      {(member) => {
-                        const isAssigned = () => allAssignedIds().has(member.id);
-                        return (
-                          <button
-                            onClick={() => toggleAssignee(member.id)}
-                            class={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-colors ${isAssigned() ? 'bg-ios-blue-500/10 text-ios-blue-500' : 'hover:bg-base-content/5 text-base-content/50'
-                              }`}
-                          >
-                            <img src={member.avatar_url!} alt="" class="w-5 h-5 rounded-full" />
-                            <span class="font-medium">{member.name.split(' ')[0]}</span>
-                            <Show when={isAssigned()}>
-                              <Check size={11} class="text-ios-blue-500" />
-                            </Show>
-                          </button>
-                        );
-                      }}
-                    </For>
-                  </div>
-                </Show>
-              </div>
-            </div>
           </div>
 
           {/* Content canvas */}
@@ -601,7 +632,7 @@ const StoryDetail: Component<Props> = (props) => {
             placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
             onChange={(md) => {
               setContent(md);
-              scheduleSave({ description: md, purpose: '', objective: '' });
+              scheduleSave({ description: md });
             }}
           />
 

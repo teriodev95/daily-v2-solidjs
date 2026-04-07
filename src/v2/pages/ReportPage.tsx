@@ -4,8 +4,8 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import {
-  CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle,
-  Plus, Package, Target, Play, RotateCcw, Check,
+  CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle, ChevronDown, ChevronRight,
+  Plus, Package, Target, Play, RotateCcw, Check, CalendarDays,
   Eye, Trash2, ArrowRightCircle, Flag, XCircle, RefreshCw, Archive,
 } from 'lucide-solid';
 import { isRecurring, isRecurringOnDate, frequencyLabel, shouldShowRecurringInActive, toLocalDateStr } from '../lib/recurrence';
@@ -18,15 +18,20 @@ interface ReportPageProps {
   refreshKey?: number;
   onStoryDeleted?: () => void;
   shareRequested?: number; // increment to trigger share modal with auto-copy
+  hiddenRequested?: number; // increment to open hidden stories overlay
 }
 
 const ReportPage: Component<ReportPageProps> = (props) => {
   const auth = useAuth();
   const data = useData();
   const [selectedStory, setSelectedStory] = createSignal<Story | null>(null);
+  const [backlogCollapsed, setBacklogCollapsed] = createSignal(true);
   const [selectedAssignment, setSelectedAssignment] = createSignal<Assignment | null>(null);
   const [showShareModal, setShowShareModal] = createSignal(false);
+  const [showHiddenStories, setShowHiddenStories] = createSignal(false);
   const [shareAutoCopy, setShareAutoCopy] = createSignal(false);
+  const [hiddenRefreshKey, setHiddenRefreshKey] = createSignal(0);
+  const [restoringIds, setRestoringIds] = createSignal<Set<string>>(new Set());
 
   // Watch for external share request (keyboard shortcut T)
   createEffect(() => {
@@ -34,6 +39,13 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     if (req && req > 0) {
       setShareAutoCopy(true);
       setShowShareModal(true);
+    }
+  });
+
+  createEffect(() => {
+    const req = props.hiddenRequested;
+    if (req && req > 0) {
+      setShowHiddenStories(true);
     }
   });
 
@@ -59,6 +71,11 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     ({ uid }) => uid ? api.assignments.list({ assigned_to: uid, status: 'open' }) : Promise.resolve([]),
   );
 
+  const [hiddenStoriesList, { mutate: mutateHiddenStories }] = createResource(
+    () => ({ uid: userId(), _r: props.refreshKey, hidden: hiddenRefreshKey() }),
+    ({ uid }) => uid ? api.stories.list({ assignee_id: uid, include_inactive: 'true' }) : Promise.resolve([]),
+  );
+
   // Recurring completions for today
   const [todayCompletions, { mutate: mutateCompletions }] = createResource(
     () => ({ uid: userId(), date: today }),
@@ -73,12 +90,6 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     return set;
   };
 
-  const recurringTodayStories = () => {
-    const all = localStories();
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
-    return all.filter(s => isRecurring(s) && isRecurringOnDate(s, todayDate));
-  };
 
   const toggleRecurringCompletion = (storyId: string) => {
     const completed = todayCompletionSet().has(storyId);
@@ -103,6 +114,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const [exitingIds, setExitingIds] = createSignal<Set<string>>(new Set());
   const [enteringIds, setEnteringIds] = createSignal<Set<string>>(new Set());
   const [deletedIds, setDeletedIds] = createSignal<Set<string>>(new Set());
+  const [archivingIds, setArchivingIds] = createSignal<Set<string>>(new Set());
 
   createEffect(() => {
     const fetched = userStories();
@@ -117,6 +129,15 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   });
 
   const report = () => reportData();
+  const hiddenStories = () =>
+    ((hiddenStoriesList() ?? []) as Story[])
+      .filter(story => !story.is_active)
+      .sort((a, b) => (b.completed_at ?? b.updated_at).localeCompare(a.completed_at ?? a.updated_at));
+
+  const hiddenDateLabel = (story: Story) => {
+    const source = story.completed_at ?? story.updated_at;
+    return new Date(source).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+  };
 
   // ─── Learnings & impediments (JSON array inside string field) ───
   const parseItems = (raw: string | undefined | null): string[] => {
@@ -220,9 +241,22 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     });
   };
 
-  const activeStories = () => localStories().filter(s =>
-    (s.status === 'in_progress' || s.status === 'todo') && shouldShowRecurringInActive(s)
-  );
+  const todayStr = toLocalDateStr(new Date());
+  const activeStories = () => {
+    const all = localStories();
+    const normal = all.filter(s => {
+      if (s.status !== 'in_progress' && s.status !== 'todo') return false;
+      if (s.frequency) return false; // recurring handled separately below
+      const dateStr = s.due_date || s.scheduled_date;
+      if (dateStr) return dateStr <= todayStr;
+      return true;
+    });
+    // Merge recurring that apply today
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const recurring = all.filter(s => isRecurring(s) && isRecurringOnDate(s, todayDate));
+    return [...normal, ...recurring];
+  };
   const backlogStories = () => localStories().filter(s => s.status === 'backlog');
   const myGoals = () => goalsList() ?? [];
   const myAssignments = () => (assignmentsList() ?? []) as Assignment[];
@@ -269,7 +303,8 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   };
 
   const cardClass = (storyId: string) =>
-    exitingIds().has(storyId) ? 'animate-card-exit' :
+    archivingIds().has(storyId) ? 'opacity-45 pointer-events-none' :
+      exitingIds().has(storyId) ? 'animate-card-exit' :
       enteringIds().has(storyId) ? 'animate-card-enter' : '';
 
   // ─── Context menu ───
@@ -316,27 +351,50 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   const ctxDelete = (story: Story) => {
     closeCtxMenu();
+    if (archivingIds().has(story.id)) return;
 
-    // Track as deleted so refetches won't restore it
-    setDeletedIds(prev => new Set([...prev, story.id]));
+    setArchivingIds(prev => new Set([...prev, story.id]));
 
-    // Exit animation then remove from list
-    setExitingIds(prev => new Set([...prev, story.id]));
-    setTimeout(() => {
-      setExitingIds(prev => { const n = new Set(prev); n.delete(story.id); return n; });
-      setLocalStories(prev => prev.filter(s => s.id !== story.id));
-    }, 190);
+    api.stories.update(story.id, { is_active: false })
+      .then(() => {
+        setLocalStories(prev => prev.filter(s => s.id !== story.id));
+        if (selectedStory()?.id === story.id) setSelectedStory(null);
+        setHiddenRefreshKey(k => k + 1);
+      })
+      .catch(() => {
+        refetchStories();
+      })
+      .finally(() => {
+        setArchivingIds(prev => {
+          const next = new Set(prev);
+          next.delete(story.id);
+          return next;
+        });
+      });
+  };
 
-    // Persist immediately so closing the app does not bring it back.
-    api.stories.update(story.id, { is_active: false }).catch(() => {
-      setDeletedIds(prev => { const n = new Set(prev); n.delete(story.id); return n; });
-      setEnteringIds(prev => new Set([...prev, story.id]));
-      setLocalStories(prev => [...prev, story]);
-      setTimeout(() => {
-        setEnteringIds(prev => { const n = new Set(prev); n.delete(story.id); return n; });
-      }, 260);
-      refetchStories();
-    });
+  const restoreHiddenStory = async (story: Story) => {
+    if (restoringIds().has(story.id)) return;
+
+    setRestoringIds(prev => new Set([...prev, story.id]));
+    try {
+      await api.stories.update(story.id, { is_active: true });
+      mutateHiddenStories(prev => (prev ?? []).filter(item => item.id !== story.id));
+      setLocalStories(prev => {
+        if (prev.some(item => item.id === story.id)) {
+          return prev.map(item => item.id === story.id ? { ...item, is_active: true } as Story : item);
+        }
+        return [{ ...story, is_active: true } as Story, ...prev];
+      });
+    } catch {
+      setHiddenRefreshKey(k => k + 1);
+    } finally {
+      setRestoringIds(prev => {
+        const next = new Set(prev);
+        next.delete(story.id);
+        return next;
+      });
+    }
   };
 
   const ctxDeleteGoal = (id: string, text: string) => {
@@ -433,7 +491,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     const opts: { label: string; status: StoryStatus; icon: any; color: string }[] = [];
     if (current !== 'in_progress') opts.push({ label: 'En progreso', status: 'in_progress', icon: Play, color: 'text-ios-blue-500' });
     if (current !== 'todo' && current !== 'backlog') opts.push({ label: 'Por hacer', status: 'todo', icon: Package, color: 'text-orange-500' });
-    if (current !== 'backlog') opts.push({ label: 'Backlog', status: 'backlog', icon: Archive, color: 'text-base-content/40' });
+    if (current !== 'backlog') opts.push({ label: 'Backlog', status: 'backlog', icon: Package, color: 'text-base-content/40' });
     if (current !== 'done') opts.push({ label: 'Completada', status: 'done', icon: Check, color: 'text-ios-green-500' });
     return opts;
   };
@@ -790,38 +848,96 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                 <div class="w-9 h-9 rounded-full bg-ios-blue-500/10 flex items-center justify-center">
                   <ArrowRight size={18} class="text-ios-blue-500" />
                 </div>
-                <div>
+                <div class="flex-1">
                   <h2 class="text-sm font-bold">Trabajo activo</h2>
                   <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Por hacer y en progreso</p>
                 </div>
+                <span class="text-base-content/15 hover:text-base-content/40 transition-colors cursor-help" title="Incluye tareas programadas o vencidas. Se quedan aquí hasta completarlas.">
+                  <AlertTriangle size={14} />
+                </span>
               </div>
               <div class="space-y-2">
                 <For each={activeStories()}>
-                  {(story) => (
-                    <div
-                      onContextMenu={(e) => openCtxMenu(e, story)}
-                      onClick={() => setSelectedStory(story)}
-                      class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-all group ${cardClass(story.id)}`}
-                    >
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'done'); }}
-                        class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 transition-all shrink-0"
-                        title="Marcar completada"
+                  {(story) => {
+                    const isRec = () => isRecurring(story);
+                    const recCompleted = () => todayCompletionSet().has(story.id);
+                    return (
+                      <div
+                        onContextMenu={(e) => !isRec() && openCtxMenu(e, story)}
+                        onClick={() => setSelectedStory(story)}
+                        class={`flex items-center gap-2 px-3 py-3 rounded-xl cursor-pointer transition-all group ${
+                          isRec() && recCompleted() ? 'bg-base-200/40' : 'bg-base-200/60 hover:bg-base-200/90'
+                        } ${cardClass(story.id)}`}
                       >
-                        <Check size={14} />
-                      </button>
-                      <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                        <span class="text-sm flex-1 truncate">{story.title}</span>
-                        <ProjectBadge story={story} />
+                        {/* Recurring: circular completion toggle. Normal: check to done */}
+                        <Show
+                          when={isRec()}
+                          fallback={
+                            <button
+                              onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'done'); }}
+                              class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 transition-all shrink-0"
+                              title="Marcar completada"
+                            >
+                              <Check size={14} />
+                            </button>
+                          }
+                        >
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleRecurringCompletion(story.id); }}
+                            class="shrink-0"
+                          >
+                            <div class={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                              recCompleted()
+                                ? 'bg-ios-green-500 border-ios-green-500'
+                                : 'border-base-content/20 hover:border-ios-green-500/50'
+                            }`}>
+                              <Show when={recCompleted()}>
+                                <svg class="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+                                  <path d="M2.5 6L5 8.5L9.5 3.5" />
+                                </svg>
+                              </Show>
+                            </div>
+                          </button>
+                        </Show>
+                        <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                          <span class={`text-sm flex-1 truncate transition-colors ${isRec() && recCompleted() ? 'text-base-content/30 line-through' : ''}`}>{story.title}</span>
+                          {/* Recurring badge */}
+                          <Show when={isRec()}>
+                            <span class="text-[9px] font-bold text-purple-500/60 bg-purple-500/10 px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
+                              <RefreshCw size={8} />
+                              {frequencyLabel(story)}
+                            </span>
+                          </Show>
+                          {/* Date badge for non-recurring */}
+                          <Show when={!isRec()}>
+                            {(() => {
+                              const dateStr = story.due_date || story.scheduled_date;
+                              if (!dateStr) return null;
+                              const isOverdue = dateStr < todayStr;
+                              const isToday = dateStr === todayStr;
+                              const d = new Date(dateStr + 'T12:00:00');
+                              const label = `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}`;
+                              return (
+                                <span class={`flex items-center gap-1 text-[10px] font-semibold shrink-0 px-1.5 py-0.5 rounded-md ${
+                                  isOverdue ? 'text-red-500 bg-red-500/10' : isToday ? 'text-ios-blue-500 bg-ios-blue-500/10' : 'text-base-content/30 bg-base-content/[0.04]'
+                                }`} title={isOverdue ? 'Vencida' : isToday ? 'Para hoy' : `Programada: ${label}`}>
+                                  <CalendarDays size={10} />
+                                  {label}
+                                </span>
+                              );
+                            })()}
+                          </Show>
+                          <ProjectBadge story={story} />
+                        </div>
+                        <Show when={!isRec() && story.status === 'in_progress'}>
+                          <span class="relative flex h-2 w-2 shrink-0 opacity-70" title="En progreso">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-ios-blue-500 opacity-50" />
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-ios-blue-500" />
+                          </span>
+                        </Show>
                       </div>
-                      <Show when={story.status === 'in_progress'}>
-                        <span class="relative flex h-2 w-2 shrink-0 opacity-70" title="En progreso">
-                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-ios-blue-500 opacity-50" />
-                          <span class="relative inline-flex rounded-full h-2 w-2 bg-ios-blue-500" />
-                        </span>
-                      </Show>
-                    </div>
-                  )}
+                    );
+                  }}
                 </For>
                 <Show when={activeStories().length === 0}>
                   <div class="px-3 py-4 rounded-xl bg-base-200/30 text-center">
@@ -833,101 +949,55 @@ const ReportPage: Component<ReportPageProps> = (props) => {
             </section>
           </div>
 
-          {/* Backlog */}
+          {/* Backlog — collapsible */}
           <section>
-            <div class="flex items-center gap-3 mb-4">
+            <button
+              onClick={() => setBacklogCollapsed(v => !v)}
+              class="flex items-center gap-3 mb-4 w-full text-left group"
+            >
               <div class="w-9 h-9 rounded-full bg-base-content/[0.06] flex items-center justify-center">
                 <Package size={18} class="text-base-content/40" />
               </div>
-              <div>
-                <h2 class="text-sm font-bold">Backlog</h2>
+              <div class="flex-1">
+                <h2 class="text-sm font-bold">Backlog <span class="text-base-content/25 font-normal ml-1">({backlogStories().length})</span></h2>
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Pendiente de priorizar</p>
               </div>
-            </div>
-            <div class="space-y-2">
-              <For each={backlogStories()}>
-                {(story) => (
-                  <div
-                    onContextMenu={(e) => openCtxMenu(e, story)}
-                    onClick={() => setSelectedStory(story)}
-                    class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 cursor-pointer hover:bg-base-200/70 transition-all group ${cardClass(story.id)}`}
-                  >
-                    <button
-                      onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'todo'); }}
-                      class="p-1.5 rounded-md text-base-content/15 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all shrink-0"
-                      title="Mover a trabajo activo"
+              <span class="text-base-content/20 group-hover:text-base-content/40 transition-colors">
+                <Show when={backlogCollapsed()} fallback={<ChevronDown size={16} />}>
+                  <ChevronRight size={16} />
+                </Show>
+              </span>
+            </button>
+            <Show when={!backlogCollapsed()}>
+              <div class="space-y-2">
+                <For each={backlogStories()}>
+                  {(story) => (
+                    <div
+                      onContextMenu={(e) => openCtxMenu(e, story)}
+                      onClick={() => setSelectedStory(story)}
+                      class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 cursor-pointer hover:bg-base-200/70 transition-all group ${cardClass(story.id)}`}
                     >
-                      <Play size={14} />
-                    </button>
-                    <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                      <span class="text-sm text-base-content/35 flex-1 truncate">{story.title}</span>
-                      <ProjectBadge story={story} />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'todo'); }}
+                        class="p-1.5 rounded-md text-base-content/15 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all shrink-0"
+                        title="Mover a trabajo activo"
+                      >
+                        <Play size={14} />
+                      </button>
+                      <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                        <span class="text-sm text-base-content/35 flex-1 truncate">{story.title}</span>
+                        <ProjectBadge story={story} />
+                      </div>
                     </div>
-                  </div>
-                )}
-              </For>
-              <InlineAdd status="backlog" placeholder="Agregar al backlog..." />
-            </div>
+                  )}
+                </For>
+                <InlineAdd status="backlog" placeholder="Agregar al backlog..." />
+              </div>
+            </Show>
           </section>
 
 
 
-          {/* Recurring tasks */}
-          <Show when={recurringTodayStories().length > 0}>
-            <section>
-              <div class="flex items-center gap-3 mb-4">
-                <div class="w-9 h-9 rounded-full bg-purple-500/10 flex items-center justify-center">
-                  <RefreshCw size={18} class="text-purple-500" />
-                </div>
-                <div>
-                  <h2 class="text-sm font-bold">Tareas recurrentes</h2>
-                  <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Rutinas de hoy</p>
-                </div>
-              </div>
-              <div class="space-y-2">
-                <For each={recurringTodayStories()}>
-                  {(story) => {
-                    const completed = () => todayCompletionSet().has(story.id);
-                    return (
-                      <div
-                        onClick={() => setSelectedStory(story)}
-                        class={`flex items-center gap-2 px-3 py-3 rounded-xl cursor-pointer transition-all group ${
-                          completed() ? 'bg-base-200/40' : 'bg-base-200/60 hover:bg-base-200/90'
-                        }`}
-                      >
-                        <button
-                          onClick={(e) => { e.stopPropagation(); toggleRecurringCompletion(story.id); }}
-                          class="shrink-0 transition-all"
-                        >
-                          <div class={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                            completed()
-                              ? 'bg-ios-green-500 border-ios-green-500'
-                              : 'border-base-content/20 hover:border-ios-green-500/50'
-                          }`}>
-                            <Show when={completed()}>
-                              <svg class="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M2.5 6L5 8.5L9.5 3.5" />
-                              </svg>
-                            </Show>
-                          </div>
-                        </button>
-                        <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                          <span class={`text-sm flex-1 truncate transition-colors ${
-                            completed() ? 'text-base-content/30 line-through' : ''
-                          }`}>{story.title}</span>
-                          <span class="text-[9px] font-bold text-purple-500/60 bg-purple-500/10 px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
-                            <RefreshCw size={8} />
-                            {frequencyLabel(story)}
-                          </span>
-                          <ProjectBadge story={story} />
-                        </div>
-                      </div>
-                    );
-                  }}
-                </For>
-              </div>
-            </section>
-          </Show>
 
           {/* Learning */}
           <section>
@@ -1184,6 +1254,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
             onUpdated={(id, fields) => {
               setLocalStories(prev => {
                 if (fields.is_active === false) {
+                  setHiddenRefreshKey(k => k + 1);
                   return prev.filter(s => s.id !== id);
                 }
                 return prev.map(s => s.id === id ? { ...s, ...fields } as Story : s);
@@ -1191,6 +1262,85 @@ const ReportPage: Component<ReportPageProps> = (props) => {
             }}
           />
         )}
+      </Show>
+
+      <Show when={showHiddenStories()}>
+        <div
+          class="fixed inset-0 z-[105] hidden md:flex items-center justify-center bg-black/55 backdrop-blur-md"
+          onClick={() => setShowHiddenStories(false)}
+        >
+          <div
+            class="w-full max-w-2xl rounded-[28px] border border-base-content/[0.08] bg-base-100/92 shadow-2xl shadow-black/40 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div class="flex items-center justify-between gap-4 border-b border-base-content/[0.05] px-6 py-5">
+              <div>
+                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-base-content/25">Ocultadas</p>
+                <h2 class="mt-1 text-xl font-semibold tracking-tight text-base-content/90">Historial de tareas ocultas</h2>
+                <p class="mt-1 text-[12px] text-base-content/35">Tareas completadas que quitaste del reporte y tableros.</p>
+              </div>
+              <button
+                onClick={() => setShowHiddenStories(false)}
+                class="rounded-2xl px-3 py-2 text-[12px] font-semibold text-base-content/45 transition-colors hover:bg-base-content/[0.05] hover:text-base-content/70"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div class="max-h-[70vh] overflow-y-auto px-6 py-5">
+              <Show
+                when={hiddenStories().length > 0}
+                fallback={
+                  <div class="rounded-[24px] border border-dashed border-base-content/[0.08] bg-base-content/[0.02] px-5 py-10 text-center">
+                    <p class="text-[14px] font-semibold text-base-content/45">No hay tareas ocultas</p>
+                    <p class="mt-2 text-[12px] text-base-content/28">Lo que ocultes desde trabajo completado aparecerá aquí.</p>
+                  </div>
+                }
+              >
+                <div class="space-y-2.5">
+                  <For each={hiddenStories()}>
+                    {(story) => {
+                      const proj = getProject(story.project_id);
+                      const restoring = () => restoringIds().has(story.id);
+                      return (
+                        <div class="rounded-[22px] border border-base-content/[0.06] bg-base-200/35 px-4 py-3">
+                          <div class="flex items-start gap-3">
+                            <div class="min-w-0 flex-1">
+                              <div class="flex items-center gap-2 flex-wrap">
+                                <p class="text-[14px] font-medium text-base-content/82 whitespace-normal break-words">{story.title}</p>
+                                <Show when={proj}>
+                                  <span
+                                    class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                    style={{ "background-color": `${proj!.color}18`, color: proj!.color }}
+                                  >
+                                    {proj!.prefix}
+                                  </span>
+                                </Show>
+                              </div>
+                              <div class="mt-2 flex items-center gap-3 flex-wrap text-[11px] text-base-content/32">
+                                <span>Completada {hiddenDateLabel(story)}</span>
+                                <Show when={story.code}>
+                                  <span class="font-mono">{story.code}</span>
+                                </Show>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => restoreHiddenStory(story)}
+                              disabled={restoring()}
+                              class="shrink-0 rounded-2xl bg-base-content/[0.05] px-3 py-2 text-[12px] font-semibold text-base-content/65 transition-all hover:bg-base-content/[0.1] hover:text-base-content disabled:opacity-45"
+                            >
+                              {restoring() ? 'Restaurando...' : 'Restaurar'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </div>
       </Show>
 
       {/* Share Report Modal */}

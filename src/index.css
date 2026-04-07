@@ -143,6 +143,11 @@ body {
   background: rgba(0, 0, 0, 0.3);
 }
 
+/* Hide scrollbar on story detail modal */
+.story-detail-modal::-webkit-scrollbar {
+  display: none;
+}
+
 /* Component utilities */
 @utility ios-card {
   background-color: white;
