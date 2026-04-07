@@ -59,7 +59,58 @@ wiki.get('/search', async (c) => {
 
   if (projectId) rows = rows.filter(r => r.project_id === projectId);
 
-  return c.json(rows.map(r => ({ ...r, tags: JSON.parse(r.tags || '[]') })));
+  // Add snippet around match
+  const lowerQ = q.toLowerCase();
+  return c.json(rows.map(r => {
+    let snippet = '';
+    const content = r.content || '';
+    const idx = content.toLowerCase().indexOf(lowerQ);
+    if (idx >= 0) {
+      const start = Math.max(0, idx - 40);
+      const end = Math.min(content.length, idx + q.length + 40);
+      snippet = (start > 0 ? '...' : '') + content.slice(start, end) + (end < content.length ? '...' : '');
+    }
+    return { ...r, tags: JSON.parse(r.tags || '[]'), snippet };
+  }));
+});
+
+// Resolve article by title (for agents navigating [[wiki links]])
+wiki.get('/resolve', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const title = (c.req.query('title') ?? '').trim();
+  const projectId = c.req.query('project_id');
+
+  if (!title) return c.json({ error: 'title is required' }, 400);
+  if (!projectId) return c.json({ error: 'project_id is required' }, 400);
+
+  const rows = await db
+    .select()
+    .from(schema.wikiArticles)
+    .where(and(
+      eq(schema.wikiArticles.project_id, projectId),
+      eq(schema.wikiArticles.team_id, user.teamId),
+    ));
+
+  const found = rows.find(r => r.title.toLowerCase() === title.toLowerCase());
+  if (!found) return c.json({ error: 'Not found' }, 404);
+
+  return c.json({ ...found, tags: JSON.parse(found.tags || '[]'), history: JSON.parse(found.history || '[]') });
+});
+
+// Batch get multiple articles by IDs
+wiki.post('/batch', async (c) => {
+  const db = c.get('db');
+  const body = await c.req.json<{ ids: string[] }>();
+
+  if (!body.ids?.length) return c.json({ error: 'ids array required' }, 400);
+  if (body.ids.length > 50) return c.json({ error: 'max 50 ids per batch' }, 400);
+
+  const all = await db.select().from(schema.wikiArticles);
+  const idSet = new Set(body.ids);
+  const found = all.filter(a => idSet.has(a.id));
+
+  return c.json(found.map(a => ({ ...a, tags: JSON.parse(a.tags || '[]') })));
 });
 
 // Get graph data for a project
@@ -79,7 +130,7 @@ wiki.get('/graph', async (c) => {
     ));
 
   const titleMap = new Map(articles.map(a => [a.title.toLowerCase(), a.id]));
-  const linkRegex = /\[\[(.+?)\]\]/g;
+  const linkRegex = /\[\[(.+?)(?:\|.+?)?\]\]/g;
 
   const nodes = articles.map(a => ({
     id: a.id,
@@ -143,6 +194,52 @@ wiki.get('/:id', async (c) => {
   if (!article) return c.json({ error: 'Not found' }, 404);
 
   return c.json({ ...article, tags: JSON.parse(article.tags || '[]'), history: JSON.parse(article.history || '[]') });
+});
+
+// Get outgoing and incoming links for an article
+wiki.get('/:id/links', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const id = c.req.param('id');
+
+  const [article] = await db.select().from(schema.wikiArticles).where(eq(schema.wikiArticles.id, id)).limit(1);
+  if (!article) return c.json({ error: 'Not found' }, 404);
+
+  // All articles in same project
+  const siblings = await db
+    .select()
+    .from(schema.wikiArticles)
+    .where(and(
+      eq(schema.wikiArticles.project_id, article.project_id),
+      eq(schema.wikiArticles.team_id, user.teamId),
+    ));
+
+  const titleToArticle = new Map(siblings.map(a => [a.title.toLowerCase(), { id: a.id, title: a.title }]));
+  const linkRegex = /\[\[(.+?)(?:\|.+?)?\]\]/g;
+
+  // Outgoing: links FROM this article
+  const outgoing: { id: string; title: string }[] = [];
+  let match;
+  while ((match = linkRegex.exec(article.content || '')) !== null) {
+    const target = titleToArticle.get(match[1].toLowerCase());
+    if (target && target.id !== id) outgoing.push(target);
+  }
+
+  // Incoming: links TO this article
+  const incoming: { id: string; title: string }[] = [];
+  for (const sib of siblings) {
+    if (sib.id === id) continue;
+    const sibRegex = /\[\[(.+?)(?:\|.+?)?\]\]/g;
+    let m;
+    while ((m = sibRegex.exec(sib.content || '')) !== null) {
+      if (m[1].toLowerCase() === article.title.toLowerCase()) {
+        incoming.push({ id: sib.id, title: sib.title });
+        break;
+      }
+    }
+  }
+
+  return c.json({ outgoing, incoming });
 });
 
 // Update article (no automatic history — use POST /:id/snapshot explicitly)

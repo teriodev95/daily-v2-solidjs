@@ -207,6 +207,12 @@ export const api = {
       return request<WikiArticle[]>(`/api/wiki/search?${q}`);
     },
     graph: (projectId: string) => request(`/api/wiki/graph?project_id=${projectId}`),
+    resolve: (title: string, projectId: string) =>
+      request<WikiArticle>(`/api/wiki/resolve?title=${encodeURIComponent(title)}&project_id=${projectId}`),
+    batch: (ids: string[]) =>
+      request<WikiArticle[]>('/api/wiki/batch', { method: 'POST', body: JSON.stringify({ ids }) }),
+    links: (id: string) =>
+      request<{ outgoing: { id: string; title: string }[]; incoming: { id: string; title: string }[] }>(`/api/wiki/${id}/links`),
     create: (data: { project_id: string; title: string; content?: string; tags?: string[] }) =>
       request<WikiArticle>('/api/wiki', { method: 'POST', body: JSON.stringify(data) }),
     get: (id: string) => request<WikiArticle>(`/api/wiki/${id}`),
