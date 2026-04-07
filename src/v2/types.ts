@@ -133,3 +133,14 @@ export interface Assignment {
   closed_at: string | null;
 }
 
+export interface Learning {
+  id: string;
+  user_id: string;
+  team_id: string;
+  title: string;
+  content: string;
+  status: 'active' | 'done';
+  created_at: string;
+  updated_at: string;
+}
+

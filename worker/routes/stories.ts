@@ -82,11 +82,14 @@ stories.get('/', async (c) => {
     rows = rows.filter(s => s.assignee_id === assigneeId || linkedStoryIds.has(s.id));
   }
 
-  // Pagination
+  // Pagination (only when explicitly requested)
+  const isPaginated = c.req.query('limit') !== undefined || c.req.query('offset') !== undefined;
   const total = rows.length;
-  const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 200);
-  const offset = parseInt(c.req.query('offset') ?? '0');
-  rows = rows.slice(offset, offset + limit);
+  if (isPaginated) {
+    const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 200);
+    const offset = parseInt(c.req.query('offset') ?? '0');
+    rows = rows.slice(offset, offset + limit);
+  }
 
   // Attach assignees array to each story
   const allAssignees = await db.select().from(schema.storyAssignees);
@@ -102,8 +105,9 @@ stories.get('/', async (c) => {
     assignees: assigneeMap.get(s.id) ?? [],
   }));
 
-  const isPaginated = c.req.query('limit') !== undefined || c.req.query('offset') !== undefined;
   if (isPaginated) {
+    const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 200);
+    const offset = parseInt(c.req.query('offset') ?? '0');
     return c.json({ data: result, total, limit, offset });
   }
   return c.json(result);

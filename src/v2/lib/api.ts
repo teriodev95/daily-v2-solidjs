@@ -1,6 +1,6 @@
 import type {
   User, Team, Project, Story, AcceptanceCriteria,
-  DailyReport, WeekGoal, Assignment, Attachment, StoryCompletion,
+  DailyReport, WeekGoal, Assignment, Attachment, StoryCompletion, Learning,
 } from '../types';
 
 export class ApiError extends Error {
@@ -178,6 +178,21 @@ export const api = {
         method: 'DELETE',
         body: JSON.stringify({ story_id, completion_date }),
       }),
+  },
+
+  learnings: {
+    list: (params?: { status?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      return request<Learning[]>(`/api/learnings?${q}`);
+    },
+    create: (data: { title: string; content?: string }) =>
+      request<Learning>('/api/learnings', { method: 'POST', body: JSON.stringify(data) }),
+    get: (id: string) => request<Learning>(`/api/learnings/${id}`),
+    update: (id: string, data: Record<string, unknown>) =>
+      request<Learning>(`/api/learnings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<{ ok: boolean }>(`/api/learnings/${id}`, { method: 'DELETE' }),
   },
 
   admin: {

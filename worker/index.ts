@@ -13,6 +13,7 @@ import goalsRoutes from './routes/goals';
 import assignmentsRoutes from './routes/assignments';
 import attachmentsRoutes from './routes/attachments';
 import completionsRoutes from './routes/completions';
+import learningsRoutes from './routes/learnings';
 import seedRoutes from './db/seed';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -50,8 +51,19 @@ app.get('/api/avatars/:key{.+}', async (c) => {
   });
 });
 
-// Meta endpoint — discovery for agents
+// Auth middleware for protected routes
 app.use('/api/meta', authMiddleware);
+app.use('/api/team/*', authMiddleware);
+app.use('/api/projects/*', authMiddleware);
+app.use('/api/stories/*', authMiddleware);
+app.use('/api/reports/*', authMiddleware);
+app.use('/api/goals/*', authMiddleware);
+app.use('/api/assignments/*', authMiddleware);
+app.use('/api/attachments/*', authMiddleware);
+app.use('/api/completions/*', authMiddleware);
+app.use('/api/learnings/*', authMiddleware);
+
+// Meta endpoint — discovery for agents
 app.get('/api/meta', async (c) => {
   return c.json({
     priorities: ['low', 'medium', 'high', 'critical'],
@@ -62,20 +74,12 @@ app.get('/api/meta', async (c) => {
       stories: { list: 'GET /api/stories', create: 'POST /api/stories', get: 'GET /api/stories/:id', update: 'PATCH /api/stories/:id', delete: 'DELETE /api/stories/:id' },
       projects: { list: 'GET /api/projects' },
       members: { list: 'GET /api/team/members' },
+      attachments: { list: 'GET /api/attachments/story/:storyId', upload: 'POST /api/attachments/story/:storyId', download: 'GET /api/attachments/file/:id', delete: 'DELETE /api/attachments/:id' },
+      learnings: { list: 'GET /api/learnings', create: 'POST /api/learnings', get: 'GET /api/learnings/:id', update: 'PATCH /api/learnings/:id', delete: 'DELETE /api/learnings/:id' },
       meta: { get: 'GET /api/meta' },
     },
   });
 });
-
-// Auth middleware for protected routes
-app.use('/api/team/*', authMiddleware);
-app.use('/api/projects/*', authMiddleware);
-app.use('/api/stories/*', authMiddleware);
-app.use('/api/reports/*', authMiddleware);
-app.use('/api/goals/*', authMiddleware);
-app.use('/api/assignments/*', authMiddleware);
-app.use('/api/attachments/*', authMiddleware);
-app.use('/api/completions/*', authMiddleware);
 
 // Protected routes
 app.route('/api/team', teamRoutes);
@@ -86,5 +90,6 @@ app.route('/api/goals', goalsRoutes);
 app.route('/api/assignments', assignmentsRoutes);
 app.route('/api/attachments', attachmentsRoutes);
 app.route('/api/completions', completionsRoutes);
+app.route('/api/learnings', learningsRoutes);
 
 export default app;

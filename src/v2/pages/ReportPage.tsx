@@ -1,5 +1,5 @@
 import { createSignal, createResource, createEffect, onCleanup, For, Show, type Component } from 'solid-js';
-import type { Story, StoryStatus, Assignment, WeekGoal, StoryCompletion } from '../types';
+import type { Story, StoryStatus, Assignment, WeekGoal, StoryCompletion, Learning } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
@@ -10,6 +10,7 @@ import {
 } from 'lucide-solid';
 import { isRecurring, isRecurringOnDate, frequencyLabel, shouldShowRecurringInActive, toLocalDateStr } from '../lib/recurrence';
 import StoryDetail from '../components/StoryDetail';
+import LearningDetail from '../components/LearningDetail';
 import ShareReportModal from '../components/ShareReportModal';
 import type { ReportCategory } from '../types';
 
@@ -75,6 +76,13 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     () => ({ uid: userId(), _r: props.refreshKey, hidden: hiddenRefreshKey() }),
     ({ uid }) => uid ? api.stories.list({ assignee_id: uid, include_inactive: 'true' }) : Promise.resolve([]),
   );
+
+  const [learningsList, { refetch: refetchLearnings }] = createResource(
+    () => ({ uid: userId(), _r: props.refreshKey }),
+    ({ uid }) => uid ? api.learnings.list() : Promise.resolve([]),
+  );
+
+  const [selectedLearning, setSelectedLearning] = createSignal<Learning | null>(null);
 
   // Recurring completions for today
   const [todayCompletions, { mutate: mutateCompletions }] = createResource(
@@ -146,7 +154,6 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     catch { return raw.trim() ? [raw] : []; }
   };
 
-  const [learnings, setLearnings] = createSignal<string[]>([]);
   const [impediments, setImpediments] = createSignal<string[]>([]);
   const [newLearning, setNewLearning] = createSignal('');
   const [newImpediment, setNewImpediment] = createSignal('');
@@ -154,7 +161,6 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   createEffect(() => {
     const r = report();
     if (r) {
-      setLearnings(parseItems(r.learning));
       setImpediments(parseItems(r.impediments));
     }
   });
@@ -173,19 +179,21 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     }).catch(() => { });
   };
 
-  const addLearning = (text: string) => {
+  const addLearning = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const next = [...learnings(), trimmed];
-    setLearnings(next);
     setNewLearning('');
-    saveReport('learning', next);
+    try {
+      await api.learnings.create({ title: trimmed });
+      refetchLearnings();
+    } catch {}
   };
 
-  const removeLearning = (index: number) => {
-    const next = learnings().filter((_, i) => i !== index);
-    setLearnings(next);
-    saveReport('learning', next);
+  const removeLearning = async (id: string) => {
+    try {
+      await api.learnings.delete(id);
+      refetchLearnings();
+    } catch {}
   };
 
   const addImpediment = (text: string) => {
@@ -1011,17 +1019,19 @@ const ReportPage: Component<ReportPageProps> = (props) => {
               </div>
             </div>
             <div class="space-y-2">
-              <For each={learnings()}>
-                {(item, i) => (
-                  <div class="group flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60">
-                    <Circle size={14} class="text-base-content/15 shrink-0" />
-                    <span class="text-sm flex-1">{item}</span>
-                    <button
-                      onClick={() => removeLearning(i())}
-                      class="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-500/10 transition-all"
-                    >
-                      <Trash2 size={13} class="text-red-500/50" />
-                    </button>
+              <For each={(learningsList() ?? []) as Learning[]}>
+                {(item) => (
+                  <div
+                    onClick={() => setSelectedLearning(item)}
+                    class={`group flex items-center gap-2 px-3 py-3 rounded-xl cursor-pointer transition-all ${
+                      item.status === 'done' ? 'bg-base-200/40' : 'bg-base-200/60 hover:bg-base-200/90'
+                    }`}
+                  >
+                    <span class={`w-2 h-2 rounded-full shrink-0 ${item.status === 'done' ? 'bg-ios-green-500' : 'bg-amber-500'}`} />
+                    <span class={`text-sm flex-1 truncate ${item.status === 'done' ? 'text-base-content/40 line-through' : ''}`}>{item.title}</span>
+                    <Show when={item.content}>
+                      <span class="text-[10px] text-base-content/20">📝</span>
+                    </Show>
                   </div>
                 )}
               </For>
@@ -1036,13 +1046,6 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   class="flex-1 bg-transparent text-sm outline-none placeholder:text-base-content/20"
                 />
               </div>
-              <button
-                onClick={() => { const el = document.querySelector<HTMLInputElement>('[placeholder="Escribe un aprendizaje..."]'); el?.focus(); }}
-                class="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-sm text-base-content/20 bg-base-200/30 hover:bg-base-200/50 transition-all"
-              >
-                <Plus size={14} />
-                Añadir nuevo aprendizaje...
-              </button>
             </div>
           </section>
 
@@ -1264,6 +1267,17 @@ const ReportPage: Component<ReportPageProps> = (props) => {
         )}
       </Show>
 
+      <Show when={selectedLearning()}>
+        {(learning) => (
+          <LearningDetail
+            learning={learning()}
+            onClose={() => setSelectedLearning(null)}
+            onUpdated={() => refetchLearnings()}
+            onDeleted={() => { setSelectedLearning(null); refetchLearnings(); }}
+          />
+        )}
+      </Show>
+
       <Show when={showHiddenStories()}>
         <div
           class="fixed inset-0 z-[105] hidden md:flex items-center justify-center bg-black/55 backdrop-blur-md"
@@ -1354,6 +1368,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
           goals={myGoals()}
           assignments={myAssignments()}
           report={report()}
+          learnings={((learningsList() ?? []) as Learning[]).map(l => ({ title: l.title, status: l.status }))}
           userName={auth.user()?.name ?? ''}
           autoCopy={shareAutoCopy()}
         />

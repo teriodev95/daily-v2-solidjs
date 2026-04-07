@@ -135,3 +135,14 @@ export const sessions = sqliteTable('sessions', {
   expires_at: text('expires_at').notNull(),
   created_at: text('created_at').notNull(),
 });
+
+export const learnings = sqliteTable('learnings', {
+  id: text('id').primaryKey(),
+  user_id: text('user_id').notNull().references(() => users.id),
+  team_id: text('team_id').notNull().references(() => teams.id),
+  title: text('title').notNull(),
+  content: text('content').notNull().default(''),
+  status: text('status', { enum: ['active', 'done'] }).notNull().default('active'),
+  created_at: text('created_at').notNull(),
+  updated_at: text('updated_at').notNull(),
+});

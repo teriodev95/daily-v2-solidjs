@@ -12,6 +12,7 @@ interface ShareReportModalProps {
   goals: WeekGoal[];
   assignments: Assignment[];
   report: DailyReport | null | undefined;
+  learnings?: { title: string; status: string }[];
   userName: string;
   autoCopy?: boolean;
 }
@@ -28,6 +29,7 @@ const ShareReportModal: Component<ShareReportModalProps> = (props) => {
       goals: props.goals,
       assignments: props.assignments,
       report: props.report,
+      learnings: props.learnings ?? [],
     });
   });
 

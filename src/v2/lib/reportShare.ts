@@ -8,6 +8,7 @@ export interface ReportSharePayload {
   goals: WeekGoal[];
   assignments: Assignment[];
   report: DailyReport | null | undefined;
+  learnings?: { title: string; status: string }[];
 }
 
 const getWeekNumber = () => {
@@ -78,9 +79,8 @@ export const buildTelegramReportText = (payload: ReportSharePayload) => {
   lines.push('');
 
   lines.push('**📚 ¿QUÉ ESTOY APRENDIENDO?**');
-  const learningItems = parseItems(payload.report?.learning);
-  if (learningItems.length > 0) {
-    learningItems.forEach((item) => lines.push(`▪️ ${item}`));
+  if (payload.learnings && payload.learnings.length > 0) {
+    payload.learnings.forEach((l) => lines.push(`▪️ ${l.title}`));
   } else {
     lines.push('▫️ Sin aprendizaje documentado');
   }
