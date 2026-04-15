@@ -9,6 +9,7 @@ import MobileStoryDetail from '../components/MobileStoryDetail';
 
 interface MobileCalendarPageProps {
   refreshKey?: number;
+  onRequestQuickAdd?: (date: string) => void;
 }
 
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -211,9 +212,12 @@ const MobileCalendarPage: Component<MobileCalendarPageProps> = (props) => {
                 <CalendarDays size={17} />
               </div>
               <div class="min-w-0">
-                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-base-content/25">Calendario</p>
-                <h1 class="mt-1 text-[24px] leading-none font-semibold tracking-tight text-base-content/92">Tu agenda</h1>
-                <p class="mt-1.5 text-[11px] text-base-content/36">Próximos 10 días y pendientes sin fecha.</p>
+                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-base-content/25">Tu agenda</p>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <h1 class="text-[24px] leading-none font-semibold tracking-tight text-base-content/92">
+                    Calendario
+                  </h1>
+                </div>
               </div>
             </div>
             <div class="rounded-[18px] border border-base-content/[0.06] bg-base-content/[0.04] px-3 py-1.5 text-right shrink-0">
@@ -297,7 +301,16 @@ const MobileCalendarPage: Component<MobileCalendarPageProps> = (props) => {
               <h2 class="mt-1 text-[21px] leading-tight font-semibold text-base-content/90">
                 {selectedDay().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}
               </h2>
-              <p class="mt-1 text-[12px] text-base-content/34">{selectedDaySubtitle()}</p>
+              <div class="mt-2 text-[12px] text-base-content/40 flex items-center gap-3">
+                 <span>{selectedDaySubtitle()}</span>
+                 <button 
+                   onClick={() => props.onRequestQuickAdd?.(toLocalDateStr(selectedDay()))}
+                   class="flex items-center gap-1.5 bg-ios-blue-500/10 text-ios-blue-500 px-2.5 py-1 rounded-lg font-bold text-[10px] active:scale-95 transition-transform"
+                 >
+                   <Plus size={12} strokeWidth={2.5} />
+                   Añadir
+                 </button>
+              </div>
             </div>
             <div class="rounded-[18px] border border-base-content/[0.06] bg-base-content/[0.04] px-3 py-2 text-right shrink-0">
               <p class="text-[18px] leading-none font-semibold text-base-content/86">{selectedItems().length}</p>

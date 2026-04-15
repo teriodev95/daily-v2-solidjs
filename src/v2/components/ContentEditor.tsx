@@ -10,6 +10,20 @@ const turndown = new TurndownService({
   strongDelimiter: '**',
 });
 
+// Preserve wiki links: <a data-wiki-link="X">Y</a> → [[X]] or [[X|Y]]
+turndown.addRule('wiki-links', {
+  filter: (node) => node.nodeName === 'A' && node.hasAttribute('data-wiki-link'),
+  replacement: (_content, node) => {
+    const target = (node as HTMLElement).getAttribute('data-wiki-link') || '';
+    const text = (node as HTMLElement).textContent || '';
+    return target === text ? `[[${target}]]` : `[[${target}|${text}]]`;
+  },
+});
+
+export interface ContentEditorHandle {
+  insertAtEnd: (markdown: string) => void;
+}
+
 interface ContentEditorProps {
   content: string;
   placeholder?: string;
@@ -17,6 +31,7 @@ interface ContentEditorProps {
   processHtml?: (html: string) => string;
   onLinkClick?: (target: string) => void;
   class?: string;
+  onReady?: (handle: ContentEditorHandle) => void;
 }
 
 export function ContentEditor(props: ContentEditorProps) {
@@ -39,6 +54,17 @@ export function ContentEditor(props: ContentEditorProps) {
     lastContent = props.content || '';
     editorRef.innerHTML = toHtml(lastContent);
     setHasContent(!!lastContent.trim());
+
+    props.onReady?.({
+      insertAtEnd: (markdown: string) => {
+        const currentMd = lastContent;
+        const newMd = currentMd.trim() ? currentMd + '\n\n' + markdown : markdown;
+        lastContent = newMd;
+        editorRef.innerHTML = toHtml(newMd);
+        setHasContent(true);
+        props.onChange(newMd);
+      },
+    });
   });
 
   const handleInput = () => {
@@ -111,11 +137,23 @@ export function ContentEditor(props: ContentEditorProps) {
         onInput={handleInput}
         onPaste={handlePaste}
         onMouseDown={(e) => {
-          const link = (e.target as HTMLElement).closest('[data-wiki-link]');
-          if (link && props.onLinkClick) {
+          // Wiki links: click to navigate
+          const wikiLink = (e.target as HTMLElement).closest('[data-wiki-link]');
+          if (wikiLink && props.onLinkClick) {
             e.preventDefault();
             e.stopPropagation();
-            props.onLinkClick((link as HTMLElement).dataset.wikiLink!);
+            props.onLinkClick((wikiLink as HTMLElement).dataset.wikiLink!);
+            return;
+          }
+          // Real links: Cmd/Ctrl+click to open in new tab
+          const anchor = (e.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
+          if (anchor && (e.metaKey || e.ctrlKey)) {
+            const href = anchor.getAttribute('href');
+            if (href && href !== '#') {
+              e.preventDefault();
+              e.stopPropagation();
+              window.open(href, '_blank', 'noopener');
+            }
           }
         }}
       />

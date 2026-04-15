@@ -1,8 +1,8 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import type { WikiArticle } from '../types';
+import type { WikiArticle, WikiSuggestedLink, LibrarianStatus } from '../types';
 import { api } from '../lib/api';
 import { X, Check, Loader2, Trash2, BookOpen, Clock, ArrowLeft, AlertCircle } from 'lucide-solid';
-import { ContentEditor } from './ContentEditor';
+import { ContentEditor, type ContentEditorHandle } from './ContentEditor';
 import { processWikiLinks } from '../lib/wikiLinks';
 
 interface Props {
@@ -23,6 +23,12 @@ const WikiArticleDetail: Component<Props> = (props) => {
   const [confirming, setConfirming] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
   const [showHistory, setShowHistory] = createSignal(false);
+  const [suggestedTags, setSuggestedTags] = createSignal<string[]>(props.article.suggested_tags ?? []);
+  const [suggestedLinks, setSuggestedLinks] = createSignal<WikiSuggestedLink[]>(props.article.suggested_links ?? []);
+  const [summary, setSummary] = createSignal(props.article.summary ?? '');
+  const [librarianStatus, setLibrarianStatus] = createSignal<LibrarianStatus>(props.article.librarian_status ?? 'pending');
+  const [librarianMode, setLibrarianMode] = createSignal<string>('auto');
+  let editorHandle: ContentEditorHandle | undefined;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -32,6 +38,8 @@ const WikiArticleDetail: Component<Props> = (props) => {
     if (props.article.content?.trim()) {
       api.wiki.snapshot(props.article.id).catch(() => {});
     }
+    // Fetch librarian mode setting
+    api.team.getSettings().then(s => setLibrarianMode(s.librarian_mode ?? 'auto')).catch(() => {});
   });
 
   onCleanup(() => {
@@ -78,6 +86,31 @@ const WikiArticleDetail: Component<Props> = (props) => {
     } catch { setDeleting(false); }
   };
 
+  const acceptTag = async (tag: string) => {
+    try {
+      const updated = await api.wiki.acceptSuggestion(props.article.id, { type: 'tag', value: tag });
+      setSuggestedTags(updated.suggested_tags ?? []);
+      setTags(updated.tags ?? []);
+      props.onUpdated?.(props.article.id, { tags: updated.tags });
+    } catch {}
+  };
+
+  const acceptLink = async (title: string) => {
+    try {
+      const updated = await api.wiki.acceptSuggestion(props.article.id, { type: 'link', value: title });
+      setSuggestedLinks(updated.suggested_links ?? []);
+      // Insert the link in the editor (frontend handles content, not server)
+      editorHandle?.insertAtEnd(`[[${title}]]`);
+    } catch {}
+  };
+
+  const dismissLink = async (title: string) => {
+    try {
+      const updated = await api.wiki.dismissSuggestion(props.article.id, { type: 'link', value: title });
+      setSuggestedLinks(updated.suggested_links ?? []);
+    } catch {}
+  };
+
   const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose(); };
   document.addEventListener('keydown', handleKeyDown);
   onCleanup(() => document.removeEventListener('keydown', handleKeyDown));
@@ -107,6 +140,13 @@ const WikiArticleDetail: Component<Props> = (props) => {
           <BookOpen size={11} />
           <span class="text-[10px] font-bold">Wiki</span>
         </div>
+        <Show when={librarianStatus() !== 'done'}>
+          <span class={`w-1.5 h-1.5 rounded-full ${
+            librarianStatus() === 'pending' ? 'bg-base-content/20 animate-pulse' :
+            librarianStatus() === 'processing' ? 'bg-blue-400 animate-pulse' :
+            'bg-red-400'
+          }`} title={librarianStatus() === 'error' ? 'Error en análisis' : 'Analizando...'} />
+        </Show>
 
         {/* Tags inline */}
         <div class="flex items-center gap-1 flex-wrap flex-1 min-w-0">
@@ -182,6 +222,65 @@ const WikiArticleDetail: Component<Props> = (props) => {
             />
           </div>
 
+          {/* Librarian summary */}
+          <Show when={summary()}>
+            <div class="mb-4 px-3 py-2 rounded-lg bg-purple-500/[0.04] border border-purple-500/[0.06]">
+              <p class="text-[10px] font-semibold text-purple-500/40 mb-0.5">Resumen del bibliotecario</p>
+              <p class="text-[12px] text-base-content/50 leading-relaxed">{summary()}</p>
+            </div>
+          </Show>
+
+          {/* Librarian suggestions */}
+          <Show when={librarianMode() === 'approval' && (suggestedTags().length > 0 || suggestedLinks().length > 0)}>
+            <div class="mb-4 px-3 py-2.5 rounded-lg bg-base-content/[0.02] border border-base-content/[0.04]">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-base-content/20 mb-2">Sugerencias del bibliotecario</p>
+
+              {/* Suggested tags */}
+              <Show when={suggestedTags().length > 0}>
+                <div class="flex items-center gap-1.5 flex-wrap mb-2">
+                  <span class="text-[9px] text-base-content/25 shrink-0">Tags:</span>
+                  <For each={suggestedTags()}>
+                    {(tag) => (
+                      <button
+                        onClick={() => acceptTag(tag)}
+                        class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500/60 hover:bg-purple-500/20 hover:text-purple-500 transition-all"
+                        title="Click para aceptar"
+                      >
+                        + {tag}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
+
+              {/* Suggested links */}
+              <Show when={suggestedLinks().length > 0}>
+                <div class="space-y-1">
+                  <span class="text-[9px] text-base-content/25">Links:</span>
+                  <For each={suggestedLinks()}>
+                    {(link) => (
+                      <div class="flex items-center gap-2 group">
+                        <button
+                          onClick={() => acceptLink(link.title)}
+                          class="text-[10px] font-medium text-purple-500/50 hover:text-purple-500 transition-colors"
+                        >
+                          → [[{link.title}]]
+                        </button>
+                        <span class="text-[9px] text-base-content/15 truncate">{link.reason}</span>
+                        <button
+                          onClick={() => dismissLink(link.title)}
+                          class="text-[9px] text-base-content/15 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all ml-auto shrink-0"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          </Show>
+
           {/* History panel (inline, collapsible) */}
           <Show when={showHistory()}>
             <div class="mb-6 rounded-xl border border-base-content/[0.06] bg-base-content/[0.02] p-4">
@@ -208,6 +307,7 @@ const WikiArticleDetail: Component<Props> = (props) => {
             onChange={(md) => scheduleSave({ content: md })}
             processHtml={processWikiLinks}
             onLinkClick={(target) => props.onNavigate?.(target)}
+            onReady={(handle) => { editorHandle = handle; }}
           />
         </div>
       </div>

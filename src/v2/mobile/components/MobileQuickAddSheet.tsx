@@ -9,6 +9,7 @@ interface MobileQuickAddSheetProps {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  initialDate?: string | null;
 }
 
 const MobileQuickAddSheet: Component<MobileQuickAddSheetProps> = (props) => {
@@ -28,6 +29,9 @@ const MobileQuickAddSheet: Component<MobileQuickAddSheetProps> = (props) => {
   createEffect(() => {
     if (props.open) {
       setTimeout(() => inputRef?.focus(), 40);
+      if (props.initialDate) setSelectedDate(props.initialDate);
+    } else {
+      // When closing, if we want to reset date we could do it here or let `reset()` handle it.
     }
   });
 

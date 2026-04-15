@@ -15,6 +15,7 @@ const MobileShell: Component = () => {
   const [isDark, setIsDark] = createSignal(savedTheme === 'ios-dark');
   const [activeTab, setActiveTab] = createSignal<MobileTab>('today');
   const [showQuickAdd, setShowQuickAdd] = createSignal(false);
+  const [quickAddDate, setQuickAddDate] = createSignal<string | null>(null);
   const [refreshKey, setRefreshKey] = createSignal(0);
 
   const toggleTheme = () => {
@@ -74,7 +75,13 @@ const MobileShell: Component = () => {
           <MobileTodayPage refreshKey={refreshKey()} />
         </div>
         <div style={{ display: activeTab() === 'calendar' ? undefined : 'none' }}>
-          <MobileCalendarPage refreshKey={refreshKey()} />
+          <MobileCalendarPage 
+             refreshKey={refreshKey()} 
+             onRequestQuickAdd={(date) => {
+               setQuickAddDate(date);
+               setShowQuickAdd(true);
+             }}
+          />
         </div>
       </main>
 
@@ -119,7 +126,8 @@ const MobileShell: Component = () => {
 
       <MobileQuickAddSheet
         open={showQuickAdd()}
-        onClose={() => setShowQuickAdd(false)}
+        initialDate={quickAddDate()}
+        onClose={() => { setShowQuickAdd(false); setQuickAddDate(null); }}
         onCreated={handleCreated}
       />
 

@@ -1,8 +1,8 @@
-import { createSignal, createResource, For, Show, type Component } from 'solid-js';
+import { createSignal, createResource, For, Show, onCleanup, type Component } from 'solid-js';
 import type { WikiArticle } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
-import { BookOpen, Plus, Search, X, Network } from 'lucide-solid';
+import { BookOpen, Plus, Search, X, Network, Settings, Archive, Trash2 } from 'lucide-solid';
 import WikiArticleDetail from '../components/WikiArticleDetail';
 import WikiGraph from '../components/WikiGraph';
 
@@ -22,16 +22,28 @@ const WikiPage: Component<Props> = (props) => {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [showGraph, setShowGraph] = createSignal(false);
   const [showAllTags, setShowAllTags] = createSignal(false);
+  const [settings, setSettings] = createSignal<Record<string, string>>({});
+  const [currentUser, setCurrentUser] = createSignal<{ role: string } | null>(null);
+  const [showSettings, setShowSettings] = createSignal(false);
+  const [contextMenu, setContextMenu] = createSignal<{ id: string; x: number; y: number } | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = createSignal<string | null>(null);
+  const [deleting, setDeleting] = createSignal(false);
 
   const [articles, { refetch }] = createResource(
     () => ({ pid: selectedProjectId(), tag: selectedTag(), _r: props.refreshKey }),
     ({ pid, tag }) => pid ? api.wiki.list(pid, tag ?? undefined) : Promise.resolve([]),
   );
 
+  // Fetch settings + current user for admin toggle
+  api.team.getSettings().then(s => setSettings(s)).catch(() => {});
+  api.auth.me().then(u => setCurrentUser(u as any)).catch(() => {});
+
   const allTags = () => {
     const set = new Set<string>();
     for (const a of (articles() ?? []) as WikiArticle[]) {
-      for (const t of a.tags) set.add(t);
+      for (const t of a.tags) {
+        if (t !== '_índice') set.add(t);
+      }
     }
     return [...set].sort();
   };
@@ -42,8 +54,13 @@ const WikiPage: Component<Props> = (props) => {
   const filteredArticles = () => {
     const q = searchQuery().toLowerCase();
     const list = (articles() ?? []) as WikiArticle[];
-    if (!q) return list;
-    return list.filter(a => a.title.toLowerCase().includes(q) || a.tags.some(t => t.includes(q)));
+    const filtered = q ? list.filter(a => a.title.toLowerCase().includes(q) || a.tags.some(t => t.includes(q))) : [...list];
+    // _Índice always first, preserve updated_at DESC for the rest
+    return filtered.sort((a, b) => {
+      if (a.title === '_Índice') return -1;
+      if (b.title === '_Índice') return 1;
+      return 0;
+    });
   };
 
   const createArticle = async () => {
@@ -55,6 +72,34 @@ const WikiPage: Component<Props> = (props) => {
       setSelectedArticle(created as WikiArticle);
     } catch {}
   };
+
+  const archiveArticle = async (id: string) => {
+    try {
+      await api.wiki.archive(id, true);
+      setContextMenu(null);
+      refetch();
+    } catch {}
+  };
+
+  const deleteArticle = async (id: string) => {
+    setDeleting(true);
+    try {
+      await api.wiki.delete(id);
+      setConfirmDeleteId(null);
+      setContextMenu(null);
+      refetch();
+    } catch {}
+    setDeleting(false);
+  };
+
+  // Close context menu on any click or scroll
+  const closeContextMenu = () => { setContextMenu(null); };
+  document.addEventListener('click', closeContextMenu);
+  document.addEventListener('scroll', closeContextMenu, true);
+  onCleanup(() => {
+    document.removeEventListener('click', closeContextMenu);
+    document.removeEventListener('scroll', closeContextMenu, true);
+  });
 
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -100,6 +145,15 @@ const WikiPage: Component<Props> = (props) => {
 
         {/* Actions — right aligned */}
         <div class="flex items-center gap-1 ml-auto shrink-0">
+          <Show when={currentUser()?.role === 'admin'}>
+            <button
+              onClick={() => setShowSettings(true)}
+              class="flex items-center justify-center w-7 h-7 rounded-lg bg-base-content/[0.03] text-base-content/25 hover:text-base-content/50 hover:bg-base-content/[0.06] transition-all"
+              title="Configuración"
+            >
+              <Settings size={12} />
+            </button>
+          </Show>
           <button
             onClick={() => setShowGraph(v => !v)}
             class={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all ${
@@ -125,7 +179,7 @@ const WikiPage: Component<Props> = (props) => {
             const active = () => selectedProjectId() === p.id;
             return (
               <button
-                onClick={() => { setSelectedProjectId(p.id); setSelectedTag(null); setShowAllTags(false); }}
+                onClick={() => { setSelectedProjectId(p.id); setSelectedTag(null); setShowAllTags(false); setShowGraph(false); }}
                 class={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-all shrink-0 ${
                   active() ? '' : 'opacity-30 hover:opacity-60'
                 }`}
@@ -192,27 +246,58 @@ const WikiPage: Component<Props> = (props) => {
       <Show when={!showGraph()}>
         <div class="space-y-0.5">
           <For each={filteredArticles()}>
-            {(article) => (
-              <div
-                onClick={() => setSelectedArticle(article)}
-                class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-base-content/[0.03] cursor-pointer transition-all group"
-              >
-                <div class="flex-1 min-w-0">
-                  <p class="text-[13px] font-medium truncate text-base-content/70 group-hover:text-base-content/90 transition-colors">{article.title}</p>
-                  <div class="flex items-center gap-1.5 mt-0.5">
-                    <For each={article.tags.slice(0, 3)}>
-                      {(tag) => (
-                        <span class="text-[8px] font-semibold px-1 py-px rounded bg-base-content/[0.03] text-base-content/20">{tag}</span>
+            {(article) => {
+              const isIndex = () => article.title === '_Índice';
+              return (
+                <div
+                  onClick={() => setSelectedArticle(article)}
+                  onContextMenu={(e) => {
+                    if (isIndex()) return;
+                    e.preventDefault();
+                    setConfirmDeleteId(null);
+                    setContextMenu({ id: article.id, x: e.clientX, y: e.clientY });
+                  }}
+                  class={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all group ${
+                    isIndex() ? 'bg-purple-500/[0.03] hover:bg-purple-500/[0.06]' : 'hover:bg-base-content/[0.03]'
+                  }`}
+                >
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <p class={`text-[13px] font-medium truncate transition-colors ${
+                        isIndex()
+                          ? 'text-purple-500/70 group-hover:text-purple-500'
+                          : 'text-base-content/70 group-hover:text-base-content/90'
+                      }`}>
+                        {isIndex() ? 'Índice' : article.title}
+                      </p>
+                      {isIndex() && (
+                        <span class="text-[8px] font-bold uppercase tracking-wider px-1 py-px rounded bg-purple-500/10 text-purple-500/40 shrink-0">auto</span>
                       )}
-                    </For>
-                    <Show when={article.tags.length > 3}>
-                      <span class="text-[8px] text-base-content/15">+{article.tags.length - 3}</span>
+                    </div>
+                    <Show when={article.summary}>
+                      <p class="text-[10px] text-base-content/25 truncate mt-0.5">{article.summary}</p>
                     </Show>
-                    <span class="text-[9px] text-base-content/15 ml-auto shrink-0">{timeAgo(article.updated_at)}</span>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                      <For each={article.tags.filter(t => t !== '_índice').slice(0, 3)}>
+                        {(tag) => (
+                          <span class="text-[8px] font-semibold px-1 py-px rounded bg-base-content/[0.03] text-base-content/20">{tag}</span>
+                        )}
+                      </For>
+                      <Show when={article.tags.filter(t => t !== '_índice').length > 3}>
+                        <span class="text-[8px] text-base-content/15">+{article.tags.filter(t => t !== '_índice').length - 3}</span>
+                      </Show>
+                      <span class="text-[9px] text-base-content/15 ml-auto shrink-0">{timeAgo(article.updated_at)}</span>
+                    </div>
                   </div>
+                  <Show when={article.librarian_status !== 'done'}>
+                    <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      article.librarian_status === 'pending' ? 'bg-base-content/20 animate-pulse' :
+                      article.librarian_status === 'processing' ? 'bg-blue-400 animate-pulse' :
+                      article.librarian_status === 'error' ? 'bg-red-400' : ''
+                    }`} /></Show>
                 </div>
-              </div>
-            )}
+              );
+            }}
           </For>
 
           <Show when={!articles.loading && filteredArticles().length === 0}>
@@ -226,6 +311,116 @@ const WikiPage: Component<Props> = (props) => {
               </button>
             </div>
           </Show>
+        </div>
+      </Show>
+
+      {/* ── Right-click context menu ── */}
+      <Show when={contextMenu()}>
+        {(menu) => (
+          <div
+            class="fixed z-[95] bg-base-100 rounded-xl shadow-lg border border-base-content/[0.08] py-1 min-w-[150px]"
+            style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => { archiveArticle(menu().id); }}
+              class="w-full text-left px-3 py-1.5 text-[11px] text-base-content/60 hover:bg-base-content/[0.04] transition-colors flex items-center gap-2"
+            >
+              <Archive size={12} /> Archivar
+            </button>
+            <button
+              onClick={() => { setContextMenu(null); setConfirmDeleteId(menu().id); }}
+              class="w-full text-left px-3 py-1.5 text-[11px] text-red-500/70 hover:bg-red-500/[0.04] transition-colors flex items-center gap-2"
+            >
+              <Trash2 size={12} /> Eliminar
+            </button>
+          </div>
+        )}
+      </Show>
+
+      {/* ── Delete confirmation dialog ── */}
+      <Show when={confirmDeleteId()}>
+        <div class="fixed inset-0 z-[96] flex items-center justify-center bg-black/20" onClick={(e) => { if (e.target === e.currentTarget) setConfirmDeleteId(null); }}>
+          <div class="bg-base-100 rounded-2xl shadow-xl border border-base-content/[0.06] w-full max-w-xs mx-4 p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center">
+                <Trash2 size={14} class="text-red-500" />
+              </div>
+              <p class="text-[13px] font-semibold">Eliminar artículo</p>
+            </div>
+            <p class="text-[11px] text-base-content/50 mb-4">
+              Esta acción es permanente y no se puede deshacer. ¿Continuar?
+            </p>
+            <div class="flex gap-2">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                class="flex-1 text-[11px] font-medium px-3 py-2 rounded-xl bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/[0.08] transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => deleteArticle(confirmDeleteId()!)}
+                disabled={deleting()}
+                class="flex-1 text-[11px] font-medium px-3 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-all disabled:opacity-50"
+              >
+                {deleting() ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* ── Settings modal ── */}
+      <Show when={showSettings()}>
+        <div class="fixed inset-0 z-[90] flex items-center justify-center bg-black/20" onClick={(e) => { if (e.target === e.currentTarget) setShowSettings(false); }}>
+          <div class="bg-base-100 rounded-2xl shadow-xl border border-base-content/[0.06] w-full max-w-sm mx-4 overflow-hidden">
+            {/* Header */}
+            <div class="flex items-center justify-between px-5 py-4 border-b border-base-content/[0.04]">
+              <div class="flex items-center gap-2">
+                <Settings size={14} class="text-purple-500" />
+                <span class="text-[13px] font-bold">Configuración</span>
+              </div>
+              <button onClick={() => setShowSettings(false)} class="text-base-content/25 hover:text-base-content/50 transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div class="px-5 py-4">
+              {/* Librarian mode */}
+              <div class="flex items-start gap-3">
+                <div class="flex-1">
+                  <p class="text-[12px] font-semibold text-base-content/80">Bibliotecario automático</p>
+                  <p class="text-[10px] text-base-content/30 mt-0.5 leading-relaxed">
+                    {(settings().librarian_mode ?? 'auto') === 'auto'
+                      ? 'Tags y resúmenes se aplican automáticamente sin intervención.'
+                      : 'Las sugerencias requieren aprobación manual antes de aplicarse.'}
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const current = settings().librarian_mode ?? 'auto';
+                    const next = current === 'auto' ? 'approval' : 'auto';
+                    try {
+                      const updated = await api.team.updateSettings('librarian_mode', next);
+                      setSettings(updated);
+                    } catch {}
+                  }}
+                  class={`relative w-10 h-[22px] rounded-full transition-colors shrink-0 mt-0.5 ${
+                    (settings().librarian_mode ?? 'auto') === 'auto'
+                      ? 'bg-purple-500'
+                      : 'bg-base-content/15'
+                  }`}
+                >
+                  <span class={`absolute top-[3px] left-[3px] w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                    (settings().librarian_mode ?? 'auto') === 'auto'
+                      ? 'translate-x-[18px]'
+                      : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </Show>
 

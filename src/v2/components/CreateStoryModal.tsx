@@ -18,6 +18,7 @@ interface Props {
   onCreated?: () => void;
   defaultCategory?: ReportCategory;
   defaultProjectId?: string;
+  initialDueDate?: string;
 }
 
 const priorityOptions: { id: Priority; label: string; color: string; bg: string; selectedBg: string; icon: any }[] = [
@@ -100,7 +101,7 @@ const CreateStoryModal: Component<Props> = (props) => {
   const [status, setStatus] = createSignal<StoryStatus>(defaultStatus);
   const [description, setDescription] = createSignal('');
   const [estimate, setEstimate] = createSignal<number>(0);
-  const [dueDate, setDueDate] = createSignal('');
+  const [dueDate, setDueDate] = createSignal(props.initialDueDate ?? '');
   const [showDatePicker, setShowDatePicker] = createSignal(false);
   let dateTriggerRef!: HTMLButtonElement;
 

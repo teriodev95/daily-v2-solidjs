@@ -13,13 +13,15 @@ import TasksPage from './pages/TasksPage';
 import WikiPage from './pages/WikiPage';
 import CreateStoryModal from './components/CreateStoryModal';
 import SearchModal from './components/SearchModal';
-import CalendarModal from './components/CalendarModal';
+import CalendarPage from './pages/CalendarPage';
 import StoryDetail from './components/StoryDetail';
 import InstallPrompt from './components/InstallPrompt';
 import UpdateToast from './components/UpdateToast';
 import MobileShell from './mobile/shell/MobileShell';
+import Dock from './components/Dock';
+import DockIcon from './components/DockIcon';
 
-type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki';
+type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar';
 
 const AppShell: Component = () => {
   const auth = useAuth();
@@ -32,12 +34,12 @@ const AppShell: Component = () => {
   const [showCreateModal, setShowCreateModal] = createSignal(false);
   const [createCategory, setCreateCategory] = createSignal<ReportCategory | undefined>();
   const [createProjectId, setCreateProjectId] = createSignal<string | undefined>();
+  const [createInitialDate, setCreateInitialDate] = createSignal<string | undefined>();
   const [refreshKey, setRefreshKey] = createSignal(0);
   const [showSearch, setShowSearch] = createSignal(false);
   const [searchSelectedStory, setSearchSelectedStory] = createSignal<Story | null>(null);
   const [shareRequested, setShareRequested] = createSignal(0);
   const [hiddenRequested, setHiddenRequested] = createSignal(0);
-  const [showCalendar, setShowCalendar] = createSignal(false);
 
   const triggerShare = () => {
     if (activeTab() !== 'report') switchTab('report');
@@ -49,9 +51,10 @@ const AppShell: Component = () => {
     setHiddenRequested(k => k + 1);
   };
 
-  const openCreateModal = (category?: ReportCategory, projectId?: string) => {
+  const openCreateModal = (category?: ReportCategory, projectId?: string, initialDate?: string) => {
     setCreateCategory(category);
     setCreateProjectId(projectId);
+    setCreateInitialDate(initialDate);
     setShowCreateModal(true);
   };
 
@@ -127,7 +130,7 @@ const AppShell: Component = () => {
         case 'a': if (user()?.role === 'admin') { e.preventDefault(); switchTab('admin'); } break;
         case 't': e.preventDefault(); triggerShare(); break;
         case 'w': e.preventDefault(); switchTab('wiki'); break;
-        case 'c': e.preventDefault(); setShowCalendar(v => !v); break;
+        case 'c': e.preventDefault(); switchTab('calendar'); break;
       }
     };
     document.addEventListener('keydown', handleKey);
@@ -270,39 +273,45 @@ const AppShell: Component = () => {
             <AdminPage />
           </div>
         </Show>
-        {/* Tasks — mobile only page, but mounted always (hidden via display) */}
         <div class={activeTab() === 'tasks' ? 'stagger-in' : ''} style={{ display: activeTab() === 'tasks' ? undefined : 'none' }}>
           <TasksPage refreshKey={refreshKey()} />
         </div>
         <div class={activeTab() === 'wiki' ? 'stagger-in' : ''} style={{ display: activeTab() === 'wiki' ? undefined : 'none' }}>
           <WikiPage refreshKey={refreshKey()} />
         </div>
+        <div class={activeTab() === 'calendar' ? 'stagger-in' : ''} style={{ display: activeTab() === 'calendar' ? undefined : 'none' }}>
+          <CalendarPage 
+             refreshKey={refreshKey()} 
+             onRequestQuickAdd={(date) => openCreateModal(undefined, undefined, date)} 
+          />
+        </div>
       </main>
 
       {/* =========================================
-          DESKTOP macOS Style Dock 
+          DESKTOP macOS Style Dock
           ========================================= */}
       <div class="hidden sm:flex fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 justify-center pointer-events-none px-0">
-        <nav class="bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-[32px] border border-base-content/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)] pointer-events-auto p-1.5 flex items-center gap-1.5">
+        <Dock
+          magnification={65}
+          distance={140}
+          class="bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-[32px] border border-base-content/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)] pointer-events-auto p-1.5 flex items-end gap-1.5"
+        >
           <For each={tabs()}>
             {(tab) => (
-              <button
+              <DockIcon
                 onClick={() => switchTab(tab.id)}
-                class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-[26px] transition-all duration-300 active:scale-95 group"
-                style={{ "-webkit-tap-highlight-color": "transparent" }}
+                class="relative flex flex-col items-center justify-center shrink-0 rounded-[26px] transition-colors duration-300 active:scale-95 group cursor-pointer"
               >
                 {/* hover/active background */}
                 <div class={`absolute inset-0 rounded-[26px] transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
 
-                {/* icon container with bounce */}
-                <div class={`relative z-10 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center ${activeTab() === tab.id ? '-translate-y-1.5 text-base-content scale-110' : 'translate-y-0 text-base-content/50 group-hover:text-base-content/80 group-hover:-translate-y-1 group-hover:scale-110'
-                  }`}>
+                {/* icon container */}
+                <div class={`relative z-10 transition-colors duration-200 flex items-center justify-center ${activeTab() === tab.id ? 'text-base-content' : 'text-base-content/50 group-hover:text-base-content/80'}`}>
                   <tab.icon size={22} strokeWidth={activeTab() === tab.id ? 2.5 : 2} />
                 </div>
 
                 {/* Active indicator dot */}
-                <div class={`absolute bottom-1 w-1 h-1 rounded-full transition-all duration-300 ease-out ${activeTab() === tab.id ? 'bg-ios-blue-500 scale-100 opacity-100' : 'bg-base-content/30 scale-50 opacity-0 group-hover:opacity-40'
-                  }`} />
+                <div class={`absolute bottom-1 w-1 h-1 rounded-full transition-all duration-300 ease-out ${activeTab() === tab.id ? 'bg-ios-blue-500 scale-100 opacity-100' : 'bg-base-content/30 scale-50 opacity-0 group-hover:opacity-40'}`} />
 
                 {/* macOS style tooltip label */}
                 <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
@@ -310,38 +319,37 @@ const AppShell: Component = () => {
                   <kbd class="ml-2 opacity-60 font-mono text-[9px]">{tab.key}</kbd>
                   <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
                 </div>
-              </button>
+              </DockIcon>
             )}
           </For>
 
           {/* Separator */}
-          <div class="w-px h-6 bg-base-content/[0.1] mx-1 shrink-0 rounded-full" />
+          <div class="w-px h-6 bg-base-content/[0.1] mx-1 shrink-0 rounded-full self-center" />
 
           {/* Calendar */}
-          <button
-            onClick={() => setShowCalendar(v => !v)}
-            class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-[26px] transition-all duration-300 active:scale-95 group"
-            style={{ "-webkit-tap-highlight-color": "transparent" }}
+          <DockIcon
+            onClick={() => switchTab('calendar')}
+            class="relative flex flex-col items-center justify-center shrink-0 rounded-[26px] transition-colors duration-300 active:scale-95 group cursor-pointer"
           >
-            <div class="absolute inset-0 rounded-[26px] transition-all duration-300 bg-transparent group-hover:bg-base-content/5" />
-            <div class="relative z-10 text-base-content/50 group-hover:text-base-content/80 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center group-hover:-translate-y-1 group-hover:scale-110">
-              <CalendarDays size={21} strokeWidth={2} />
+            <div class={`absolute inset-0 rounded-[26px] transition-all duration-300 ${activeTab() === 'calendar' ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
+            <div class={`relative z-10 transition-colors duration-200 flex items-center justify-center ${activeTab() === 'calendar' ? 'text-base-content' : 'text-base-content/50 group-hover:text-base-content/80'}`}>
+              <CalendarDays size={21} strokeWidth={activeTab() === 'calendar' ? 2.5 : 2} />
             </div>
+            <div class={`absolute bottom-1 w-1 h-1 rounded-full transition-all duration-300 ease-out ${activeTab() === 'calendar' ? 'bg-ios-blue-500 scale-100 opacity-100' : 'bg-base-content/30 scale-50 opacity-0 group-hover:opacity-40'}`} />
             <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
               Calendario
               <kbd class="ml-2 opacity-60 font-mono text-[9px]">C</kbd>
               <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
             </div>
-          </button>
+          </DockIcon>
 
           {/* Create FAB */}
-          <button
+          <DockIcon
             onClick={() => openCreateModal()}
-            class="relative flex flex-col items-center justify-center w-12 h-12 shrink-0 rounded-[26px] transition-all duration-300 active:scale-95 group"
-            style={{ "-webkit-tap-highlight-color": "transparent" }}
+            class="relative flex flex-col items-center justify-center shrink-0 rounded-[26px] transition-colors duration-300 active:scale-95 group cursor-pointer"
           >
             <div class="absolute inset-0 rounded-[26px] transition-all duration-300 bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20" />
-            <div class="relative z-10 text-ios-blue-500 transition-all duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center group-hover:-translate-y-1 group-hover:scale-110">
+            <div class="relative z-10 text-ios-blue-500 transition-colors duration-200 flex items-center justify-center">
               <Plus size={22} strokeWidth={2.5} />
             </div>
             <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
@@ -349,8 +357,8 @@ const AppShell: Component = () => {
               <kbd class="ml-2 opacity-60 font-mono text-[9px]">N</kbd>
               <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
             </div>
-          </button>
-        </nav>
+          </DockIcon>
+        </Dock>
       </div>
 
       {/* =========================================
@@ -409,6 +417,7 @@ const AppShell: Component = () => {
           onCreated={handleStoryCreated}
           defaultCategory={createCategory()}
           defaultProjectId={createProjectId()}
+          initialDueDate={createInitialDate()}
         />
       </Show>
 
@@ -420,10 +429,7 @@ const AppShell: Component = () => {
         />
       </Show>
 
-      {/* Calendar Modal */}
-      <Show when={showCalendar()}>
-        <CalendarModal onClose={() => setShowCalendar(false)} />
-      </Show>
+      {/* Calendar Modal no longer used here; now a page */}
 
       {/* Story Detail from search */}
       <Show when={searchSelectedStory()}>

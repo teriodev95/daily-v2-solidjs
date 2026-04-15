@@ -81,6 +81,9 @@ export const api = {
       request<UserSafe>(`/api/team/members/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     uploadAvatar: (userId: string, file: File) =>
       uploadFile<UserSafe>(`/api/team/members/${userId}/avatar`, file),
+    getSettings: () => request<Record<string, string>>('/api/team/settings'),
+    updateSettings: (key: string, value: string) =>
+      request<Record<string, string>>('/api/team/settings', { method: 'PATCH', body: JSON.stringify({ key, value }) }),
   },
 
   projects: {
@@ -220,8 +223,14 @@ export const api = {
       request<WikiArticle>(`/api/wiki/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<{ ok: boolean }>(`/api/wiki/${id}`, { method: 'DELETE' }),
+    archive: (id: string, is_archived: boolean) =>
+      request<{ ok: boolean; is_archived: boolean }>(`/api/wiki/${id}/archive`, { method: 'PATCH', body: JSON.stringify({ is_archived }) }),
     snapshot: (id: string) =>
       request<{ ok: boolean }>(`/api/wiki/${id}/snapshot`, { method: 'POST' }),
+    acceptSuggestion: (id: string, data: { type: 'tag' | 'link'; value: string }) =>
+      request<WikiArticle>(`/api/wiki/${id}/accept-suggestion`, { method: 'POST', body: JSON.stringify(data) }),
+    dismissSuggestion: (id: string, data: { type: 'tag' | 'link'; value: string }) =>
+      request<WikiArticle>(`/api/wiki/${id}/dismiss-suggestion`, { method: 'POST', body: JSON.stringify(data) }),
   },
 
   admin: {

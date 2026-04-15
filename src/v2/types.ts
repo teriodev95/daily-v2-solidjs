@@ -151,6 +151,13 @@ export interface WikiHistoryEntry {
   preview: string;
 }
 
+export type LibrarianStatus = 'pending' | 'processing' | 'done' | 'error';
+
+export interface WikiSuggestedLink {
+  title: string;
+  reason: string;
+}
+
 export interface WikiArticle {
   id: string;
   project_id: string;
@@ -162,5 +169,12 @@ export interface WikiArticle {
   created_by: string;
   created_at: string;
   updated_at: string;
+  // Librarian fields
+  summary: string;
+  librarian_status: LibrarianStatus;
+  suggested_tags: string[];
+  suggested_links: WikiSuggestedLink[];
+  librarian_error: string;
+  is_archived: boolean;
 }
 
