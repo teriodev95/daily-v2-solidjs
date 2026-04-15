@@ -3,15 +3,18 @@ import type { Story } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
-import { CheckCircle, Circle, Share2, Target, ClipboardList, RefreshCw } from 'lucide-solid';
+import { CheckCircle, Circle, Share2, Target, ClipboardList, RefreshCw, Users } from 'lucide-solid';
 import MemberReportPreview from '../components/MemberReportPreview';
 import StoryDetail from '../components/StoryDetail';
+import TopNavigation from '../components/TopNavigation';
+import HeaderSearchBar from '../components/HeaderSearchBar';
 
 const TeamPage: Component = () => {
   const auth = useAuth();
   const data = useData();
   const [selectedMember, setSelectedMember] = createSignal<string | null>(null);
   const [selectedStory, setSelectedStory] = createSignal<Story | null>(null);
+  const [searchQuery, setSearchQuery] = createSignal('');
 
   const [goalsList] = createResource(() => api.goals.list({ shared: 'true' }));
   const [storiesList] = createResource(() => api.stories.list({}));
@@ -40,6 +43,18 @@ const TeamPage: Component = () => {
 
   return (
     <>
+    <TopNavigation
+      breadcrumbs={[
+        { label: "Equipo", icon: <Users size={14} /> },
+      ]}
+      center={
+        <HeaderSearchBar
+          value={searchQuery()}
+          onInput={setSearchQuery}
+          placeholder="Buscar miembro..."
+        />
+      }
+    />
     <Show when={!goalsList.loading} fallback={<TeamSkeleton />}>
       <div class="space-y-4">
 

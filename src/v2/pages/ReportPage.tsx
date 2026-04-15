@@ -6,12 +6,14 @@ import { useData } from '../lib/data';
 import {
   CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle, ChevronDown, ChevronRight,
   Plus, Package, Target, Play, RotateCcw, Check, CalendarDays,
-  Eye, Trash2, ArrowRightCircle, Flag, XCircle, RefreshCw, Archive,
+  Eye, Trash2, ArrowRightCircle, Flag, XCircle, RefreshCw, Archive, Send, Search, ClipboardList
 } from 'lucide-solid';
 import { isRecurring, isRecurringOnDate, frequencyLabel, shouldShowRecurringInActive, toLocalDateStr } from '../lib/recurrence';
 import StoryDetail from '../components/StoryDetail';
 import LearningDetail from '../components/LearningDetail';
 import ShareReportModal from '../components/ShareReportModal';
+import TopNavigation from '../components/TopNavigation';
+import HeaderSearchBar from '../components/HeaderSearchBar';
 import type { ReportCategory } from '../types';
 
 interface ReportPageProps {
@@ -713,6 +715,57 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   return (
     <>
+      <TopNavigation
+        breadcrumbs={[
+          { label: "Reporte Diario", icon: <ClipboardList size={14} /> },
+          { label: new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) },
+        ]}
+        onSearchClick={() => window.dispatchEvent(new Event('open-search'))}
+        center={
+          <HeaderSearchBar
+            value=""
+            onInput={() => {}}
+            placeholder="Buscar tareas..."
+            readOnly
+            onFocus={() => window.dispatchEvent(new Event('open-search'))}
+          />
+        }
+        mobileActions={
+          <>
+            <button onClick={() => window.dispatchEvent(new Event('open-search'))} class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 transition-all" title="Buscar">
+              <Search size={16} />
+            </button>
+            <button onClick={() => window.dispatchEvent(new Event('open-share'))} class="p-2 rounded-xl text-[#0088cc]/60 hover:text-[#0088cc] transition-all" title="Compartir">
+              <Send size={16} />
+            </button>
+          </>
+        }
+        actions={
+          <div class="flex items-center gap-1">
+             <button
+               onClick={() => window.dispatchEvent(new Event('open-search'))}
+               class="hidden md:flex items-center justify-center w-8 h-8 rounded-xl transition-all shadow-sm border bg-base-100 border-base-content/[0.08] text-base-content/40 hover:text-base-content/80 hover:bg-base-content/5"
+               title="Buscar (⌘K)"
+             >
+               <Search size={14} />
+             </button>
+             <button
+               onClick={() => window.dispatchEvent(new Event('open-share'))}
+               class="flex items-center justify-center w-8 h-8 rounded-xl transition-all shadow-sm border bg-base-100 border-base-content/[0.08] text-[#0088cc] hover:text-[#0088cc]/80 hover:bg-[#0088cc]/10"
+               title="Compartir Daily"
+             >
+               <Send size={14} />
+             </button>
+             <button
+               onClick={() => window.dispatchEvent(new Event('open-hidden'))}
+               class="flex items-center justify-center w-8 h-8 rounded-xl transition-all shadow-sm border bg-base-100 border-base-content/[0.08] text-base-content/40 hover:text-base-content/80 hover:bg-base-content/5"
+               title="Ver ocultadas"
+             >
+               <Archive size={14} />
+             </button>
+          </div>
+        }
+      />
       <Show when={!reportData.loading && !userStories.loading} fallback={<ReportSkeleton />}>
         <div class="space-y-6">
 

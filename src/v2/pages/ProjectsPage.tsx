@@ -4,9 +4,11 @@ import { api } from '../lib/api';
 import { useData } from '../lib/data';
 import { useAuth } from '../lib/auth';
 import {
-  Plus, ArrowUp, ArrowRight, ArrowDown, Flame, RefreshCw, User, Layers,
+  Plus, ArrowUp, ArrowRight, ArrowDown, Flame, RefreshCw, User, Layers, FolderKanban,
 } from 'lucide-solid';
 import StoryDetail from '../components/StoryDetail';
+import TopNavigation from '../components/TopNavigation';
+import HeaderSearchBar from '../components/HeaderSearchBar';
 
 interface ProjectsPageProps {
   onCreateStory?: (projectId: string) => void;
@@ -38,6 +40,7 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
   const auth = useAuth();
 
   // Default: "Mías" ON + "Todos" selected
+  const [searchQuery, setSearchQuery] = createSignal('');
   const [selectedProjectId, setSelectedProjectId] = createSignal<string>(ALL_PROJECTS);
   const [selectedStory, setSelectedStory] = createSignal<Story | null>(null);
   const [dragOverCol, setDragOverCol] = createSignal<StoryStatus | null>(null);
@@ -141,6 +144,18 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
 
   return (
     <div class="space-y-4">
+      <TopNavigation
+        breadcrumbs={[
+          { label: "Proyectos", icon: <FolderKanban size={14} /> },
+        ]}
+        center={
+          <HeaderSearchBar
+            value={searchQuery()}
+            onInput={setSearchQuery}
+            placeholder="Buscar proyectos..."
+          />
+        }
+      />
       {/* Filter bar */}
       <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
         {/* Filter: Mías */}

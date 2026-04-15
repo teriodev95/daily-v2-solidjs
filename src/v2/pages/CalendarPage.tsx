@@ -8,6 +8,7 @@ import { useData } from '../lib/data';
 import { isRecurringOnDate, isRecurring, toLocalDateStr } from '../lib/recurrence';
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, RefreshCw, CheckCircle2, Circle, X } from 'lucide-solid';
 import StoryDetail from '../components/StoryDetail';
+import TopNavigation from '../components/TopNavigation';
 
 interface Props {
   refreshKey?: number;
@@ -237,16 +238,19 @@ const CalendarPage: Component<Props> = (props) => {
   };
 
   return (
-    <div class="flex flex-col pt-10 min-h-screen">
-      {/* ── Header ── */}
-      <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
-        <div class="flex items-center gap-4">
-          <div class="flex items-center gap-1 bg-base-200/50 p-1 rounded-xl border border-base-content/[0.06]">
+    <>
+      <TopNavigation
+        breadcrumbs={[
+          { label: "Calendario", icon: <CalendarDays size={14} /> },
+          { label: formatHeader() },
+        ]}
+        center={
+          <div class="flex items-center gap-1 bg-base-100 p-1 rounded-xl shadow-sm border border-base-content/[0.06]">
             <button
               onClick={goPrev}
               class="p-1.5 rounded-lg text-base-content/40 hover:text-base-content/80 hover:bg-base-content/5 transition-all"
             >
-              <ChevronLeft size={18} strokeWidth={2.5} />
+              <ChevronLeft size={16} strokeWidth={2.5} />
             </button>
             <button
               onClick={goToday}
@@ -258,35 +262,32 @@ const CalendarPage: Component<Props> = (props) => {
               onClick={goNext}
               class="p-1.5 rounded-lg text-base-content/40 hover:text-base-content/80 hover:bg-base-content/5 transition-all"
             >
-              <ChevronRight size={18} strokeWidth={2.5} />
+              <ChevronRight size={16} strokeWidth={2.5} />
             </button>
           </div>
-
-          <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-base-content/90 w-48 shrink-0">
-            {formatHeader()}
-          </h1>
-        </div>
-
-        {/* View Toggle */}
-        <div class="flex items-center gap-1 bg-base-200/50 p-1 rounded-xl border border-base-content/[0.06]">
-          <button
-            onClick={() => setView('week')}
-            class={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${
-              view() === 'week' ? 'bg-base-100 shadow-sm text-base-content' : 'text-base-content/40 hover:text-base-content/70'
-            }`}
-          >
-            Semana
-          </button>
-          <button
-            onClick={() => setView('month')}
-            class={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${
-              view() === 'month' ? 'bg-base-100 shadow-sm text-base-content' : 'text-base-content/40 hover:text-base-content/70'
-            }`}
-          >
-            Mes
-          </button>
-        </div>
-      </div>
+        }
+        actions={
+          <div class="flex items-center gap-1 bg-base-100 p-1 rounded-xl shadow-sm border border-base-content/[0.06] shrink-0">
+            <button
+              onClick={() => setView('week')}
+              class={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                view() === 'week' ? 'bg-base-content/5 shadow-sm text-base-content' : 'text-base-content/40 hover:text-base-content/70'
+              }`}
+            >
+              Semana
+            </button>
+            <button
+              onClick={() => setView('month')}
+              class={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                view() === 'month' ? 'bg-base-content/5 shadow-sm text-base-content' : 'text-base-content/40 hover:text-base-content/70'
+              }`}
+            >
+              Mes
+            </button>
+          </div>
+        }
+      />
+      <div class="flex flex-col pt-0 min-h-screen">
 
       {/* ── Grid ── */}
       <div class="flex-1 bg-base-200/30 rounded-2xl border border-base-content/[0.08] overflow-hidden flex flex-col shadow-sm">
@@ -306,24 +307,24 @@ const CalendarPage: Component<Props> = (props) => {
         <div class={`grid grid-cols-7 flex-1 ${view() === 'month' ? 'auto-rows-fr' : 'min-h-[160px]'}`}>
           <For each={visibleDays()}>
             {(d, i) => {
-              const isCurrentMonth = d.getMonth() === baseDate().getMonth();
               const dateKey = toLocalDateStr(d);
-              const items = itemsByDate().get(dateKey) ?? [];
+              const isCurrentMonth = () => d.getMonth() === baseDate().getMonth();
+              const items = () => itemsByDate().get(dateKey) ?? [];
               const isToday = isSameDay(d, today);
-              const isSelected = isSameDay(d, selectedDay());
+              const isSelected = () => isSameDay(d, selectedDay());
 
               return (
                 <div
                   onClick={() => handleCellClick(d)}
                   class={`relative flex flex-col border-r border-b border-base-content/[0.04] transition-colors p-1 sm:p-2 cursor-pointer group ${
-                     isSelected ? 'bg-ios-blue-500/[0.02] ring-1 ring-inset ring-ios-blue-500/20' : 'hover:bg-base-content/[0.02]'
-                  } ${!isCurrentMonth && view() === 'month' ? 'opacity-40 bg-base-200/50' : 'bg-base-100/30'}`}
+                     isSelected() ? 'bg-ios-blue-500/[0.02] ring-1 ring-inset ring-ios-blue-500/20' : 'hover:bg-base-content/[0.02]'
+                  } ${!isCurrentMonth() && view() === 'month' ? 'opacity-40 bg-base-200/50' : 'bg-base-100/30'}`}
                 >
                   <div class="flex items-start justify-between mb-1">
                     <div class={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[11px] sm:text-[13px] font-bold transition-all ${
                       isToday
                          ? 'bg-ios-blue-500 text-white shadow-sm'
-                         : isSelected
+                         : isSelected()
                            ? 'text-ios-blue-500'
                            : 'text-base-content/60'
                     }`}>
@@ -342,7 +343,7 @@ const CalendarPage: Component<Props> = (props) => {
 
                   {/* Tasks inside cell (Desktop only) */}
                   <div class="flex-1 overflow-y-auto scrollbar-none hidden sm:flex flex-col gap-1 w-full pb-1">
-                    <For each={items.slice(0, view() === 'month' ? 4 : undefined)}>
+                    <For each={items().slice(0, view() === 'month' ? 4 : undefined)}>
                       {(item) => {
                         const styleDesc = priorityColor[item.story.priority] || priorityColor.low;
                         const proj = item.story.project_id ? data.getProjectById(item.story.project_id) : null;
@@ -377,21 +378,21 @@ const CalendarPage: Component<Props> = (props) => {
                         )
                       }}
                     </For>
-                    <Show when={items.length > (view() === 'month' ? 4 : 99)}>
+                    <Show when={items().length > (view() === 'month' ? 4 : 99)}>
                       <div class="text-[9px] font-bold text-base-content/30 hover:text-base-content/50 pl-1">
-                        + {items.length - 4} más...
+                        + {items().length - 4} más...
                       </div>
                     </Show>
                   </div>
 
                   {/* Tasks dots for mobile/small screens */}
                   <div class="flex sm:hidden flex-wrap items-center gap-0.5 px-1 mt-1">
-                     <For each={items.slice(0, 5)}>
+                     <For each={items().slice(0, 5)}>
                        {(item) => (
                          <div class={`w-1.5 h-1.5 rounded-full ${item.isCompleted ? 'bg-base-content/20' : 'bg-ios-blue-500'}`} />
                        )}
                      </For>
-                     <Show when={items.length > 5}>
+                     <Show when={items().length > 5}>
                        <span class="text-[8px] font-bold text-base-content/40">+</span>
                      </Show>
                   </div>
@@ -507,7 +508,8 @@ const CalendarPage: Component<Props> = (props) => {
         />
       </Show>
 
-    </div>
+      </div>
+    </>
   );
 };
 

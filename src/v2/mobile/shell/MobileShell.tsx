@@ -6,25 +6,16 @@ import MobileTodayPage from '../pages/MobileTodayPage';
 import MobileCalendarPage from '../pages/MobileCalendarPage';
 import MobileQuickAddSheet from '../components/MobileQuickAddSheet';
 import InstallPrompt from '../../components/InstallPrompt';
+import { isDark, toggleTheme } from '../../lib/theme';
 
 type MobileTab = 'today' | 'calendar';
 
 const MobileShell: Component = () => {
   const auth = useAuth();
-  const savedTheme = localStorage.getItem('dc-theme') || 'ios-dark';
-  const [isDark, setIsDark] = createSignal(savedTheme === 'ios-dark');
   const [activeTab, setActiveTab] = createSignal<MobileTab>('today');
   const [showQuickAdd, setShowQuickAdd] = createSignal(false);
   const [quickAddDate, setQuickAddDate] = createSignal<string | null>(null);
   const [refreshKey, setRefreshKey] = createSignal(0);
-
-  const toggleTheme = () => {
-    const next = !isDark();
-    setIsDark(next);
-    const theme = next ? 'ios-dark' : 'ios';
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('dc-theme', theme);
-  };
 
   const handleCreated = () => {
     setRefreshKey(value => value + 1);

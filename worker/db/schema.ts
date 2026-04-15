@@ -158,4 +158,21 @@ export const wikiArticles = sqliteTable('wiki_articles', {
   created_by: text('created_by').notNull().references(() => users.id),
   created_at: text('created_at').notNull(),
   updated_at: text('updated_at').notNull(),
+  // Librarian fields
+  summary: text('summary').notNull().default(''),
+  librarian_status: text('librarian_status', { enum: ['pending', 'processing', 'done', 'error'] }).notNull().default('pending'),
+  suggested_tags: text('suggested_tags').notNull().default('[]'),
+  suggested_links: text('suggested_links').notNull().default('[]'),
+  librarian_error: text('librarian_error').notNull().default(''),
+  librarian_retries: integer('librarian_retries').notNull().default(0),
+  is_archived: integer('is_archived', { mode: 'boolean' }).notNull().default(false),
+});
+
+export const configs = sqliteTable('configs', {
+  id: text('id').primaryKey(),
+  team_id: text('team_id').notNull().references(() => teams.id),
+  key: text('key').notNull(),
+  value: text('value').notNull(),
+  updated_by: text('updated_by').notNull().references(() => users.id),
+  updated_at: text('updated_at').notNull(),
 });

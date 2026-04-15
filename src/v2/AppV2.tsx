@@ -20,6 +20,7 @@ import UpdateToast from './components/UpdateToast';
 import MobileShell from './mobile/shell/MobileShell';
 import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
+import { isDark, toggleTheme } from './lib/theme';
 
 type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar';
 
@@ -29,8 +30,7 @@ const AppShell: Component = () => {
   const isMobile = window.innerWidth < 640;
   if (isMobile) return <MobileShell />;
   const [activeTab, setActiveTab] = createSignal<Tab>(isMobile ? 'tasks' : 'report');
-  const savedTheme = localStorage.getItem('dc-theme') || 'ios-dark';
-  const [isDark, setIsDark] = createSignal(savedTheme === 'ios-dark');
+  // Theme is managed by shared lib/theme module
   const [showCreateModal, setShowCreateModal] = createSignal(false);
   const [createCategory, setCreateCategory] = createSignal<ReportCategory | undefined>();
   const [createProjectId, setCreateProjectId] = createSignal<string | undefined>();
@@ -70,13 +70,6 @@ const AppShell: Component = () => {
     setActiveTab(tab);
   };
 
-  const toggleTheme = () => {
-    const next = !isDark();
-    setIsDark(next);
-    const theme = next ? 'ios-dark' : 'ios';
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('dc-theme', theme);
-  };
 
   const baseTabs: { id: Tab; label: string; icon: any; key: string }[] = [
     { id: 'report', label: 'Reporte', icon: ClipboardList, key: 'R' },
@@ -134,128 +127,26 @@ const AppShell: Component = () => {
       }
     };
     document.addEventListener('keydown', handleKey);
+
+    const onOpenSearch = () => setShowSearch(true);
+    const onOpenShare = () => triggerShare();
+    const onOpenHidden = () => triggerHiddenStories();
+
+    window.addEventListener('open-search', onOpenSearch);
+    window.addEventListener('open-share', onOpenShare);
+    window.addEventListener('open-hidden', onOpenHidden);
+
     onCleanup(() => {
       document.removeEventListener('keydown', handleKey);
+      window.removeEventListener('open-search', onOpenSearch);
+      window.removeEventListener('open-share', onOpenShare);
+      window.removeEventListener('open-hidden', onOpenHidden);
     });
   });
 
   return (
     <div class="min-h-screen bg-base-100 text-base-content font-system">
-
-      {/* Floating Top Bar */}
-      <header class="sticky top-0 z-50 px-3 pt-3 hidden md:block">
-        <div class="max-w-5xl mx-auto flex items-center justify-between pointer-events-none">
-          {/* Left Pill (Logo) */}
-          <div class="pointer-events-auto h-12 px-4 flex items-center gap-2.5 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
-            <img src={dailyIcon} alt="Daily Check" class="w-7 h-7 rounded-lg ring-1 ring-black/10" />
-            <div class="flex flex-col">
-              <span class="font-semibold text-sm tracking-tight leading-tight">Daily Check</span>
-              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.8.0</span>
-            </div>
-          </div>
-
-          {/* Right Pill (Actions) */}
-          <div class="pointer-events-auto h-12 px-2 flex items-center gap-1 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
-            <button
-              onClick={() => setShowSearch(true)}
-              class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-base-content/25 hover:text-base-content/50 hover:bg-base-content/5 transition-all"
-              title="Buscar (⌘K)"
-            >
-              <Search size={14} />
-              <span class="text-[10px] text-base-content/20 hidden lg:inline">Buscar</span>
-              <kbd class="hidden lg:flex text-[9px] text-base-content/15 border border-base-content/[0.08] rounded px-1 py-px font-mono">⌘K</kbd>
-            </button>
-            <div class="w-px h-4 bg-base-content/[0.08] mx-0.5" />
-            <button
-              onClick={triggerShare}
-              class="p-2 rounded-xl text-[#0088cc]/50 hover:text-[#0088cc] hover:bg-[#0088cc]/10 transition-all"
-              title="Compartir Daily (T)"
-            >
-              <Send size={15} />
-            </button>
-            <button
-              onClick={triggerHiddenStories}
-              class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
-              title="Ver ocultadas"
-            >
-              <Archive size={15} />
-            </button>
-            <button
-              onClick={toggleTheme}
-              class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
-            >
-              <Show when={isDark()} fallback={<Sun size={15} />}>
-                <Moon size={15} />
-              </Show>
-            </button>
-            <button
-              onClick={() => auth.logout()}
-              class="p-2 rounded-xl text-base-content/35 hover:text-red-500 hover:bg-red-500/10 transition-all"
-              title="Cerrar sesión"
-            >
-              <LogOut size={15} />
-            </button>
-            <Show when={user()}>
-              <div class="ml-1 pl-2 border-l border-base-content/[0.08]">
-                <img
-                  src={user()!.avatar_url!}
-                  alt={user()!.name}
-                  class="w-7 h-7 rounded-full ring-2 ring-base-content/[0.06] shadow-sm"
-                />
-              </div>
-            </Show>
-          </div>
-        </div>
-      </header>
-
-      {/* Mobile Top Bar — minimal */}
-      <header class="md:hidden sticky top-0 z-50 px-3 pt-2">
-        <div class="flex items-center justify-between pointer-events-none">
-          {/* Left Pill (Logo) */}
-          <div class="pointer-events-auto h-11 px-3.5 flex items-center gap-2 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-sm">
-            <img src={dailyIcon} alt="Daily Check" class="w-6 h-6 rounded-md ring-1 ring-black/10" />
-            <div class="flex flex-col">
-              <span class="font-semibold text-sm tracking-tight text-base-content/90 leading-tight">Daily Check</span>
-              <span class="text-[9px] text-base-content/25 font-medium leading-none">v0.8.0</span>
-            </div>
-          </div>
-
-          {/* Right Pill (Actions) */}
-          <div class="pointer-events-auto h-11 px-1.5 flex items-center gap-0.5 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-sm">
-            <button
-              onClick={() => setShowSearch(true)}
-              class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
-              title="Buscar"
-            >
-              <Search size={16} />
-            </button>
-            <button
-              onClick={triggerShare}
-              class="p-2 rounded-xl text-[#0088cc]/50 hover:text-[#0088cc] hover:bg-[#0088cc]/10 transition-all"
-              title="Compartir Daily"
-            >
-              <Send size={15} />
-            </button>
-            <button
-              onClick={toggleTheme}
-              class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all"
-            >
-              <Show when={isDark()} fallback={<Sun size={15} />}>
-                <Moon size={15} />
-              </Show>
-            </button>
-            <Show when={user()}>
-              <div class="ml-0.5 pl-1.5 border-l border-base-content/[0.08]">
-                <img
-                  src={user()!.avatar_url!}
-                  alt={user()!.name}
-                  class="w-6 h-6 rounded-full ring-2 ring-base-content/[0.06] shadow-sm"
-                />
-              </div>
-            </Show>
-          </div>
-        </div>
-      </header>
+      {/* Global Top Nav has been replaced by Contextual TopNavigation in each page */}
 
       {/* Content — all pages mounted, toggle visibility to avoid refetch flicker */}
       <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">

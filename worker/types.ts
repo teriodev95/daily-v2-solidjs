@@ -7,6 +7,8 @@ export interface Env {
   JWT_SECRET: string;
   BUCKET: R2Bucket;
   API_KEY: string;
+  DEEPSEEK_API_KEY: string;
+  AI: Ai;
 }
 
 export type AppDb = DrizzleD1Database<typeof schema>;

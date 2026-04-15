@@ -16,6 +16,7 @@ import completionsRoutes from './routes/completions';
 import learningsRoutes from './routes/learnings';
 import wikiRoutes from './routes/wiki';
 import seedRoutes from './db/seed';
+import { processLibrarianQueue } from './lib/librarian';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -96,4 +97,9 @@ app.route('/api/completions', completionsRoutes);
 app.route('/api/learnings', learningsRoutes);
 app.route('/api/wiki', wikiRoutes);
 
-export default app;
+export default {
+  fetch: app.fetch.bind(app),
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(processLibrarianQueue(env));
+  },
+};

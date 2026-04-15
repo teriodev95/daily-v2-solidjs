@@ -33,7 +33,6 @@ const WikiArticleDetail: Component<Props> = (props) => {
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
   onMount(() => {
-    document.body.style.overflow = 'hidden';
     // Snapshot current state once when opening (not on every save)
     if (props.article.content?.trim()) {
       api.wiki.snapshot(props.article.id).catch(() => {});
@@ -45,7 +44,6 @@ const WikiArticleDetail: Component<Props> = (props) => {
   onCleanup(() => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
-    document.body.style.overflow = '';
   });
 
   const scheduleSave = (fields: Record<string, unknown>) => {
@@ -124,7 +122,7 @@ const WikiArticleDetail: Component<Props> = (props) => {
   };
 
   return (
-    <div class="fixed inset-0 z-[100] bg-base-100 flex flex-col animate-in fade-in duration-200">
+    <div class="flex flex-col h-[calc(100vh-8rem)] bg-base-100/50 rounded-3xl border border-base-content/[0.08] shadow-sm overflow-hidden animate-in fade-in zoom-in-[0.98] duration-200">
 
       {/* Header — sticky bar */}
       <div class="shrink-0 px-6 sm:px-10 py-3 border-b border-base-content/[0.04] flex items-center gap-3">

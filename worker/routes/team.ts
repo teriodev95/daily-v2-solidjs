@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
 import { requireAdmin } from '../middleware/auth';
@@ -132,6 +132,70 @@ team.post('/members/:id/avatar', requireAdmin, async (c) => {
 
   const [updated] = await db.select(safeUserSelect).from(schema.users).where(eq(schema.users.id, memberId)).limit(1);
   return c.json(updated);
+});
+
+// ─── Settings (configs) ──────────────────────────
+team.get('/settings', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const rows = await db.select().from(schema.configs).where(eq(schema.configs.team_id, user.teamId));
+
+  // Convert rows to a key-value object
+  const settings: Record<string, string> = {};
+  for (const r of rows) settings[r.key] = r.value;
+
+  // Ensure defaults for known keys
+  if (!settings.librarian_mode) settings.librarian_mode = 'auto';
+
+  return c.json(settings);
+});
+
+team.patch('/settings', requireAdmin, async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const body = await c.req.json<{ key: string; value: string }>();
+
+  if (!body.key || !body.value) return c.json({ error: 'key and value are required' }, 400);
+
+  // Validate known keys
+  const validKeys: Record<string, string[]> = {
+    librarian_mode: ['auto', 'approval'],
+  };
+
+  if (validKeys[body.key] && !validKeys[body.key].includes(body.value)) {
+    return c.json({ error: `Invalid value for ${body.key}. Must be one of: ${validKeys[body.key].join(', ')}` }, 400);
+  }
+
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+
+  // Upsert: try to find existing, update or insert
+  const [existing] = await db.select().from(schema.configs)
+    .where(and(eq(schema.configs.team_id, user.teamId), eq(schema.configs.key, body.key)))
+    .limit(1);
+
+  if (existing) {
+    await db.update(schema.configs)
+      .set({ value: body.value, updated_by: user.userId, updated_at: now })
+      .where(eq(schema.configs.id, existing.id));
+  } else {
+    await db.insert(schema.configs).values({
+      id,
+      team_id: user.teamId,
+      key: body.key,
+      value: body.value,
+      updated_by: user.userId,
+      updated_at: now,
+    });
+  }
+
+  // Return all settings
+  const rows = await db.select().from(schema.configs).where(eq(schema.configs.team_id, user.teamId));
+  const settings: Record<string, string> = {};
+  for (const r of rows) settings[r.key] = r.value;
+  if (!settings.librarian_mode) settings.librarian_mode = 'auto';
+
+  return c.json(settings);
 });
 
 export default team;

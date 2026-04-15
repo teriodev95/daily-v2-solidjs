@@ -11,3 +11,9 @@ migrations_dir = "drizzle"
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "daily-check-attachments"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[ai]
+binding = "AI"
