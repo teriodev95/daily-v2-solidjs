@@ -11,6 +11,7 @@ import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
 import AttachmentSection from './AttachmentSection';
 import { ContentEditor } from './ContentEditor';
 import DatePickerPopover from './DatePickerPopover';
+import CopyForAgentButton from './CopyForAgentButton';
 
 const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   critical: { label: 'Crítica', color: 'text-red-500', bg: 'bg-red-500/10', icon: Flame },
@@ -560,8 +561,8 @@ const StoryDetail: Component<Props> = (props) => {
               </div>
             </Show>
 
-            {/* Spacer + save + close */}
-            <div class="flex items-center gap-1 ml-auto">
+            {/* Spacer + save + share + close */}
+            <div class="flex items-center gap-1.5 ml-auto">
               <Show when={saveStatus() !== 'idle'}>
                 <span class="flex items-center gap-1">
                   <Show when={saveStatus() === 'saving'}>
@@ -578,6 +579,7 @@ const StoryDetail: Component<Props> = (props) => {
                   </Show>
                 </span>
               </Show>
+              <CopyForAgentButton storyId={props.story.id} storyTitle={title()} />
               <button onClick={() => props.onClose()} class="p-1.5 rounded-full hover:bg-base-content/10 transition-colors group">
                 <X size={18} class="text-base-content/40 group-hover:text-base-content/80 transition-colors" />
               </button>

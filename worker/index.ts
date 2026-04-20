@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
+import type { Context, Next } from 'hono';
 import { cors } from 'hono/cors';
 import { drizzle } from 'drizzle-orm/d1';
 import type { Env, Variables } from './types';
 import * as dbSchema from './db/schema';
 import { authMiddleware } from './middleware/auth';
+import { tokenAuthMiddleware, agentRateLimitMiddleware } from './middleware/tokenAuth';
+import agentRoutes from './routes/agent';
 import authRoutes from './routes/auth';
 import teamRoutes from './routes/team';
 import projectRoutes from './routes/projects';
@@ -15,8 +18,47 @@ import attachmentsRoutes from './routes/attachments';
 import completionsRoutes from './routes/completions';
 import learningsRoutes from './routes/learnings';
 import wikiRoutes from './routes/wiki';
+import tokensRoutes from './routes/tokens';
 import seedRoutes from './db/seed';
 import { processLibrarianQueue } from './lib/librarian';
+
+/**
+ * Scope enforcement for PAT-authenticated requests.
+ *
+ * - If the request was authenticated via session/cookie (no `tokenId` set
+ *   by tokenAuthMiddleware), this is a no-op: session users have full access.
+ * - If PAT-authenticated, require the token's scopes to cover the module
+ *   with at least the needed action (read for GET/HEAD, write otherwise).
+ */
+function enforceScope(moduleName: string) {
+  return async (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
+    const tokenId = c.get('tokenId');
+    if (!tokenId) return next();
+
+    const method = c.req.method.toUpperCase();
+    const needsWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+    const requiredAction: 'read' | 'write' = needsWrite ? 'write' : 'read';
+
+    const scopes = c.get('scopes') ?? {};
+    const granted = scopes[moduleName] ?? 'none';
+    const ok =
+      requiredAction === 'read'
+        ? granted === 'read' || granted === 'write'
+        : granted === 'write';
+
+    if (!ok) {
+      return c.json(
+        {
+          error: 'token_scope_insufficient',
+          required: `${moduleName}:${requiredAction}`,
+          granted: `${moduleName}:${granted}`,
+        },
+        403,
+      );
+    }
+    return next();
+  };
+}
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -53,18 +95,69 @@ app.get('/api/avatars/:key{.+}', async (c) => {
   });
 });
 
-// Auth middleware for protected routes
+// Auth middleware for protected routes.
+// tokenAuthMiddleware runs first: if a `Bearer dk_*` PAT is present it sets
+// user/scopes/tokenId; otherwise it's a no-op and authMiddleware handles
+// the session cookie / global API_KEY as before.
+app.use('/api/meta', tokenAuthMiddleware);
 app.use('/api/meta', authMiddleware);
+
+app.use('/api/team/*', tokenAuthMiddleware);
 app.use('/api/team/*', authMiddleware);
+app.use('/api/team/*', enforceScope('team'));
+
+app.use('/api/projects/*', tokenAuthMiddleware);
 app.use('/api/projects/*', authMiddleware);
+app.use('/api/projects/*', enforceScope('projects'));
+
+app.use('/api/stories/*', tokenAuthMiddleware);
 app.use('/api/stories/*', authMiddleware);
+app.use('/api/stories/*', enforceScope('stories'));
+
+app.use('/api/reports/*', tokenAuthMiddleware);
 app.use('/api/reports/*', authMiddleware);
+app.use('/api/reports/*', enforceScope('reports'));
+
+app.use('/api/goals/*', tokenAuthMiddleware);
 app.use('/api/goals/*', authMiddleware);
+app.use('/api/goals/*', enforceScope('goals'));
+
+// /api/assignments/* is the "tasks" module
+app.use('/api/assignments/*', tokenAuthMiddleware);
 app.use('/api/assignments/*', authMiddleware);
+app.use('/api/assignments/*', enforceScope('tasks'));
+
+// Attachments and completions are per-story; reuse the stories scope.
+app.use('/api/attachments/*', tokenAuthMiddleware);
 app.use('/api/attachments/*', authMiddleware);
+app.use('/api/attachments/*', enforceScope('stories'));
+
+app.use('/api/completions/*', tokenAuthMiddleware);
 app.use('/api/completions/*', authMiddleware);
+app.use('/api/completions/*', enforceScope('stories'));
+
+app.use('/api/learnings/*', tokenAuthMiddleware);
 app.use('/api/learnings/*', authMiddleware);
+app.use('/api/learnings/*', enforceScope('learnings'));
+
+app.use('/api/wiki/*', tokenAuthMiddleware);
 app.use('/api/wiki/*', authMiddleware);
+app.use('/api/wiki/*', enforceScope('wiki'));
+
+// Token management itself: only accessible via session auth — this is
+// a user-level operation (and MUST prevent PATs from minting more PATs,
+// revealing other PATs, or revoking them). We explicitly do NOT wire
+// tokenAuthMiddleware here: any `Bearer dk_*` presented to /api/tokens/*
+// is rejected below, and everything else falls through to authMiddleware
+// (session cookie or legacy global API_KEY).
+app.use('/api/tokens/*', async (c, next) => {
+  const authHeader = c.req.header('Authorization') ?? '';
+  if (authHeader.startsWith('Bearer dk_')) {
+    return c.json({ error: 'token_forbidden_for_tokens_api' }, 403);
+  }
+  return next();
+});
+app.use('/api/tokens/*', authMiddleware);
 
 // Meta endpoint — discovery for agents
 app.get('/api/meta', async (c) => {
@@ -80,6 +173,15 @@ app.get('/api/meta', async (c) => {
       attachments: { list: 'GET /api/attachments/story/:storyId', upload: 'POST /api/attachments/story/:storyId', download: 'GET /api/attachments/file/:id', delete: 'DELETE /api/attachments/:id' },
       learnings: { list: 'GET /api/learnings', create: 'POST /api/learnings', get: 'GET /api/learnings/:id', update: 'PATCH /api/learnings/:id', delete: 'DELETE /api/learnings/:id' },
       wiki: { list: 'GET /api/wiki?project_id=X', search: 'GET /api/wiki/search?q=X', graph: 'GET /api/wiki/graph?project_id=X', create: 'POST /api/wiki', get: 'GET /api/wiki/:id', update: 'PATCH /api/wiki/:id', delete: 'DELETE /api/wiki/:id' },
+      agent: {
+        manifest: 'GET /agent/story/:id',
+        description: 'GET /agent/story/:id/description',
+        criteria: 'GET /agent/story/:id/criteria',
+        attachments: 'GET /agent/story/:id/attachments',
+        related: 'GET /agent/story/:id/related',
+        wiki_refs: 'GET /agent/story/:id/wiki-refs',
+        project_context: 'GET /agent/project/:id/context',
+      },
       meta: { get: 'GET /api/meta' },
     },
   });
@@ -96,6 +198,28 @@ app.route('/api/attachments', attachmentsRoutes);
 app.route('/api/completions', completionsRoutes);
 app.route('/api/learnings', learningsRoutes);
 app.route('/api/wiki', wikiRoutes);
+app.route('/api/tokens', tokensRoutes);
+
+// ---------- Agent API ----------
+// Accepts share tokens (?s=st_*), PATs (Authorization: Bearer dk_*) or session
+// cookies. CORS for the agent surface is broader than /api because agents may
+// call from any origin with only a share URL.
+app.use('/agent/*', cors({
+  origin: (origin) => origin ?? '*',
+  allowMethods: ['GET', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
+
+app.use('/agent/*', async (c, next) => {
+  const db = drizzle(c.env.DB, { schema: dbSchema });
+  c.set('db', db);
+  await next();
+});
+app.use('/agent/*', tokenAuthMiddleware);
+app.use('/agent/*', authMiddleware);
+app.use('/agent/*', agentRateLimitMiddleware);
+app.route('/agent', agentRoutes);
 
 export default {
   fetch: app.fetch.bind(app),

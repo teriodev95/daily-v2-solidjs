@@ -176,3 +176,29 @@ export const configs = sqliteTable('configs', {
   updated_by: text('updated_by').notNull().references(() => users.id),
   updated_at: text('updated_at').notNull(),
 });
+
+export const apiTokens = sqliteTable('api_tokens', {
+  id: text('id').primaryKey(),
+  user_id: text('user_id').notNull().references(() => users.id),
+  name: text('name').notNull(),
+  token_encrypted: text('token_encrypted').notNull(),
+  token_hash: text('token_hash').notNull().unique(),
+  prefix: text('prefix').notNull(),
+  scopes: text('scopes').notNull(), // JSON string: {"wiki":"write","reports":"read",...}
+  expires_at: text('expires_at'),
+  last_used_at: text('last_used_at'),
+  last_used_ip: text('last_used_ip'),
+  created_at: text('created_at').notNull(),
+  revoked_at: text('revoked_at'),
+});
+
+export const storyShareTokens = sqliteTable('story_share_tokens', {
+  id: text('id').primaryKey(),
+  story_id: text('story_id').notNull().references(() => stories.id, { onDelete: 'cascade' }),
+  user_id: text('user_id').notNull().references(() => users.id),
+  token_hash: text('token_hash').notNull().unique(),
+  prefix: text('prefix').notNull(),           // first ~8 chars for UI debug
+  expires_at: text('expires_at').notNull(),   // ISO string, required (always expires)
+  created_at: text('created_at').notNull(),
+  revoked_at: text('revoked_at'),
+});

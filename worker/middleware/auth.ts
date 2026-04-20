@@ -6,6 +6,12 @@ import * as schema from '../db/schema';
 
 export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Variables }>(
   async (c, next) => {
+    // If a previous middleware (e.g. tokenAuthMiddleware for PATs) already
+    // resolved a user, skip — don't try to overwrite or re-validate.
+    if (c.get('user')) {
+      return next();
+    }
+
     // Try 1: Bearer token (API key for agents)
     const authHeader = c.req.header('Authorization') ?? '';
     if (authHeader.startsWith('Bearer ')) {

@@ -1,6 +1,6 @@
-import { Show, For, type Component, type JSX } from 'solid-js';
+import { Show, For, createSignal, onCleanup, onMount, type Component, type JSX } from 'solid-js';
 import { useAuth } from '../lib/auth';
-import { Search, Moon, Sun, LogOut, ChevronRight } from 'lucide-solid';
+import { Search, Moon, Sun, LogOut, ChevronRight, User as UserIcon, Key } from 'lucide-solid';
 import { isDark, toggleTheme } from '../lib/theme';
 import dailyIcon from '../../assets/daily-icon.png';
 
@@ -21,6 +21,48 @@ interface Props {
 const TopNavigation: Component<Props> = (props) => {
   const auth = useAuth();
   const user = () => auth.user();
+  const [menuOpen, setMenuOpen] = createSignal(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = createSignal(false);
+  let desktopMenuRef: HTMLDivElement | undefined;
+  let mobileMenuRef: HTMLDivElement | undefined;
+
+  const handleDocClick = (e: MouseEvent) => {
+    const target = e.target as Node;
+    if (menuOpen() && desktopMenuRef && !desktopMenuRef.contains(target)) {
+      setMenuOpen(false);
+    }
+    if (mobileMenuOpen() && mobileMenuRef && !mobileMenuRef.contains(target)) {
+      setMobileMenuOpen(false);
+    }
+  };
+
+  const handleKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && (menuOpen() || mobileMenuOpen())) {
+      setMenuOpen(false);
+      setMobileMenuOpen(false);
+    }
+  };
+
+  onMount(() => {
+    document.addEventListener('mousedown', handleDocClick);
+    document.addEventListener('keydown', handleKey);
+    onCleanup(() => {
+      document.removeEventListener('mousedown', handleDocClick);
+      document.removeEventListener('keydown', handleKey);
+    });
+  });
+
+  const openTokens = () => {
+    setMenuOpen(false);
+    setMobileMenuOpen(false);
+    window.dispatchEvent(new Event('open-tokens'));
+  };
+
+  const doLogout = () => {
+    setMenuOpen(false);
+    setMobileMenuOpen(false);
+    auth.logout();
+  };
 
   return (
     <>
@@ -72,12 +114,62 @@ const TopNavigation: Component<Props> = (props) => {
             <button onClick={toggleTheme} class="p-2.5 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all">
               <Show when={isDark()} fallback={<Sun size={15} />}><Moon size={15} /></Show>
             </button>
-            <button onClick={() => auth.logout()} class="p-2.5 rounded-xl text-base-content/35 hover:text-red-500 hover:bg-red-500/10 transition-all" title="Cerrar sesión">
-              <LogOut size={15} />
-            </button>
             <Show when={user()}>
-              <div class="ml-1 pl-2 border-l border-base-content/[0.08]">
-                <img src={user()!.avatar_url!} alt={user()!.name} class="w-7 h-7 rounded-full ring-2 ring-base-content/[0.06] shadow-sm" />
+              <div class="ml-1 pl-2 border-l border-base-content/[0.08] relative" ref={desktopMenuRef}>
+                <button
+                  onClick={() => setMenuOpen((v) => !v)}
+                  class="rounded-full focus:outline-none focus:ring-2 focus:ring-base-content/20 transition-all"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen()}
+                  title={user()!.name}
+                >
+                  <img
+                    src={user()!.avatar_url!}
+                    alt={user()!.name}
+                    class="w-7 h-7 rounded-full ring-2 ring-base-content/[0.06] shadow-sm hover:ring-base-content/20 transition-all"
+                  />
+                </button>
+                <Show when={menuOpen()}>
+                  <div
+                    role="menu"
+                    class="absolute right-0 top-[calc(100%+0.5rem)] min-w-[200px] bg-base-200/95 backdrop-blur-2xl rounded-xl border border-base-content/[0.08] shadow-lg py-1.5 z-50 origin-top-right"
+                  >
+                    <div class="px-3 py-2 border-b border-base-content/[0.06] mb-1">
+                      <p class="text-xs font-semibold truncate">{user()!.name}</p>
+                      <p class="text-[10px] text-base-content/40 truncate">{user()!.email}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled
+                      title="Próximamente"
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/40 cursor-not-allowed"
+                    >
+                      <UserIcon size={14} class="text-base-content/30" />
+                      <span class="flex-1 text-left">Mi cuenta</span>
+                      <span class="text-[9px] uppercase tracking-wider text-base-content/30">Pronto</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={openTokens}
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/70 hover:bg-base-content/5 transition-colors"
+                    >
+                      <Key size={14} class="text-base-content/50" />
+                      API Tokens
+                    </button>
+                    <div class="my-1 h-px bg-base-content/[0.06]" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={doLogout}
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors"
+                    >
+                      <LogOut size={14} />
+                      Cerrar sesión
+                    </button>
+                  </div>
+                </Show>
               </div>
             </Show>
           </div>
@@ -114,8 +206,55 @@ const TopNavigation: Component<Props> = (props) => {
               <Show when={isDark()} fallback={<Sun size={15} />}><Moon size={15} /></Show>
             </button>
             <Show when={user()}>
-              <div class="ml-0.5 pl-1.5 border-l border-base-content/[0.08]">
-                <img src={user()!.avatar_url!} alt="" class="w-6 h-6 rounded-full ring-2 ring-base-content/[0.06] shadow-sm" />
+              <div class="ml-0.5 pl-1.5 border-l border-base-content/[0.08] relative" ref={mobileMenuRef}>
+                <button
+                  onClick={() => setMobileMenuOpen((v) => !v)}
+                  class="rounded-full focus:outline-none focus:ring-2 focus:ring-base-content/20 transition-all"
+                  aria-haspopup="menu"
+                  aria-expanded={mobileMenuOpen()}
+                  aria-label="Menú de usuario"
+                >
+                  <img src={user()!.avatar_url!} alt="" class="w-6 h-6 rounded-full ring-2 ring-base-content/[0.06] shadow-sm" />
+                </button>
+                <Show when={mobileMenuOpen()}>
+                  <div
+                    role="menu"
+                    class="absolute right-0 top-[calc(100%+0.5rem)] min-w-[200px] bg-base-200/95 backdrop-blur-2xl rounded-xl border border-base-content/[0.08] shadow-lg py-1.5 z-50"
+                  >
+                    <div class="px-3 py-2 border-b border-base-content/[0.06] mb-1">
+                      <p class="text-xs font-semibold truncate">{user()!.name}</p>
+                      <p class="text-[10px] text-base-content/40 truncate">{user()!.email}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled
+                      title="Próximamente"
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/40 cursor-not-allowed"
+                    >
+                      <UserIcon size={14} class="text-base-content/30" />
+                      <span class="flex-1 text-left">Mi cuenta</span>
+                      <span class="text-[9px] uppercase tracking-wider text-base-content/30">Pronto</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openTokens}
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/70 hover:bg-base-content/5 transition-colors"
+                    >
+                      <Key size={14} class="text-base-content/50" />
+                      API Tokens
+                    </button>
+                    <div class="my-1 h-px bg-base-content/[0.06]" />
+                    <button
+                      type="button"
+                      onClick={doLogout}
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors"
+                    >
+                      <LogOut size={14} />
+                      Cerrar sesión
+                    </button>
+                  </div>
+                </Show>
               </div>
             </Show>
           </div>

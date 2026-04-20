@@ -58,6 +58,39 @@ type ReportDetailed = DailyReport & {
   backlog: StoryWithAssignees[];
 };
 
+// ─── API Tokens ──────────────────────────────────
+
+export type TokenScope = 'none' | 'read' | 'write';
+
+export interface Token {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: Record<string, TokenScope>;
+  expires_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
+}
+
+export interface CreatedToken extends Token {
+  token: string; // full "dk_live_..." raw token, shown once
+}
+
+export interface CreateTokenInput {
+  name: string;
+  scopes: Record<string, TokenScope>;
+  expires_in_days?: number | null;
+}
+
+// ─── Share Tokens (per-story URL share for agents) ───
+
+export interface ShareTokenResponse {
+  share_url: string;
+  expires_at: string;
+  previous_revoked: boolean;
+}
+
 // ─── API Client ──────────────────────────────────
 
 export const api = {
@@ -119,6 +152,8 @@ export const api = {
       request<{ ok: boolean; count: number }>(`/api/stories/${storyId}/criteria`, { method: 'POST', body: JSON.stringify({ criteria }) }),
     updateCriteria: (storyId: string, criteriaId: string, data: { is_met: boolean }) =>
       request<AcceptanceCriteria>(`/api/stories/${storyId}/criteria/${criteriaId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    createShareToken: (storyId: string) =>
+      request<ShareTokenResponse>(`/api/stories/${storyId}/share-token`, { method: 'POST' }),
   },
 
   reports: {
@@ -235,5 +270,14 @@ export const api = {
 
   admin: {
     seed: () => request<{ ok: boolean; message: string }>('/api/admin/seed', { method: 'POST' }),
+  },
+
+  tokens: {
+    list: () => request<Token[]>('/api/tokens'),
+    create: (data: CreateTokenInput) =>
+      request<CreatedToken>('/api/tokens', { method: 'POST', body: JSON.stringify(data) }),
+    reveal: (id: string) => request<{ token: string }>(`/api/tokens/${id}/reveal`),
+    revoke: (id: string) =>
+      request<{ ok: boolean }>(`/api/tokens/${id}`, { method: 'DELETE' }),
   },
 };

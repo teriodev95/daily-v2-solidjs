@@ -1,8 +1,13 @@
 import { Hono } from 'hono';
-import { eq, and, or, like, sql } from 'drizzle-orm';
+import { eq, and, or, like, sql, isNull } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
 import { requireAdmin } from '../middleware/auth';
+import {
+  generateShareToken,
+  hashToken,
+  shareTokenPrefix,
+} from '../lib/tokenCrypto';
 
 const stories = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -357,6 +362,109 @@ stories.delete('/:id/assignees/:uid', async (c) => {
     .where(and(eq(schema.storyAssignees.story_id, storyId), eq(schema.storyAssignees.user_id, uid)));
 
   return c.json({ ok: true });
+});
+
+/**
+ * Mint a share-token URL for the story, scoped to the current user.
+ *
+ * Each (story, user) pair has at most one ACTIVE share token at a time:
+ * calling this endpoint rotates the token — the previous active one is
+ * revoked and a fresh one with a new 30-day TTL is issued.
+ *
+ * Auth: session cookie ONLY. PATs are explicitly rejected so an agent can't
+ * mint a share URL to escalate its own access surface.
+ */
+stories.post('/:id/share-token', async (c) => {
+  // PAT guard: share tokens are user-intent operations.
+  if (c.get('tokenKind') === 'pat') {
+    return c.json({ error: 'session_required' }, 403);
+  }
+
+  const user = c.get('user');
+  const db = c.get('db');
+  const storyId = c.req.param('id');
+
+  // Verify the story exists AND belongs to the caller's team. We don't
+  // differentiate "404" vs "403" to avoid leaking cross-team story ids.
+  const [story] = await db
+    .select()
+    .from(schema.stories)
+    .where(eq(schema.stories.id, storyId))
+    .limit(1);
+  if (!story || story.team_id !== user.teamId) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const nowIso = new Date().toISOString();
+
+  // Revoke any existing active share token for this (story, user) BEFORE
+  // creating the new one. A partial unique index (migration 0013) enforces
+  // at most one active row per (story_id, user_id) — so this ordering is
+  // required: attempting to insert before revoking would violate the
+  // constraint.
+  //
+  // Other users of the same team keep their independent tokens.
+  const existing = await db
+    .select()
+    .from(schema.storyShareTokens)
+    .where(
+      and(
+        eq(schema.storyShareTokens.story_id, storyId),
+        eq(schema.storyShareTokens.user_id, user.userId),
+        isNull(schema.storyShareTokens.revoked_at),
+      ),
+    );
+
+  let previousRevoked = false;
+  if (existing.length > 0) {
+    for (const row of existing) {
+      await db
+        .update(schema.storyShareTokens)
+        .set({ revoked_at: nowIso })
+        .where(eq(schema.storyShareTokens.id, row.id));
+    }
+    previousRevoked = true;
+  }
+
+  // Mint the new token. 30-day TTL, fixed.
+  const rawToken = generateShareToken();
+  const tokenHashHex = await hashToken(rawToken);
+  const prefix = shareTokenPrefix(rawToken);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const id = crypto.randomUUID();
+
+  try {
+    await db.insert(schema.storyShareTokens).values({
+      id,
+      story_id: storyId,
+      user_id: user.userId,
+      token_hash: tokenHashHex,
+      prefix,
+      expires_at: expiresAt,
+      created_at: nowIso,
+      revoked_at: null,
+    });
+  } catch (err) {
+    // Likely a race on the partial unique index: a concurrent rotation
+    // already minted a new active token for this (story, user). Ask the
+    // client to retry rather than leaking the DB error.
+    const msg = (err as Error)?.message ?? '';
+    if (/UNIQUE/i.test(msg) || /constraint/i.test(msg)) {
+      return c.json({ error: 'share_token_rotation_conflict' }, 409);
+    }
+    return c.json({ error: 'internal_error' }, 500);
+  }
+
+  // Build the absolute URL from the incoming request origin. This keeps
+  // staging/dev deployments self-consistent without needing an env var.
+  const origin = new URL(c.req.url).origin;
+  const shareUrl = `${origin}/agent/story/${storyId}?s=${rawToken}`;
+
+  return c.json({
+    share_url: shareUrl,
+    expires_at: expiresAt,
+    previous_revoked: previousRevoked,
+  });
 });
 
 export default stories;

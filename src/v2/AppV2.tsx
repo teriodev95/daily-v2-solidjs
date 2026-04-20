@@ -11,6 +11,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import AdminPage from './pages/AdminPage';
 import TasksPage from './pages/TasksPage';
 import WikiPage from './pages/WikiPage';
+import TokensPage from './pages/TokensPage';
 import CreateStoryModal from './components/CreateStoryModal';
 import SearchModal from './components/SearchModal';
 import CalendarPage from './pages/CalendarPage';
@@ -22,7 +23,7 @@ import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
 import { isDark, toggleTheme } from './lib/theme';
 
-type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar';
+type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar' | 'tokens';
 
 const AppShell: Component = () => {
   const auth = useAuth();
@@ -131,16 +132,19 @@ const AppShell: Component = () => {
     const onOpenSearch = () => setShowSearch(true);
     const onOpenShare = () => triggerShare();
     const onOpenHidden = () => triggerHiddenStories();
+    const onOpenTokens = () => switchTab('tokens');
 
     window.addEventListener('open-search', onOpenSearch);
     window.addEventListener('open-share', onOpenShare);
     window.addEventListener('open-hidden', onOpenHidden);
+    window.addEventListener('open-tokens', onOpenTokens);
 
     onCleanup(() => {
       document.removeEventListener('keydown', handleKey);
       window.removeEventListener('open-search', onOpenSearch);
       window.removeEventListener('open-share', onOpenShare);
       window.removeEventListener('open-hidden', onOpenHidden);
+      window.removeEventListener('open-tokens', onOpenTokens);
     });
   });
 
@@ -171,10 +175,13 @@ const AppShell: Component = () => {
           <WikiPage refreshKey={refreshKey()} />
         </div>
         <div class={activeTab() === 'calendar' ? 'stagger-in' : ''} style={{ display: activeTab() === 'calendar' ? undefined : 'none' }}>
-          <CalendarPage 
-             refreshKey={refreshKey()} 
-             onRequestQuickAdd={(date) => openCreateModal(undefined, undefined, date)} 
+          <CalendarPage
+             refreshKey={refreshKey()}
+             onRequestQuickAdd={(date) => openCreateModal(undefined, undefined, date)}
           />
+        </div>
+        <div class={activeTab() === 'tokens' ? 'stagger-in' : ''} style={{ display: activeTab() === 'tokens' ? undefined : 'none' }}>
+          <TokensPage />
         </div>
       </main>
 

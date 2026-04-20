@@ -9,6 +9,11 @@ export interface Env {
   API_KEY: string;
   DEEPSEEK_API_KEY: string;
   AI: Ai;
+  TOKEN_ENCRYPTION_KEY: string;
+  // Cloudflare rate-limit binding (unsafe.bindings in wrangler.toml). Optional
+  // because the binding may be unavailable in local dev without the
+  // --experimental-rate-limit flag; consumers must fail open on absence.
+  AGENT_RL: any;
 }
 
 export type AppDb = DrizzleD1Database<typeof schema>;
@@ -22,4 +27,12 @@ export interface AuthUser {
 export type Variables = {
   db: AppDb;
   user: AuthUser;
+  scopes?: Record<string, 'none' | 'read' | 'write'>;
+  tokenId?: string;
+  // Which kind of token authenticated the request, if any. Absent on session
+  // / legacy API_KEY auth. 'pat' = Bearer dk_*; 'share' = ?s=st_* share URL.
+  tokenKind?: 'pat' | 'share';
+  // Share-token row id, set only when tokenKind === 'share'. Used as the
+  // rate-limit key so we can throttle per share link independently of PATs.
+  shareTokenId?: string;
 };
