@@ -202,3 +202,11 @@ export const storyShareTokens = sqliteTable('story_share_tokens', {
   created_at: text('created_at').notNull(),
   revoked_at: text('revoked_at'),
 });
+
+// Re-export wiki share tokens table from its feature folder so Drizzle's
+// schema introspection (drizzle-kit + the typed `AppDb`) picks it up.
+// The feature module imports `projects` and `users` from this file — that's
+// a forward-reference cycle at module level, which is safe because Drizzle
+// table definitions only read `projects.id` / `users.id` lazily inside the
+// `.references()` callback.
+export { wikiShareTokens } from '../features/wikiShare/schema';

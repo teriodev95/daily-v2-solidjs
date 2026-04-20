@@ -196,17 +196,6 @@ const WikiPage: Component<Props> = (props) => {
         {/* ── COLLUMNA IZQUIERDA (Sidebar / Cajones Bento Nav) ── */}
         <aside class="w-full sm:w-64 flex flex-col gap-8 shrink-0">
           
-          {/* Bento: Gamificación & Stats Generales */}
-          <div class="rounded-2xl border border-base-content/[0.08] bg-base-100/40 p-4 shadow-sm relative overflow-hidden">
-             <div class="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent pointer-events-none" />
-             <div class="flex items-center gap-3 relative z-10">
-                <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500 shadow-sm border border-purple-500/20">
-                  <BookOpen size={20} strokeWidth={2.5} />
-                </div>
-                <h2 class="text-[17px] font-extrabold tracking-tight text-base-content/90">Wiki Central</h2>
-             </div>
-          </div>
-
           {/* Bento: Espacios */}
           <div class="flex flex-col">
             <h3 class="text-[10px] font-bold uppercase tracking-[0.15em] text-base-content/40 mb-3 px-1 flex items-center justify-between">
@@ -288,8 +277,6 @@ const WikiPage: Component<Props> = (props) => {
 
         {/* ── COLLUMNA DERECHA (Main Content / El Conocimiento) ── */}
         <div class="flex-1 min-w-0 flex flex-col pt-2">
-          <Show when={selectedArticle()} fallback={
-            <>
 
           <Show when={showGraph() && selectedProjectId()}>
             <div class="mb-4 flex-1 h-[calc(100vh-220px)] min-h-[400px] bg-base-100 rounded-3xl border border-base-content/[0.08] shadow-inner overflow-hidden">
@@ -444,38 +431,37 @@ const WikiPage: Component<Props> = (props) => {
               </Show>
             </div>
           </Show>
-          </>
-          }>
-            <Show when={selectedArticle()}>
-              {(article) => (
-                <WikiArticleDetail
-                  article={article()}
-                  onClose={() => { setSelectedArticle(null); refetch(); }}
-                  onUpdated={(id, fields) => {
-                    setSelectedArticle(prev => prev ? { ...prev, ...fields, tags: fields.tags ?? prev.tags } as WikiArticle : prev);
-                  }}
-                  onDeleted={() => { setSelectedArticle(null); refetch(); }}
-                  onNavigate={async (targetTitle) => {
-                    setSelectedArticle(null);
-                    const list = (articles() ?? []) as WikiArticle[];
-                    const found = list.find(a => a.title.toLowerCase() === targetTitle.toLowerCase());
-                    if (found) {
-                      queueMicrotask(() => setSelectedArticle(found));
-                    } else {
-                      try {
-                        const created = await api.wiki.create({ project_id: selectedProjectId(), title: targetTitle });
-                        refetch();
-                        queueMicrotask(() => setSelectedArticle(created as WikiArticle));
-                      } catch {}
-                    }
-                  }}
-                />
-              )}
-            </Show>
-          </Show>
 
         </div>
       </div>
+
+      {/* ── Overlay modal for the selected article ── */}
+      <Show when={selectedArticle()}>
+        {(article) => (
+          <WikiArticleDetail
+            article={article()}
+            onClose={() => { setSelectedArticle(null); refetch(); }}
+            onUpdated={(_id, fields) => {
+              setSelectedArticle(prev => prev ? { ...prev, ...fields, tags: fields.tags ?? prev.tags } as WikiArticle : prev);
+            }}
+            onDeleted={() => { setSelectedArticle(null); refetch(); }}
+            onNavigate={async (targetTitle) => {
+              setSelectedArticle(null);
+              const list = (articles() ?? []) as WikiArticle[];
+              const found = list.find(a => a.title.toLowerCase() === targetTitle.toLowerCase());
+              if (found) {
+                queueMicrotask(() => setSelectedArticle(found));
+              } else {
+                try {
+                  const created = await api.wiki.create({ project_id: selectedProjectId(), title: targetTitle });
+                  refetch();
+                  queueMicrotask(() => setSelectedArticle(created as WikiArticle));
+                } catch {}
+              }
+            }}
+          />
+        )}
+      </Show>
 
       {/* ── Context Menu, Settings, Detail (unchanged structure logically, just omitted for brevity from layout context, keeping them absolute/fixed) ── */}
       {/* ── Right-click context menu ── */}

@@ -2,9 +2,18 @@ import { createSignal, onCleanup, Show, type Component } from 'solid-js';
 import { Share2, Link as LinkIcon, Clipboard, Check, AlertCircle, Loader2 } from 'lucide-solid';
 import { api, type ShareTokenResponse } from '../lib/api';
 
+export type ShareableEntityType = 'story' | 'wiki';
+
+export interface ShareableEntity {
+  type: ShareableEntityType;
+  id: string;
+  title: string;
+}
+
 interface Props {
-  storyId: string;
-  storyTitle: string;
+  entity: ShareableEntity;
+  /** Optional extra context for the prompt (e.g. "Espacio: Daily Check" for wiki) */
+  contextLabel?: string;
 }
 
 type ToastKind = 'success' | 'error';
@@ -40,7 +49,7 @@ const copyToClipboard = async (text: string): Promise<void> => {
   }
 };
 
-const buildPromptText = (storyTitle: string, shareUrl: string): string =>
+const buildStoryPrompt = (storyTitle: string, shareUrl: string): string =>
   `Trabaja en esta Historia de Usuario: "${storyTitle}".
 
 URL de contexto (incluye el share token):
@@ -54,6 +63,35 @@ Antes de empezar:
 3. Usa los enlaces de "actions" solo si tu token lo permite (los scopes vienen declarados en el manifiesto).
 
 Responde únicamente basándote en el contenido del manifiesto y sus sub-recursos.`;
+
+const buildWikiPrompt = (articleTitle: string, shareUrl: string, contextLabel?: string): string => {
+  const contextLine = contextLabel ? `\n${contextLabel}` : '';
+  return `Artículo de wiki: "${articleTitle}".${contextLine}
+
+URL: ${shareUrl}
+
+El endpoint devuelve un manifiesto con el vecindario del grafo (neighbors), enlaces a sub-recursos (/content, /outline, /graph, /space_search, /space_tags, /space_index) y metadatos de auth. El token autoriza lectura del espacio completo, así que puedes navegar al artículo que necesites siguiendo los URLs en 'neighbors' y 'links'.`;
+};
+
+const buildPromptText = (entity: ShareableEntity, shareUrl: string, contextLabel?: string): string => {
+  if (entity.type === 'wiki') return buildWikiPrompt(entity.title, shareUrl, contextLabel);
+  return buildStoryPrompt(entity.title, shareUrl);
+};
+
+const buildSuccessToast = (
+  entity: ShareableEntity,
+  response: ShareTokenResponse,
+  contextLabel?: string,
+): string => {
+  const dateLabel = formatExpiration(response.expires_at);
+  const base =
+    entity.type === 'wiki'
+      ? `Enlace copiado. Da acceso al espacio "${contextLabel || entity.title}". Expira el ${dateLabel}.`
+      : `Enlace copiado. Expira el ${dateLabel}.`;
+  return response.previous_revoked
+    ? `${base} El enlace anterior fue invalidado.`
+    : base;
+};
 
 const CopyForAgentButton: Component<Props> = (props) => {
   const [open, setOpen] = createSignal(false);
@@ -100,7 +138,7 @@ const CopyForAgentButton: Component<Props> = (props) => {
     }
   };
 
-  // Escape key (capture phase — stops the StoryDetail modal from also closing)
+  // Escape key (capture phase — stops the parent modal from also closing)
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && open()) {
       e.stopPropagation();
@@ -123,23 +161,30 @@ const CopyForAgentButton: Component<Props> = (props) => {
     detachListeners();
   });
 
+  const createShareToken = (): Promise<ShareTokenResponse> => {
+    const { entity } = props;
+    if (entity.type === 'wiki') return api.wiki.createShareToken(entity.id);
+    return api.stories.createShareToken(entity.id);
+  };
+
+  const ariaLabel = () =>
+    props.entity.type === 'wiki'
+      ? 'Compartir artículo con agente'
+      : 'Compartir historia con agente';
+
   const handleCopy = async (mode: 'url' | 'prompt') => {
     if (loading()) return;
     setLoading(true);
     // Close dropdown immediately so user sees the spinner on the trigger
     closeDropdown();
     try {
-      const response: ShareTokenResponse = await api.stories.createShareToken(props.storyId);
+      const response = await createShareToken();
       const text =
         mode === 'url'
           ? response.share_url
-          : buildPromptText(props.storyTitle, response.share_url);
+          : buildPromptText(props.entity, response.share_url, props.contextLabel);
       await copyToClipboard(text);
-      const dateLabel = formatExpiration(response.expires_at);
-      const message = response.previous_revoked
-        ? `Enlace copiado. El enlace anterior fue invalidado. Expira el ${dateLabel}.`
-        : `Enlace copiado. Expira el ${dateLabel}.`;
-      showToast('success', message);
+      showToast('success', buildSuccessToast(props.entity, response, props.contextLabel));
     } catch (err) {
       console.error('[CopyForAgentButton] copy failed', err);
       showToast('error', 'No se pudo copiar el enlace. Intenta de nuevo.');
@@ -155,7 +200,7 @@ const CopyForAgentButton: Component<Props> = (props) => {
         ref={(el) => { buttonRef = el; }}
         onClick={toggleDropdown}
         disabled={loading()}
-        aria-label="Compartir historia con agente"
+        aria-label={ariaLabel()}
         aria-haspopup="menu"
         aria-expanded={open()}
         title="Compartir con agente"

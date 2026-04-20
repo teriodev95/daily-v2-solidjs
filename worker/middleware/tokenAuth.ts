@@ -1,8 +1,9 @@
 import { createMiddleware } from 'hono/factory';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { hashToken } from '../lib/tokenCrypto';
 import * as schema from '../db/schema';
+import { validateWikiShareToken } from '../features/wikiShare/middleware';
 
 type ScopeLevel = 'none' | 'read' | 'write';
 
@@ -42,6 +43,52 @@ export const tokenAuthMiddleware = createMiddleware<{
   const shareRaw = c.req.query('s');
   if (shareRaw && shareRaw.startsWith(SHARE_TOKEN_PREFIX)) {
     const db = c.get('db');
+    const urlPath = new URL(c.req.url).pathname;
+
+    // --- Wiki share-token branch -------------------------------------
+    // Wiki share URLs live under /agent/wiki/*. The token is bound to a
+    // PROJECT (not a single article), so validation is delegated to the
+    // feature module which knows the path grammar + scope rules.
+    if (urlPath.startsWith('/agent/wiki/')) {
+      const result = await validateWikiShareToken({
+        rawToken: shareRaw,
+        urlPath,
+        db,
+      });
+      if (!result.ok) {
+        const status = result.error === 'wrong_scope' ? 403 : 401;
+        return c.json({ error: `share_token_${result.error}` }, status);
+      }
+
+      const [u] = await db
+        .select()
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.id, result.userId),
+            eq(schema.users.is_active, true),
+          ),
+        )
+        .limit(1);
+      if (!u) return c.json({ error: 'share_token_invalid' }, 401);
+
+      c.set('user', {
+        userId: u.id,
+        teamId: u.team_id,
+        role: u.role as 'admin' | 'collaborator',
+      });
+      // Wiki share tokens grant project-scoped read access; they don't
+      // need stories / attachments scopes (those belong to story shares).
+      c.set('scopes', { wiki: 'read', projects: 'read' });
+      c.set('tokenKind', 'share');
+      c.set('shareTokenId', result.tokenId);
+      c.set('shareTokenScope', { type: 'project', id: result.projectId });
+
+      await next();
+      return;
+    }
+
+    // --- Story share-token branch (legacy path shape) ----------------
     const shareHash = await hashToken(shareRaw);
 
     const [shareRow] = await db
@@ -65,13 +112,15 @@ export const tokenAuthMiddleware = createMiddleware<{
     // Allowed path shapes:
     //   - /agent/story/<bound_id>            (manifest)
     //   - /agent/story/<bound_id>/<sub>      (description, criteria, ...)
+    //   - /agent/story/<bound_id>/attachment/<any_id>
+    //     (attachment download — the handler re-verifies that the
+    //     attachment belongs to the bound story + team).
     //   - /agent/project/<project_id>/context (ONLY if the bound story
     //     lives in that project — the handler re-verifies this).
     //
     // We match on exact path segments (no substring / prefix tricks) to
     // avoid edge cases where a crafted URL incidentally contains the
     // bound id as a substring.
-    const urlPath = new URL(c.req.url).pathname;
     const segments = urlPath.split('/').filter((s) => s.length > 0);
     // segments[0] must be 'agent' for any of our routes.
     const isStoryPath =
@@ -105,6 +154,7 @@ export const tokenAuthMiddleware = createMiddleware<{
     c.set('scopes', { ...SHARE_TOKEN_SCOPES });
     c.set('tokenKind', 'share');
     c.set('shareTokenId', shareRow.id);
+    c.set('shareTokenScope', { type: 'story', id: shareRow.story_id });
 
     // Note: we intentionally do NOT track last_used_at on share tokens.
     // They're ephemeral / regeneratable and audit is better served by the

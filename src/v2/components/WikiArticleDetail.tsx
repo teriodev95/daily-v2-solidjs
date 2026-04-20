@@ -1,9 +1,11 @@
 import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
 import type { WikiArticle, WikiSuggestedLink, LibrarianStatus } from '../types';
 import { api } from '../lib/api';
+import { useData } from '../lib/data';
 import { X, Check, Loader2, Trash2, BookOpen, Clock, ArrowLeft, AlertCircle } from 'lucide-solid';
 import { ContentEditor, type ContentEditorHandle } from './ContentEditor';
 import { processWikiLinks } from '../lib/wikiLinks';
+import CopyForAgentButton from './CopyForAgentButton';
 
 interface Props {
   article: WikiArticle;
@@ -16,6 +18,14 @@ interface Props {
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const WikiArticleDetail: Component<Props> = (props) => {
+  const data = useData();
+  const projectName = () =>
+    data.projects().find((p) => p.id === props.article.project_id)?.name ?? '';
+  const contextLabel = () => {
+    const name = projectName();
+    return name ? `Espacio: ${name}` : undefined;
+  };
+
   const [title, setTitle] = createSignal(props.article.title);
   const [tags, setTags] = createSignal<string[]>(props.article.tags ?? []);
   const [newTag, setNewTag] = createSignal('');
@@ -39,6 +49,23 @@ const WikiArticleDetail: Component<Props> = (props) => {
     }
     // Fetch librarian mode setting
     api.team.getSettings().then(s => setLibrarianMode(s.librarian_mode ?? 'auto')).catch(() => {});
+
+    // Escape key closes modal (unless a sub-modal is open)
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !confirming() && !showHistory()) {
+        props.onClose();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+
+    // Body scroll lock while modal is open
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    onCleanup(() => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = originalOverflow;
+    });
   });
 
   onCleanup(() => {
@@ -109,10 +136,6 @@ const WikiArticleDetail: Component<Props> = (props) => {
     } catch {}
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose(); };
-  document.addEventListener('keydown', handleKeyDown);
-  onCleanup(() => document.removeEventListener('keydown', handleKeyDown));
-
   const formatHistoryDate = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
@@ -122,10 +145,14 @@ const WikiArticleDetail: Component<Props> = (props) => {
   };
 
   return (
-    <div class="flex flex-col h-[calc(100vh-8rem)] bg-base-100/50 rounded-3xl border border-base-content/[0.08] shadow-sm overflow-hidden animate-in fade-in zoom-in-[0.98] duration-200">
+    <div
+      class="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center animate-in fade-in duration-200"
+      onClick={(e) => { if (e.target === e.currentTarget) props.onClose(); }}
+    >
+      <div class="bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl w-full sm:max-w-5xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[95vh] sm:max-h-[92vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 relative flex flex-col" style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}>
 
       {/* Header — sticky bar */}
-      <div class="shrink-0 px-6 sm:px-10 py-3 border-b border-base-content/[0.04] flex items-center gap-3">
+      <div class="sticky top-0 bg-base-100/95 backdrop-blur z-10 px-6 sm:px-10 py-3 border-b border-base-content/[0.04] flex items-center gap-3">
         <button
           onClick={() => props.onClose()}
           class="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/40 hover:text-base-content/70 transition-colors"
@@ -195,11 +222,20 @@ const WikiArticleDetail: Component<Props> = (props) => {
               {(props.article.history ?? []).length}
             </button>
           </Show>
+
+          <CopyForAgentButton
+            entity={{
+              type: 'wiki',
+              id: props.article.id,
+              title: title(),
+            }}
+            contextLabel={contextLabel()}
+          />
         </div>
       </div>
 
-      {/* Body — scrollable, centered, max-width for readability */}
-      <div class="flex-1 overflow-y-auto" style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}>
+      {/* Body — centered, max-width for readability (scrolls with outer modal) */}
+      <div class="flex-1">
         <div class="max-w-3xl mx-auto px-6 sm:px-10 py-8">
 
           {/* Title */}
@@ -330,6 +366,7 @@ const WikiArticleDetail: Component<Props> = (props) => {
             </div>
           </Show>
         </div>
+      </div>
       </div>
     </div>
   );

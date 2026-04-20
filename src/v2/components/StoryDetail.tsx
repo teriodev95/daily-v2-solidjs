@@ -579,7 +579,13 @@ const StoryDetail: Component<Props> = (props) => {
                   </Show>
                 </span>
               </Show>
-              <CopyForAgentButton storyId={props.story.id} storyTitle={title()} />
+              <CopyForAgentButton
+                entity={{
+                  type: 'story',
+                  id: props.story.id,
+                  title: title(),
+                }}
+              />
               <button onClick={() => props.onClose()} class="p-1.5 rounded-full hover:bg-base-content/10 transition-colors group">
                 <X size={18} class="text-base-content/40 group-hover:text-base-content/80 transition-colors" />
               </button>

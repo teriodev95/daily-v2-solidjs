@@ -16,6 +16,147 @@ const parseRecurrenceDays = (s: any) => ({
   recurrence_days: s.recurrence_days ? JSON.parse(s.recurrence_days) : null,
 });
 
+/**
+ * Kanban view endpoint — returns 4 pre-paginated buckets (one per status)
+ * in a single request. Designed for the kanban UI: avoids 4 round-trips and
+ * keeps per-bucket caps server-side so clients can't accidentally over-fetch.
+ *
+ * Query params:
+ *   - scope: 'mine' (default) | 'all'
+ *   - projects: comma-separated project ids, or '__all__' for no filter
+ *   - done_range: 'week' (default) | 'month' | 'all' — applies only to done bucket
+ *
+ * Per-bucket caps (hardcoded):
+ *   backlog: 10 by updated_at DESC
+ *   todo: 10 by updated_at DESC
+ *   in_progress: 20 by updated_at DESC (soft cap — rarely hit in practice)
+ *   done: 5 by completed_at DESC within done_range
+ *
+ * `total` is the filter-matching count regardless of cap; for done it reflects
+ * the configured date range so the UI can show "5 of N this week".
+ */
+stories.get('/kanban', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+
+  // --- parse + validate params -------------------------------------------
+  const scopeRaw = c.req.query('scope');
+  const scope: 'mine' | 'all' = scopeRaw === 'all' ? 'all' : 'mine';
+
+  const projectsRaw = c.req.query('projects');
+  let projectIds: string[] | null = null; // null = no project filter
+  if (projectsRaw && projectsRaw !== '__all__') {
+    const parts = projectsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    projectIds = parts.length > 0 ? parts : null;
+  }
+
+  const doneRangeRaw = c.req.query('done_range');
+  const doneRange: 'week' | 'month' | 'all' =
+    doneRangeRaw === 'month' || doneRangeRaw === 'all' ? doneRangeRaw : 'week';
+
+  let doneCutoffIso: string | null = null;
+  if (doneRange === 'week') {
+    doneCutoffIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  } else if (doneRange === 'month') {
+    doneCutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  // --- resolve assignee link set once if scope=mine ----------------------
+  // `story_assignees` links extra assignees beyond the primary `assignee_id`.
+  // We fetch the user's linked story ids up front so bucket filtering stays
+  // in-memory and consistent across all 4 buckets.
+  let myLinkedStoryIds: Set<string> | null = null;
+  if (scope === 'mine') {
+    const links = await db
+      .select()
+      .from(schema.storyAssignees)
+      .where(eq(schema.storyAssignees.user_id, user.userId));
+    myLinkedStoryIds = new Set(links.map(l => l.story_id));
+  }
+
+  // Base filter: team isolation + active. Everything else runs in-memory
+  // because Drizzle+D1 has limited dynamic-predicate support and row counts
+  // per team are small enough (< a few thousand) for this to be fine.
+  const baseRows = await db
+    .select()
+    .from(schema.stories)
+    .where(
+      and(
+        eq(schema.stories.team_id, user.teamId),
+        eq(schema.stories.is_active, true),
+      ),
+    );
+
+  const matchesFilters = (s: typeof baseRows[number]) => {
+    if (projectIds && (!s.project_id || !projectIds.includes(s.project_id))) return false;
+    if (scope === 'mine') {
+      const mine =
+        s.assignee_id === user.userId ||
+        s.created_by === user.userId ||
+        (myLinkedStoryIds?.has(s.id) ?? false);
+      if (!mine) return false;
+    }
+    return true;
+  };
+
+  const filtered = baseRows.filter(matchesFilters);
+
+  // --- split by status ---------------------------------------------------
+  const byStatus = {
+    backlog: [] as typeof filtered,
+    todo: [] as typeof filtered,
+    in_progress: [] as typeof filtered,
+    done: [] as typeof filtered,
+  };
+  for (const s of filtered) {
+    if (s.status in byStatus) byStatus[s.status as keyof typeof byStatus].push(s);
+  }
+
+  // done bucket is filtered by completed_at range BEFORE counting total,
+  // per spec: "total count within the done_range".
+  const doneInRange = doneCutoffIso
+    ? byStatus.done.filter(s => s.completed_at && s.completed_at >= doneCutoffIso)
+    : byStatus.done;
+
+  // --- sort + cap per bucket --------------------------------------------
+  const byUpdatedDesc = (a: typeof filtered[number], b: typeof filtered[number]) =>
+    (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
+  const byCompletedDesc = (a: typeof filtered[number], b: typeof filtered[number]) =>
+    (b.completed_at ?? '').localeCompare(a.completed_at ?? '');
+
+  const backlogItems = [...byStatus.backlog].sort(byUpdatedDesc).slice(0, 10);
+  const todoItems = [...byStatus.todo].sort(byUpdatedDesc).slice(0, 10);
+  const inProgressItems = [...byStatus.in_progress].sort(byUpdatedDesc).slice(0, 20);
+  const doneItems = [...doneInRange].sort(byCompletedDesc).slice(0, 5);
+
+  // --- attach assignees for the stories actually returned ---------------
+  const returnedIds = new Set<string>();
+  for (const arr of [backlogItems, todoItems, inProgressItems, doneItems]) {
+    for (const s of arr) returnedIds.add(s.id);
+  }
+
+  const assigneeMap = new Map<string, string[]>();
+  if (returnedIds.size > 0) {
+    const allAssignees = await db.select().from(schema.storyAssignees);
+    for (const a of allAssignees) {
+      if (!returnedIds.has(a.story_id)) continue;
+      const arr = assigneeMap.get(a.story_id) ?? [];
+      arr.push(a.user_id);
+      assigneeMap.set(a.story_id, arr);
+    }
+  }
+
+  const shape = (s: typeof filtered[number]) =>
+    parseRecurrenceDays({ ...s, assignees: assigneeMap.get(s.id) ?? [] });
+
+  return c.json({
+    backlog:     { items: backlogItems.map(shape),    total: byStatus.backlog.length },
+    todo:        { items: todoItems.map(shape),       total: byStatus.todo.length },
+    in_progress: { items: inProgressItems.map(shape), total: byStatus.in_progress.length },
+    done:        { items: doneItems.map(shape),       total: doneInRange.length },
+  });
+});
+
 // Full-text search across title, description, code
 stories.get('/search', async (c) => {
   const user = c.get('user');
@@ -69,6 +210,8 @@ stories.get('/', async (c) => {
   const assigneeId = c.req.query('assignee_id');
   const isShared = c.req.query('is_shared');
   const includeInactive = c.req.query('include_inactive') === 'true';
+  const completedAfter = c.req.query('completed_after');
+  const completedBefore = c.req.query('completed_before');
 
   let rows = await db.select().from(schema.stories).where(eq(schema.stories.team_id, user.teamId));
 
@@ -77,6 +220,19 @@ stories.get('/', async (c) => {
   if (category) rows = rows.filter(s => s.category === category);
   if (status) rows = rows.filter(s => s.status === status);
   if (isShared === 'true') rows = rows.filter(s => s.is_shared);
+
+  // Date-range filters on completed_at — stories without a completed_at are
+  // excluded when either bound is present (you can't date-filter an unfinished
+  // story). ISO-8601 lexicographic ordering means string compare is fine.
+  // Invalid date strings are ignored gracefully (no filter applied) rather
+  // than silently returning zero results.
+  const isValidDateString = (v: string) => !Number.isNaN(Date.parse(v));
+  if (completedAfter && isValidDateString(completedAfter)) {
+    rows = rows.filter(s => !!s.completed_at && s.completed_at >= completedAfter);
+  }
+  if (completedBefore && isValidDateString(completedBefore)) {
+    rows = rows.filter(s => !!s.completed_at && s.completed_at <= completedBefore);
+  }
 
   if (assigneeId) {
     const assigneeLinks = await db
@@ -87,12 +243,18 @@ stories.get('/', async (c) => {
     rows = rows.filter(s => s.assignee_id === assigneeId || linkedStoryIds.has(s.id));
   }
 
-  // Pagination (only when explicitly requested)
+  // Pagination (only when explicitly requested).
+  // limit: clamped to [1, 200]; NaN/<1 falls back to default 50.
+  // offset: clamped to >= 0; NaN/<0 falls back to 0.
   const isPaginated = c.req.query('limit') !== undefined || c.req.query('offset') !== undefined;
   const total = rows.length;
+  let limit = 50;
+  let offset = 0;
   if (isPaginated) {
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 200);
-    const offset = parseInt(c.req.query('offset') ?? '0');
+    const limitRaw = parseInt(c.req.query('limit') ?? '50', 10);
+    limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 50;
+    const offsetRaw = parseInt(c.req.query('offset') ?? '0', 10);
+    offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
     rows = rows.slice(offset, offset + limit);
   }
 
@@ -111,8 +273,6 @@ stories.get('/', async (c) => {
   }));
 
   if (isPaginated) {
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 200);
-    const offset = parseInt(c.req.query('offset') ?? '0');
     return c.json({ data: result, total, limit, offset });
   }
   return c.json(result);

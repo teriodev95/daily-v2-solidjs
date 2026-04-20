@@ -19,6 +19,7 @@ import completionsRoutes from './routes/completions';
 import learningsRoutes from './routes/learnings';
 import wikiRoutes from './routes/wiki';
 import tokensRoutes from './routes/tokens';
+import { wikiAgentRoutes } from './features/wikiShare';
 import seedRoutes from './db/seed';
 import { processLibrarianQueue } from './lib/librarian';
 
@@ -61,6 +62,14 @@ function enforceScope(moduleName: string) {
 }
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// Global error handler: ensure unhandled route errors return a generic 500
+// without leaking stack traces, schema names, or internals to the client.
+// Errors are logged server-side for debugging.
+app.onError((err, c) => {
+  console.error('Unhandled route error:', err);
+  return c.json({ error: 'internal_error' }, 500);
+});
 
 // CORS
 app.use('/api/*', cors({
@@ -167,7 +176,7 @@ app.get('/api/meta', async (c) => {
     categories: ['yesterday', 'today', 'backlog'],
     frequencies: ['daily', 'weekly', 'monthly'],
     endpoints: {
-      stories: { list: 'GET /api/stories', create: 'POST /api/stories', get: 'GET /api/stories/:id', update: 'PATCH /api/stories/:id', delete: 'DELETE /api/stories/:id' },
+      stories: { list: 'GET /api/stories', kanban: 'GET /api/stories/kanban', search: 'GET /api/stories/search', create: 'POST /api/stories', get: 'GET /api/stories/:id', update: 'PATCH /api/stories/:id', delete: 'DELETE /api/stories/:id' },
       projects: { list: 'GET /api/projects' },
       members: { list: 'GET /api/team/members' },
       attachments: { list: 'GET /api/attachments/story/:storyId', upload: 'POST /api/attachments/story/:storyId', download: 'GET /api/attachments/file/:id', delete: 'DELETE /api/attachments/:id' },
@@ -181,6 +190,16 @@ app.get('/api/meta', async (c) => {
         related: 'GET /agent/story/:id/related',
         wiki_refs: 'GET /agent/story/:id/wiki-refs',
         project_context: 'GET /agent/project/:id/context',
+        wiki: {
+          manifest: 'GET /agent/wiki/:id',
+          content: 'GET /agent/wiki/:id/content',
+          outline: 'GET /agent/wiki/:id/outline',
+          graph: 'GET /agent/wiki/:id/graph?depth=1&max_nodes=20',
+          space_search: 'GET /agent/wiki/space/:pid/search?q=&limit=10',
+          space_tags: 'GET /agent/wiki/space/:pid/tags',
+          space_index: 'GET /agent/wiki/space/:pid/index',
+          share_token: 'POST /api/wiki/:id/share-token',
+        },
       },
       meta: { get: 'GET /api/meta' },
     },
@@ -219,6 +238,9 @@ app.use('/agent/*', async (c, next) => {
 app.use('/agent/*', tokenAuthMiddleware);
 app.use('/agent/*', authMiddleware);
 app.use('/agent/*', agentRateLimitMiddleware);
+// Wiki agent surface (project-scoped share tokens). Same middleware chain as
+// the rest of /agent/* — the /agent/* middleware above already applies.
+app.route('/agent/wiki', wikiAgentRoutes);
 app.route('/agent', agentRoutes);
 
 export default {

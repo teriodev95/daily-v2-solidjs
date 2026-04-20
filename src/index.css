@@ -51,6 +51,25 @@
   /* Custom border radius */
   --radius-ios: 0.75rem;
   --radius-ios-sm: 0.5rem;
+
+  /* ─── Kanban & Story Design Tokens ─────────────── */
+  /* Status tokens (kanban columns + status badges) */
+  --color-status-backlog: oklch(0.7 0 0);          /* neutral gray */
+  --color-status-todo: #007AFF;                     /* ios-blue */
+  --color-status-in-progress: #FF9500;              /* ios-orange */
+  --color-status-done: #34C759;                     /* ios-green */
+
+  /* Priority tokens (card border-l + icon) */
+  --color-priority-critical: #EF4444;               /* red-500 */
+  --color-priority-high: #F97316;                   /* orange-500 */
+  --color-priority-medium: #EAB308;                 /* yellow-500 */
+  /* priority-low: no color, transparent */
+
+  /* Due date urgency tokens */
+  --color-due-overdue: #DC2626;                     /* red-600 */
+  --color-due-today: #D97706;                       /* amber-600 */
+  --color-due-soon: #F59E0B;                        /* amber-500 */
+  --color-due-future: oklch(0.5 0 0);               /* muted */
 }
 
 /* DaisyUI custom themes */

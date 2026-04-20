@@ -35,4 +35,8 @@ export type Variables = {
   // Share-token row id, set only when tokenKind === 'share'. Used as the
   // rate-limit key so we can throttle per share link independently of PATs.
   shareTokenId?: string;
+  // Scope of the share token. 'story' binds to a single story id; 'project'
+  // binds to a whole wiki project (graph-scoped wiki share). Absent when the
+  // caller isn't using a share token.
+  shareTokenScope?: { type: 'story' | 'project'; id: string };
 };

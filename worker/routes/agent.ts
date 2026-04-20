@@ -358,9 +358,61 @@ agent.get('/story/:id/attachments', async (c) => {
       file_name: a.file_name,
       mime_type: a.mime_type,
       file_size: a.file_size,
-      download_url: absUrl(c, `/api/attachments/file/${a.id}`),
+      download_url: absUrl(c, `/agent/story/${story.id}/attachment/${a.id}`),
       created_at: a.created_at,
     })),
+  });
+});
+
+// ---------- GET /story/:storyId/attachment/:attachmentId ----------
+//
+// Agent-scoped attachment download. Accepts share-token / PAT / session auth
+// (share tokens only get here because the middleware allows the
+// `/agent/story/<bound_id>/<sub>...` shape for the bound story).
+//
+// Ownership is re-verified here as defense in depth: the URL's storyId must
+// match the attachment's story_id AND the attachment's team must match the
+// authed user's team. On any mismatch we return 404 to avoid enumeration.
+agent.get('/story/:storyId/attachment/:attachmentId', async (c) => {
+  const db = c.get('db');
+  const user = c.get('user');
+  const storyId = c.req.param('storyId');
+  const attachmentId = c.req.param('attachmentId');
+
+  const [story] = await db
+    .select()
+    .from(schema.stories)
+    .where(eq(schema.stories.id, storyId))
+    .limit(1);
+
+  if (!story) return c.json({ error: 'Not found' }, 404);
+  if (!(await canAccessStory(c, story))) return c.json({ error: 'Not found' }, 404);
+
+  const [attachment] = await db
+    .select()
+    .from(schema.attachments)
+    .where(eq(schema.attachments.id, attachmentId))
+    .limit(1);
+
+  if (!attachment) return c.json({ error: 'Not found' }, 404);
+  if (attachment.story_id !== storyId) return c.json({ error: 'Not found' }, 404);
+  if (attachment.team_id !== user.teamId) return c.json({ error: 'Not found' }, 404);
+
+  const object = await c.env.BUCKET.get(attachment.r2_key);
+  if (!object) return c.json({ error: 'Not found' }, 404);
+
+  const isImage = attachment.mime_type.startsWith('image/');
+  const disposition = isImage
+    ? `inline; filename="${attachment.file_name}"`
+    : `attachment; filename="${attachment.file_name}"`;
+
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': attachment.mime_type,
+      'Content-Disposition': disposition,
+      'Content-Length': String(attachment.file_size),
+      'Cache-Control': 'private, max-age=3600',
+    },
   });
 });
 

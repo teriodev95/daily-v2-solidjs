@@ -2,6 +2,10 @@ import { Hono } from 'hono';
 import { eq, and, or, like } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
+import {
+  rotateWikiShareToken,
+  WikiShareTokenConflictError,
+} from '../features/wikiShare';
 
 const wiki = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -438,6 +442,57 @@ wiki.delete('/:id', async (c) => {
 
   await db.delete(schema.wikiArticles).where(eq(schema.wikiArticles.id, id));
   return c.json({ ok: true });
+});
+
+/**
+ * Mint a project-scoped share-token URL for the wiki, using this article as
+ * the entry point. Rotates any existing active token for the (project, user)
+ * pair — callers get a single stable "current share URL" per project.
+ *
+ * Auth: session cookie ONLY. PATs are explicitly rejected so an agent
+ * holding a PAT can't escalate into a broader share surface.
+ */
+wiki.post('/:id/share-token', async (c) => {
+  if (c.get('tokenKind') === 'pat') {
+    return c.json({ error: 'session_required' }, 403);
+  }
+
+  const user = c.get('user');
+  const db = c.get('db');
+  const id = c.req.param('id');
+
+  const [article] = await db
+    .select()
+    .from(schema.wikiArticles)
+    .where(eq(schema.wikiArticles.id, id))
+    .limit(1);
+  // Don't distinguish 404 from 403 — avoids leaking cross-team article ids.
+  if (!article || article.team_id !== user.teamId) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const baseUrl = new URL(c.req.url).origin;
+  try {
+    const { shareUrl, expiresAt, previousRevoked } = await rotateWikiShareToken(
+      db,
+      {
+        projectId: article.project_id,
+        userId: user.userId,
+        entryArticleId: id,
+        baseUrl,
+      },
+    );
+    return c.json({
+      share_url: shareUrl,
+      expires_at: expiresAt,
+      previous_revoked: previousRevoked,
+    });
+  } catch (err) {
+    if (err instanceof WikiShareTokenConflictError) {
+      return c.json({ error: 'share_token_rotation_conflict' }, 409);
+    }
+    return c.json({ error: 'internal_error' }, 500);
+  }
 });
 
 export default wiki;

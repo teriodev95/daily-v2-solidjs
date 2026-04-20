@@ -52,6 +52,28 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
 type UserSafe = Omit<User, never>; // same shape but no password from server
 type StoryWithAssignees = Story & { assignees: string[] };
 type StoryDetailed = StoryWithAssignees & { criteria: AcceptanceCriteria[] };
+
+// ─── Kanban ──────────────────────────────────────
+
+export interface KanbanBucket {
+  items: StoryWithAssignees[];
+  total: number;
+}
+
+export interface KanbanResponse {
+  backlog: KanbanBucket;
+  todo: KanbanBucket;
+  in_progress: KanbanBucket;
+  done: KanbanBucket;
+}
+
+// Paginated list response shape (server switches to this when limit/offset present)
+export interface PaginatedStories {
+  data: StoryWithAssignees[];
+  total: number;
+  limit: number;
+  offset: number;
+}
 type ReportDetailed = DailyReport & {
   yesterday: StoryWithAssignees[];
   today: StoryWithAssignees[];
@@ -134,6 +156,33 @@ export const api = {
     list: (params?: Record<string, string>) => {
       const qs = params ? '?' + new URLSearchParams(params).toString() : '';
       return request<StoryWithAssignees[]>(`/api/stories${qs}`);
+    },
+    kanban: (params: {
+      scope?: 'mine' | 'all';
+      projects?: string[];
+      done_range?: 'week' | 'month' | 'all';
+    }) => {
+      const q = new URLSearchParams();
+      if (params.scope) q.set('scope', params.scope);
+      if (params.projects && params.projects.length) q.set('projects', params.projects.join(','));
+      if (params.done_range) q.set('done_range', params.done_range);
+      const qs = q.toString();
+      return request<KanbanResponse>(`/api/stories/kanban${qs ? `?${qs}` : ''}`);
+    },
+    listPaged: (params: {
+      status?: string;
+      project_id?: string;
+      limit?: number;
+      offset?: number;
+      assignee_id?: string;
+      completed_after?: string;
+      completed_before?: string;
+    }) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+      }
+      return request<PaginatedStories>(`/api/stories?${q.toString()}`);
     },
     search: (q: string) =>
       request<StoryWithAssignees[]>(`/api/stories/search?q=${encodeURIComponent(q)}`),
@@ -266,6 +315,8 @@ export const api = {
       request<WikiArticle>(`/api/wiki/${id}/accept-suggestion`, { method: 'POST', body: JSON.stringify(data) }),
     dismissSuggestion: (id: string, data: { type: 'tag' | 'link'; value: string }) =>
       request<WikiArticle>(`/api/wiki/${id}/dismiss-suggestion`, { method: 'POST', body: JSON.stringify(data) }),
+    createShareToken: (articleId: string) =>
+      request<ShareTokenResponse>(`/api/wiki/${articleId}/share-token`, { method: 'POST' }),
   },
 
   admin: {
