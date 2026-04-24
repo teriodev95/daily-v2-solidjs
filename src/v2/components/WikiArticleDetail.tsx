@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
+import { createEffect, createSignal, on, onMount, onCleanup, For, Show, type Component } from 'solid-js';
 import type { WikiArticle, WikiSuggestedLink, LibrarianStatus } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
@@ -6,6 +6,8 @@ import { X, Check, Loader2, Trash2, BookOpen, Clock, ArrowLeft, AlertCircle } fr
 import { ContentEditor, type ContentEditorHandle } from './ContentEditor';
 import { processWikiLinks } from '../lib/wikiLinks';
 import CopyForAgentButton from './CopyForAgentButton';
+import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
+import { isDark } from '../lib/theme';
 
 interface Props {
   article: WikiArticle;
@@ -39,8 +41,16 @@ const WikiArticleDetail: Component<Props> = (props) => {
   const [librarianStatus, setLibrarianStatus] = createSignal<LibrarianStatus>(props.article.librarian_status ?? 'pending');
   const [librarianMode, setLibrarianMode] = createSignal<string>('auto');
   let editorHandle: ContentEditorHandle | undefined;
+  let editorEl: HTMLElement | undefined;
+  let editorFocused = false;
+  let unmounted = false;
+  const mermaidOpts = { shouldAbort: () => unmounted || editorFocused };
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => { unmounted = true; });
+  createEffect(on(isDark, (dark) => {
+    if (editorEl && !editorFocused) void renderMermaid(editorEl, dark, mermaidOpts);
+  }, { defer: true }));
 
   onMount(() => {
     // Snapshot current state once when opening (not on every save)
@@ -342,6 +352,12 @@ const WikiArticleDetail: Component<Props> = (props) => {
             processHtml={processWikiLinks}
             onLinkClick={(target) => props.onNavigate?.(target)}
             onReady={(handle) => { editorHandle = handle; }}
+            onEditorMount={(el) => {
+              editorEl = el;
+              void renderMermaid(el, isDark(), mermaidOpts);
+            }}
+            onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
+            onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
           />
         </div>
       </div>

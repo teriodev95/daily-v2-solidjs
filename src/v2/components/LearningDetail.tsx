@@ -1,8 +1,10 @@
-import { createSignal, onMount, onCleanup, Show, type Component } from 'solid-js';
+import { createEffect, createSignal, on, onMount, onCleanup, Show, type Component } from 'solid-js';
 import type { Learning } from '../types';
 import { api } from '../lib/api';
 import { X, Check, Loader2, Trash2, BookOpen, AlertCircle } from 'lucide-solid';
 import { ContentEditor } from './ContentEditor';
+import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
+import { isDark } from '../lib/theme';
 
 interface Props {
   learning: Learning;
@@ -22,6 +24,14 @@ const LearningDetail: Component<Props> = (props) => {
   const [deleting, setDeleting] = createSignal(false);
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  let editorEl: HTMLElement | undefined;
+  let editorFocused = false;
+  let unmounted = false;
+  const mermaidOpts = { shouldAbort: () => unmounted || editorFocused };
+  onCleanup(() => { unmounted = true; });
+  createEffect(on(isDark, (dark) => {
+    if (editorEl && !editorFocused) void renderMermaid(editorEl, dark, mermaidOpts);
+  }, { defer: true }));
 
   onMount(() => {
     document.body.style.overflow = 'hidden';
@@ -162,6 +172,12 @@ const LearningDetail: Component<Props> = (props) => {
             onChange={(md) => {
               scheduleSave({ content: md });
             }}
+            onEditorMount={(el) => {
+              editorEl = el;
+              void renderMermaid(el, isDark(), mermaidOpts);
+            }}
+            onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
+            onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
           />
         </div>
 

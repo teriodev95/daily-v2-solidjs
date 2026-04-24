@@ -32,6 +32,9 @@ interface ContentEditorProps {
   onLinkClick?: (target: string) => void;
   class?: string;
   onReady?: (handle: ContentEditorHandle) => void;
+  onEditorMount?: (el: HTMLElement) => void;
+  onEditorFocus?: () => void;
+  onEditorBlur?: () => void;
 }
 
 export function ContentEditor(props: ContentEditorProps) {
@@ -54,6 +57,8 @@ export function ContentEditor(props: ContentEditorProps) {
     lastContent = props.content || '';
     editorRef.innerHTML = toHtml(lastContent);
     setHasContent(!!lastContent.trim());
+
+    props.onEditorMount?.(editorRef);
 
     props.onReady?.({
       insertAtEnd: (markdown: string) => {
@@ -136,6 +141,8 @@ export function ContentEditor(props: ContentEditorProps) {
           prose-img:rounded-lg prose-img:shadow-sm"
         onInput={handleInput}
         onPaste={handlePaste}
+        onFocus={() => props.onEditorFocus?.()}
+        onBlur={() => props.onEditorBlur?.()}
         onMouseDown={(e) => {
           // Wiki links: click to navigate
           const wikiLink = (e.target as HTMLElement).closest('[data-wiki-link]');

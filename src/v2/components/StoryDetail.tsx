@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
+import { createSignal, createEffect, on, onMount, onCleanup, For, Show, type Component } from 'solid-js';
 import type { Story, AcceptanceCriteria, User } from '../types';
 import { useData } from '../lib/data';
 import { api } from '../lib/api';
@@ -12,6 +12,8 @@ import AttachmentSection from './AttachmentSection';
 import { ContentEditor } from './ContentEditor';
 import DatePickerPopover from './DatePickerPopover';
 import CopyForAgentButton from './CopyForAgentButton';
+import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
+import { isDark } from '../lib/theme';
 
 const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   critical: { label: 'Crítica', color: 'text-red-500', bg: 'bg-red-500/10', icon: Flame },
@@ -112,6 +114,15 @@ const StoryDetail: Component<Props> = (props) => {
   const [showPriorityPicker, setShowPriorityPicker] = createSignal(false);
   const [showStatusPicker, setShowStatusPicker] = createSignal(false);
   let dateTriggerRef!: HTMLButtonElement;
+  let editorEl: HTMLElement | undefined;
+  let editorFocused = false;
+  let unmounted = false;
+  const mermaidOpts = { shouldAbort: () => unmounted || editorFocused };
+  onCleanup(() => { unmounted = true; });
+  // defer:true — onEditorMount already renders once; this only fires on theme change
+  createEffect(on(isDark, (dark) => {
+    if (editorEl && !editorFocused) void renderMermaid(editorEl, dark, mermaidOpts);
+  }, { defer: true }));
   // Save state
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>('idle');
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -647,6 +658,12 @@ const StoryDetail: Component<Props> = (props) => {
             onChange={(md) => {
               scheduleSave({ description: md });
             }}
+            onEditorMount={(el) => {
+              editorEl = el;
+              void renderMermaid(el, isDark(), mermaidOpts);
+            }}
+            onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
+            onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
           />
 
           {/* Acceptance Criteria */}

@@ -400,3 +400,16 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.mermaid-rendered {
+  display: block;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.mermaid-rendered svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}

@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, Show, type Component } from 'solid-js';
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type Component } from 'solid-js';
 import type { AcceptanceCriteria, Story, User } from '../../types';
 import { useAuth } from '../../lib/auth';
 import { useData } from '../../lib/data';
@@ -21,6 +21,8 @@ import {
 import { frequencyLabel, toLocalDateStr } from '../../lib/recurrence';
 import AttachmentSection from '../../components/AttachmentSection';
 import { ContentEditor } from '../../components/ContentEditor';
+import { renderAll as renderMermaid, revertAll as revertMermaid } from '../../lib/mermaid';
+import { isDark } from '../../lib/theme';
 
 interface MobileStoryDetailProps {
   story: Story;
@@ -67,6 +69,14 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   const [detailLoaded, setDetailLoaded] = createSignal(false);
   const [confirming, setConfirming] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
+  let editorEl: HTMLElement | undefined;
+  let editorFocused = false;
+  let unmounted = false;
+  const mermaidOpts = { shouldAbort: () => unmounted || editorFocused };
+  onCleanup(() => { unmounted = true; });
+  createEffect(on(isDark, (dark) => {
+    if (editorEl && !editorFocused) void renderMermaid(editorEl, dark, mermaidOpts);
+  }, { defer: true }));
   const [archiving, setArchiving] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal('');
 
@@ -598,6 +608,12 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                 scheduleSave({ description: md });
               }}
               class="px-1"
+              onEditorMount={(el) => {
+                editorEl = el;
+                void renderMermaid(el, isDark(), mermaidOpts);
+              }}
+              onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
+              onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
             />
 
             <Show when={criteriaList().length > 0}>
