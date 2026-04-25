@@ -19,6 +19,7 @@ interface DockProps {
   magnification?: number;
   distance?: number;
   class?: string;
+  elementRef?: (element: HTMLElement) => void;
 }
 
 export default function Dock(props: DockProps) {
@@ -31,6 +32,7 @@ export default function Dock(props: DockProps) {
       get distance() { return props.distance ?? 140; },
     }}>
       <nav
+        ref={(element) => props.elementRef?.(element)}
         onMouseMove={(e) => setMouseX(e.clientX)}
         onMouseLeave={() => setMouseX(Infinity)}
         class={props.class}

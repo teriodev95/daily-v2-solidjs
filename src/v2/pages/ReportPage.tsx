@@ -16,6 +16,7 @@ import ShareReportModal from '../components/ShareReportModal';
 import TopNavigation from '../components/TopNavigation';
 import HeaderSearchBar from '../components/HeaderSearchBar';
 import type { ReportCategory } from '../types';
+import { playInteractionSuccess } from '../lib/interactionMotion';
 
 interface ReportPageProps {
   onCreateStory?: (category: ReportCategory) => void;
@@ -111,6 +112,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       mutateCompletions(prev => (prev ?? []).filter(c => c.story_id !== storyId));
       api.completions.delete(storyId, today).catch(() => {});
     } else {
+      playInteractionSuccess({ source: 'report', tone: 'success' });
       const optimistic: StoryCompletion = {
         id: `temp-${Date.now()}`,
         story_id: storyId,
@@ -289,9 +291,12 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   // Animated move with exit → enter transition
   const moveStory = (storyId: string, newStatus: StoryStatus) => {
     const now = new Date().toISOString();
+    const previousStory = localStories().find((story) => story.id === storyId);
+    const completedLocally = newStatus === 'done' && previousStory?.status !== 'done';
 
     // Step 1: Play exit animation
     setExitingIds(prev => new Set([...prev, storyId]));
+    if (completedLocally) playInteractionSuccess({ source: 'report', tone: 'success' });
 
     // Step 2: After exit animation, update state and play enter
     setTimeout(() => {

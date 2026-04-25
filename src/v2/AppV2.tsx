@@ -27,7 +27,7 @@ import { usePresence } from './lib/presence';
 import MobileShell from './mobile/shell/MobileShell';
 import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
-import { isDark, toggleTheme } from './lib/theme';
+import { interactionMotion } from './lib/interactionMotion';
 
 type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar' | 'tokens';
 
@@ -72,6 +72,7 @@ const AppShell: Component = () => {
   const [shareRequested, setShareRequested] = createSignal(0);
   const [hiddenRequested, setHiddenRequested] = createSignal(0);
   const [showAgentBootstrap, setShowAgentBootstrap] = createSignal(false);
+  let unmountDockMotion: (() => void) | undefined;
 
   const triggerShare = () => {
     if (activeTab() !== 'report') switchTab('report');
@@ -184,6 +185,11 @@ const AppShell: Component = () => {
     });
   });
 
+  onCleanup(() => {
+    unmountDockMotion?.();
+    interactionMotion.dispose();
+  });
+
   return (
     <div class="min-h-screen bg-base-100 text-base-content font-system">
       {/* Global Top Nav has been replaced by Contextual TopNavigation in each page */}
@@ -228,7 +234,11 @@ const AppShell: Component = () => {
         <Dock
           magnification={65}
           distance={140}
-          class="bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-[32px] border border-base-content/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)] pointer-events-auto p-1.5 flex items-end gap-1.5"
+          elementRef={(element) => {
+            unmountDockMotion?.();
+            unmountDockMotion = interactionMotion.mountDock(element);
+          }}
+          class="relative overflow-hidden bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-[32px] border border-base-content/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)] pointer-events-auto p-1.5 flex items-end gap-1.5"
         >
           <For each={tabs()}>
             {(tab) => (

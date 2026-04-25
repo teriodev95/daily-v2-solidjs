@@ -11,6 +11,7 @@ import TopNavigation from '../TopNavigation';
 import FilterBar from '../kanban/FilterBar';
 import KanbanCard from './KanbanCard';
 import KanbanColumn from './KanbanColumn';
+import { playInteractionSuccess } from '../../lib/interactionMotion';
 import {
   COLUMN_ORDER,
   STATUS_LABELS,
@@ -289,6 +290,9 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     setMenuBusy(`move-${status}`);
     const moved = moveStory(current, story.id, status, null, null);
     if (moved.story) setBuckets(moved.next);
+    if (status === 'done' && story.status !== 'done') {
+      playInteractionSuccess({ source: 'kanban', tone: 'success' });
+    }
     try {
       const updated = await api.stories.move(story.id, {
         to_status: status,
@@ -469,6 +473,9 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     }
     setBuckets(moved.next);
     focusStoryById(moved.next, storyId);
+    if (status === 'done' && moved.story.status !== 'done') {
+      playInteractionSuccess({ source: 'kanban', tone: 'success' });
+    }
     cleanupDrag();
     try {
       const updated = await api.stories.move(storyId, {

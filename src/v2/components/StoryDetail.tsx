@@ -16,6 +16,7 @@ import DatePickerPopover from './DatePickerPopover';
 import CopyForAgentButton from './CopyForAgentButton';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
 import { isDark } from '../lib/theme';
+import { playInteractionSuccess } from '../lib/interactionMotion';
 import { createPulse } from '../lib/usePulse';
 import { usePresence, type PresenceMode } from '../lib/presence';
 import PresenceAvatars from '../components/PresenceAvatars';
@@ -183,10 +184,14 @@ const StoryDetail: Component<Props> = (props) => {
     debounceTimer = setTimeout(fire, 800);
   };
 
-  const saveImmediate = async (fields: Record<string, unknown>) => {
+  const saveImmediate = async (
+    fields: Record<string, unknown>,
+    options: { playCompletionMotion?: boolean } = {},
+  ) => {
     setSaveStatus('saving');
     try {
       await api.stories.update(props.story.id, fields);
+      if (options.playCompletionMotion) playInteractionSuccess({ source: 'detail', tone: 'success' });
       setSaveStatus('saved');
       props.onUpdated?.(props.story.id, fields);
       clearTimeout(savedTimer);
@@ -484,7 +489,20 @@ const StoryDetail: Component<Props> = (props) => {
                   <For each={Object.entries(statusConfig)}>
                     {([key, cfg]) => (
                       <button
-                        onClick={() => { setStatus(key as any); setShowStatusPicker(false); saveImmediate({ status: key }); props.onUpdated?.(props.story.id, { status: key }); }}
+                        onClick={() => {
+                          const previousStatus = status();
+                          const nextCompletedAt = key === 'done' && previousStatus !== 'done'
+                            ? new Date().toISOString()
+                            : key !== 'done'
+                              ? null
+                              : props.story.completed_at;
+                          setStatus(key as any);
+                          setShowStatusPicker(false);
+                          void saveImmediate(
+                            { status: key, completed_at: nextCompletedAt },
+                            { playCompletionMotion: key === 'done' && previousStatus !== 'done' },
+                          );
+                        }}
                         class={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all ${status() === key ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/60'}`}
                       >
                         <span class={`w-2.5 h-2.5 rounded-full ${cfg.color}`} />

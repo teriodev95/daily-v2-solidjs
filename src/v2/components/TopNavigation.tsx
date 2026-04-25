@@ -117,7 +117,10 @@ const TopNavigation: Component<Props> = (props) => {
               <div class="w-px h-4 bg-base-content/[0.08] mx-0.5" />
             </Show>
             
-            <button onClick={toggleTheme} class="p-2.5 rounded-xl text-base-content/35 hover:text-base-content/60 hover:bg-base-content/5 transition-all">
+            <button
+              onClick={(event) => toggleTheme({ animate: true, trigger: event.currentTarget })}
+              class="p-2.5 rounded-xl text-base-content/35 transition-all hover:bg-base-content/5 hover:text-base-content/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+            >
               <Show when={isDark()} fallback={<Sun size={15} />}><Moon size={15} /></Show>
             </button>
             <Show when={user()}>
@@ -217,7 +220,10 @@ const TopNavigation: Component<Props> = (props) => {
               <div class="w-px h-4 bg-base-content/[0.08] mx-0.5" />
             </Show>
             {/* Mobile simplified actions, just theme and avatar */}
-            <button onClick={toggleTheme} class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 transition-all">
+            <button
+              onClick={() => toggleTheme()}
+              class="p-2 rounded-xl text-base-content/35 transition-all hover:text-base-content/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+            >
               <Show when={isDark()} fallback={<Sun size={15} />}><Moon size={15} /></Show>
             </button>
             <Show when={user()}>
