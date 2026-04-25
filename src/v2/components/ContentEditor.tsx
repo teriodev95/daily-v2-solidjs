@@ -44,7 +44,19 @@ export function ContentEditor(props: ContentEditorProps) {
 
   const [hasContent, setHasContent] = createSignal(!!props.content?.trim());
 
-  onCleanup(() => clearTimeout(convertTimer));
+  // Convert any pending HTML→MD synchronously and emit. Used on unmount to
+  // avoid losing the user's last keystrokes when they close the modal during
+  // the 50 ms debounce window.
+  const flushConvert = () => {
+    if (!convertTimer) return;
+    clearTimeout(convertTimer);
+    convertTimer = undefined;
+    const md = turndown.turndown(editorRef.innerHTML).trim();
+    lastContent = md;
+    props.onChange(md);
+  };
+
+  onCleanup(flushConvert);
 
   const toHtml = (md: string): string => {
     if (!md.trim()) return '';

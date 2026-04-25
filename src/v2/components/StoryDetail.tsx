@@ -134,6 +134,9 @@ const StoryDetail: Component<Props> = (props) => {
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>('idle');
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  // Captured by `scheduleSave`; lets `onCleanup` fire any pending payload
+  // before unmount so a fast modal close doesn't drop the user's last edits.
+  let pendingFlush: (() => void) | undefined;
 
   // Optimistic concurrency for `description`. We track the `updated_at` we
   // observed last and send it as `expected_updated_at` on description PATCHes.
@@ -145,6 +148,9 @@ const StoryDetail: Component<Props> = (props) => {
   onCleanup(() => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
+    // Last-ditch flush: fire-and-forget any pending debounced save before
+    // the modal is gone. Any error/banner UI is moot at this point.
+    pendingFlush?.();
     document.body.style.overflow = '';
   });
 
@@ -173,19 +179,12 @@ const StoryDetail: Component<Props> = (props) => {
   const scheduleSave = (fields: Record<string, unknown>) => {
     clearTimeout(debounceTimer);
     setSaveStatus('idle');
-    debounceTimer = setTimeout(async () => {
-      setSaveStatus('saving');
-      try {
-        const updated = await api.stories.update(props.story.id, buildPayload(fields));
-        if ((updated as any)?.updated_at) setBaseVersion((updated as any).updated_at);
-        setSaveStatus('saved');
-        props.onUpdated?.(props.story.id, fields);
-        clearTimeout(savedTimer);
-        savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
-      } catch (err) {
-        if (!handleSaveError(err, fields)) setSaveStatus('error');
-      }
-    }, 800);
+    const fire = () => {
+      pendingFlush = undefined;
+      void saveImmediate(fields);
+    };
+    pendingFlush = fire;
+    debounceTimer = setTimeout(fire, 800);
   };
 
   const saveImmediate = async (fields: Record<string, unknown>) => {

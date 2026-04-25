@@ -92,6 +92,9 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
   let attachmentUploadRef: ((file: File) => Promise<void>) | undefined;
+  // Captured by scheduleSave; lets onCleanup fire any pending payload before
+  // unmount so a fast close doesn't drop the user's last edits.
+  let pendingFlush: (() => void) | undefined;
 
   // Optimistic concurrency for `description`. See StoryDetail.tsx for context.
   const [baseVersion, setBaseVersion] = createSignal<string>(props.story.updated_at);
@@ -100,6 +103,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   onCleanup(() => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
+    pendingFlush?.();
     document.body.style.overflow = '';
   });
 
@@ -125,19 +129,12 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   const scheduleSave = (fields: Record<string, unknown>) => {
     clearTimeout(debounceTimer);
     setSaveStatus('idle');
-    debounceTimer = setTimeout(async () => {
-      setSaveStatus('saving');
-      try {
-        const updated = await api.stories.update(props.story.id, buildPayload(fields));
-        if ((updated as any)?.updated_at) setBaseVersion((updated as any).updated_at);
-        props.onUpdated?.(props.story.id, fields);
-        setSaveStatus('saved');
-        clearTimeout(savedTimer);
-        savedTimer = setTimeout(() => setSaveStatus('idle'), 1500);
-      } catch (err) {
-        if (!handleSaveError(err, fields)) setSaveStatus('idle');
-      }
-    }, 600);
+    const fire = () => {
+      pendingFlush = undefined;
+      void saveImmediate(fields);
+    };
+    pendingFlush = fire;
+    debounceTimer = setTimeout(fire, 600);
   };
 
   const saveImmediate = async (fields: Record<string, unknown>) => {
