@@ -1,4 +1,5 @@
 import { For, Show, createMemo, type Component } from 'solid-js';
+import { MousePointer2 } from 'lucide-solid';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import { presentIn, type PresenceEntry } from '../lib/presence';
@@ -9,6 +10,9 @@ interface Props {
   excludeSelf?: boolean;
   size?: 'sm' | 'md';
   max?: number;
+  // When true, render a small name tag with a downward arrow over each avatar
+  // whose mode is 'editing'. Desktop-only — auto-hidden on small viewports.
+  showEditingPointer?: boolean;
 }
 
 const sizes = {
@@ -72,6 +76,17 @@ const PresenceAvatars: Component<Props> = (props) => {
                   <div
                     class={`absolute inset-0 rounded-full pointer-events-none ${dim().ring}`}
                     style={{ 'box-shadow': `0 0 0 2px ${color}` }}
+                    aria-hidden="true"
+                  />
+                </Show>
+                <Show when={isEditing && props.showEditingPointer}>
+                  {/* Tiny pointer icon over the editor's avatar — desktop only.
+                      Stroke white so it stays legible on any avatar/background. */}
+                  <MousePointer2
+                    size={10}
+                    strokeWidth={2.5}
+                    class="hidden sm:block absolute -top-1 -right-1 pointer-events-none drop-shadow-sm"
+                    style={{ color: 'white', fill: color }}
                     aria-hidden="true"
                   />
                 </Show>

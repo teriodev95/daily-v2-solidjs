@@ -723,7 +723,7 @@ const StoryDetail: Component<Props> = (props) => {
 
             {/* Spacer + save + share + close */}
             <div class="flex items-center gap-1.5 ml-auto">
-              <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={3} />
+              <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={3} showEditingPointer />
               <Show when={saveStatus() === 'saved' || saveStatus() === 'error'}>
                 <span class="flex items-center gap-1 transition-opacity">
                   <Show when={saveStatus() === 'saved'}>
