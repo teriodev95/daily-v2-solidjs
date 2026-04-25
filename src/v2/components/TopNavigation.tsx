@@ -111,23 +111,24 @@ const TopNavigation: Component<Props> = (props) => {
           </div>
 
           {/* Right Pill (Actions) */}
-          <div class="pointer-events-auto h-12 px-2 flex items-center gap-1 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.12)] shrink-0">
+          <div class="pointer-events-auto flex h-12 items-center gap-1.5 rounded-[1.25rem] border border-base-content/[0.08] bg-base-200/60 p-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] backdrop-blur-2xl shrink-0">
             {props.actions}
             <Show when={props.actions}>
               <div class="w-px h-4 bg-base-content/[0.08] mx-0.5" />
             </Show>
-            
+
             <button
               onClick={(event) => toggleTheme({ animate: true, trigger: event.currentTarget })}
-              class="p-2.5 rounded-xl text-base-content/35 transition-all hover:bg-base-content/5 hover:text-base-content/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-[0.9rem] text-base-content/35 transition-all hover:bg-base-content/5 hover:text-base-content/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+              aria-label="Cambiar tema"
             >
               <Show when={isDark()} fallback={<Sun size={15} />}><Moon size={15} /></Show>
             </button>
             <Show when={user()}>
-              <div class="ml-1 pl-2 border-l border-base-content/[0.08] relative" ref={desktopMenuRef}>
+              <div class="flex h-9 items-center gap-1.5 border-l border-base-content/[0.08] pl-1.5 relative" ref={desktopMenuRef}>
                 <button
                   onClick={() => setMenuOpen((v) => !v)}
-                  class="rounded-full focus:outline-none focus:ring-2 focus:ring-base-content/20 transition-all"
+                  class="inline-flex h-9 w-9 items-center justify-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-base-content/20"
                   aria-haspopup="menu"
                   aria-expanded={menuOpen()}
                   title={user()!.name}
@@ -135,7 +136,7 @@ const TopNavigation: Component<Props> = (props) => {
                   <img
                     src={user()!.avatar_url!}
                     alt={user()!.name}
-                    class="w-7 h-7 rounded-full ring-2 ring-base-content/[0.06] shadow-sm hover:ring-base-content/20 transition-all"
+                    class="h-8 w-8 rounded-full shadow-sm ring-2 ring-base-content/[0.06] transition-all hover:ring-base-content/20"
                   />
                 </button>
                 <Show when={menuOpen()}>

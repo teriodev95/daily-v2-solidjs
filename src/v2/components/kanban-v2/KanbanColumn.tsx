@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, Show, type Component, type JSX } from 'solid-js';
-import { CheckCircle2, ChevronDown, Circle, Inbox, Loader2, MoreHorizontal, Plus } from 'lucide-solid';
+import { CheckCircle2, ChevronDown, Circle, Inbox, Loader2, MoreHorizontal, PlayCircle, Plus } from 'lucide-solid';
 import type { Story, StoryStatus } from '../../types';
 import { EMPTY_MESSAGES, STATUS_COLORS, type DoneRange } from './kanbanState';
 
@@ -32,6 +32,13 @@ const EmptyIcon: Component<{ status: StoryStatus }> = (props) => {
   return <Circle size={18} />;
 };
 
+const STATUS_ICONS: Record<StoryStatus, Component<{ size?: number }>> = {
+  backlog: Inbox,
+  todo: Circle,
+  in_progress: PlayCircle,
+  done: CheckCircle2,
+};
+
 const DropPlaceholder: Component<{ height: number | null }> = (props) => (
   <div
     class="my-0.5 rounded-xl border border-dashed border-ios-blue-500/28 bg-ios-blue-500/[0.045] shadow-[inset_0_0_0_1px_rgba(0,122,255,0.025)]"
@@ -52,6 +59,14 @@ const KanbanColumn: Component<KanbanColumnProps> = (props) => {
   });
 
   const statusColor = () => STATUS_COLORS[props.status];
+  const StatusIcon = () => STATUS_ICONS[props.status];
+  const columnSurface = () => {
+    const color = statusColor();
+    return {
+      'background': `linear-gradient(180deg, color-mix(in srgb, ${color} 2.5%, transparent), transparent 42%), color-mix(in srgb, ${color} 1.25%, transparent)`,
+      'box-shadow': `0 12px 30px color-mix(in srgb, ${color} 4.5%, transparent)`,
+    };
+  };
 
   const startQuickAdd = () => {
     setAdding(true);
@@ -96,14 +111,26 @@ const KanbanColumn: Component<KanbanColumnProps> = (props) => {
     <section
       data-kanban-column-status={props.status}
       class={[
-        'flex min-w-[228px] flex-1 flex-col rounded-xl',
-        props.focused ? 'bg-base-content/[0.018]' : '',
+        'flex min-w-[228px] flex-1 flex-col rounded-2xl border border-base-content/[0.035] px-1.5 pb-1.5 pt-1',
+        props.focused ? 'ring-1 ring-base-content/[0.075]' : '',
       ].filter(Boolean).join(' ')}
+      style={columnSurface()}
       aria-label={props.label}
     >
       <header class="flex h-10 items-center justify-between gap-2 px-2">
         <div class="flex min-w-0 items-center gap-2">
-          <span class="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: statusColor() }} />
+          <span
+            class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+            style={{
+              color: statusColor(),
+              'background-color': `color-mix(in srgb, ${statusColor()} 11%, transparent)`,
+            }}
+          >
+            {(() => {
+              const Icon = StatusIcon();
+              return <Icon size={13} />;
+            })()}
+          </span>
           <h2 class="truncate text-[12.5px] font-semibold text-base-content/70">{props.label}</h2>
           <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-base-content/[0.055] px-1.5 text-[10.5px] font-semibold text-base-content/48 tabular-nums">
             {props.count}

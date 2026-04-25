@@ -96,7 +96,22 @@ npx wrangler pages deploy dist/ --project-name daily-check --branch main
 
 ## Deploy completo (back + front, en serie)
 
+El flujo de producción debe pasar primero por control de versiones y después por Wrangler:
+
 ```bash
+# 1) Verificar build local
+npm run build
+
+# 2) Commit del cambio
+git status --short
+git add <archivos-del-cambio>
+git commit -m "<mensaje>"
+
+# 3) Publicar en ambos repositorios
+git push origin main
+git push gitea main
+
+# 4) Desplegar backend y frontend con Wrangler
 npx wrangler deploy \
   && npm run build \
   && npx wrangler pages deploy dist/ --project-name daily-check --branch main

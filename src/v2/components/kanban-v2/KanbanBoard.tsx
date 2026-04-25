@@ -108,6 +108,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   const [doneStories, setDoneStories] = createSignal<Story[]>([]);
   const [doneLoading, setDoneLoading] = createSignal(false);
   const [doneLoaded, setDoneLoaded] = createSignal(false);
+  const [doneSelectedId, setDoneSelectedId] = createSignal<string | null>(null);
 
   let filtersLoaded = false;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -121,6 +122,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   const activeProjects = () => data.projects().filter((project) => project.status === 'active');
   const doneCount = () => buckets()?.done.total ?? 0;
   const doneRangeLabel = () => DONE_RANGE_LABELS[doneRange()];
+  const selectedDoneStory = () => doneStories().find((story) => story.id === doneSelectedId()) ?? null;
 
   const showToast = (message: string, kind: 'error' | 'success' = 'error') => {
     setToast({ message, kind });
@@ -264,6 +266,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       setBuckets((current) => current ? deleteStory(current, id) : current);
       setSelectedStory((current) => current?.id === id ? null : current);
       setDoneStories((current) => current.filter((story) => story.id !== id));
+      setDoneSelectedId((current) => current === id ? null : current);
       return;
     }
 
@@ -322,6 +325,12 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     setCardMenu(null);
   };
 
+  const openDoneStory = (story: Story) => {
+    setDonePanelOpen(true);
+    setDoneSelectedId(story.id);
+    setCardMenu(null);
+  };
+
   const focusStoryById = (source: KanbanResponse | null, storyId: string) => {
     if (!source) return false;
     for (const status of BOARD_COLUMN_ORDER) {
@@ -373,6 +382,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     try {
       await api.stories.update(story.id, { is_active: false });
       setSelectedStory((item) => item?.id === story.id ? null : item);
+      setDoneSelectedId((id) => id === story.id ? null : id);
       setCardMenu(null);
       setConfirmingMenuDelete(false);
       showToast('Historia ocultada', 'success');
@@ -410,6 +420,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       setBuckets((current) => current ? deleteStory(current, story.id) : current);
       setDoneStories((stories) => stories.filter((item) => item.id !== story.id));
       setSelectedStory((item) => item?.id === story.id ? null : item);
+      setDoneSelectedId((id) => id === story.id ? null : id);
       setCardMenu(null);
       setConfirmingMenuDelete(false);
       showToast('Historia eliminada', 'success');
@@ -635,10 +646,40 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
         setConfirmingMenuDelete(false);
         return;
       }
+      if (donePanelOpen()) {
+        if (doneSelectedId()) {
+          setDoneSelectedId(null);
+        } else {
+          setDonePanelOpen(false);
+        }
+        return;
+      }
       if (shortcutsOpen()) return setShortcutsOpen(false);
       if (selectedStory()) return setSelectedStory(null);
       setFocusedIndex(0);
       return;
+    }
+    if (donePanelOpen()) {
+      const stories = doneStories();
+      const selectedIndex = Math.max(0, stories.findIndex((story) => story.id === doneSelectedId()));
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        const next = stories[Math.min(stories.length - 1, selectedIndex + 1)];
+        if (next) setDoneSelectedId(next.id);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        const next = stories[Math.max(0, selectedIndex - 1)];
+        if (next) setDoneSelectedId(next.id);
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const current = stories[selectedIndex];
+        if (current) setDoneSelectedId(current.id);
+        return;
+      }
     }
     if (event.key === '?') {
       event.preventDefault();
@@ -738,6 +779,23 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     void loadDoneStories();
   });
 
+  createEffect(() => {
+    const stories = doneStories();
+    if (!donePanelOpen() || doneLoading()) return;
+    const selectedId = doneSelectedId();
+    if (selectedId && stories.some((story) => story.id === selectedId)) return;
+    setDoneSelectedId(stories[0]?.id ?? null);
+  });
+
+  createEffect(() => {
+    if (!donePanelOpen()) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    onCleanup(() => {
+      document.body.style.overflow = previous;
+    });
+  });
+
   const renderColumn = (status: StoryStatus) => {
     const b = visible();
     const bucket = b?.[status] ?? { items: [], total: 0 };
@@ -825,19 +883,34 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
         </div>
 
         <Show when={donePanelOpen()}>
-          <DoneStoriesPanel
+          <DoneStoriesModal
             panelRef={(element) => { donePanelRef = element; }}
             stories={doneStories()}
+            selectedStory={selectedDoneStory()}
             loading={doneLoading()}
             loaded={doneLoaded()}
             range={doneRange()}
+            count={doneCount()}
             onRangeChange={setDoneRange}
-            onOpenStory={(story) => {
-              setDonePanelOpen(false);
-              openStory(story);
-            }}
+            onSelectStory={(story) => setDoneSelectedId(story.id)}
             onMenuOpen={openCardMenu}
+            onClose={() => {
+              setDonePanelOpen(false);
+              setDoneSelectedId(null);
+            }}
+            onClearSelection={() => setDoneSelectedId(null)}
             getProject={(id) => id ? data.getProjectById(id) ?? null : null}
+            onStoryDeleted={(story) => {
+              setBuckets((current) => current ? deleteStory(current, story.id) : current);
+              setDoneStories((stories) => stories.filter((item) => item.id !== story.id));
+              setDoneSelectedId((id) => id === story.id ? null : id);
+              props.onStoryDeleted?.();
+            }}
+            onStoryUpdated={(story, fields) => {
+              const nextStory = { ...story, ...fields } as Story;
+              setBuckets((current) => current ? updateStory(current, nextStory, matchesCurrentFilters) : current);
+              patchDonePanelStory(nextStory);
+            }}
           />
         </Show>
       </div>
@@ -863,7 +936,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
             x={menu().x}
             y={menu().y}
             busy={menuBusy()}
-            onOpen={() => openStory(menu().story)}
+            onOpen={() => menu().story.status === 'done' && donePanelOpen() ? openDoneStory(menu().story) : openStory(menu().story)}
             onCopyLink={() => void copyStoryLinkFromMenu(menu().story)}
             onMove={(status) => void moveStoryFromMenu(menu().story, status)}
             onHide={() => void hideStoryFromMenu(menu().story)}
@@ -942,112 +1015,190 @@ const DoneMetric: Component<{
   </button>
 );
 
-const DoneStoriesPanel: Component<{
+const DoneStoriesModal: Component<{
   panelRef: (element: HTMLDivElement) => void;
   stories: Story[];
+  selectedStory: Story | null;
   loading: boolean;
   loaded: boolean;
   range: DoneRange;
+  count: number;
   onRangeChange: (range: DoneRange) => void;
-  onOpenStory: (story: Story) => void;
+  onSelectStory: (story: Story) => void;
   onMenuOpen: (event: MouseEvent, story: Story) => void;
+  onClose: () => void;
+  onClearSelection: () => void;
   getProject: (projectId: string | null) => Project | null;
+  onStoryDeleted: (story: Story) => void;
+  onStoryUpdated: (story: Story, fields: Record<string, unknown>) => void;
 }> = (props) => (
   <div
-    ref={props.panelRef}
+    class="fixed inset-0 z-[105] flex items-center justify-center bg-black/45 px-4 py-6 backdrop-blur-md"
     role="dialog"
+    aria-modal="true"
     aria-label="Historias hechas"
-    class="absolute right-1 top-[calc(100%+0.5rem)] z-40 w-[360px] overflow-hidden rounded-2xl border border-base-content/[0.08] bg-base-100 shadow-xl shadow-black/15"
+    onClick={props.onClose}
   >
-    <div class="flex items-start justify-between gap-3 border-b border-base-content/[0.06] px-4 py-3">
-      <div>
-        <p class="text-[12px] font-semibold text-base-content/82">Hecho</p>
-        <p class="mt-0.5 text-[10.5px] font-medium text-base-content/35">Historias completadas</p>
-      </div>
-      <div class="flex rounded-full bg-base-content/[0.035] p-0.5">
-        <For each={[
-          ['week', 'Semana'],
-          ['month', 'Mes'],
-          ['all', 'Todo'],
-        ] as [DoneRange, string][]}>
-          {([range, label]) => (
-            <button
-              type="button"
-              onClick={() => props.onRangeChange(range)}
-              class={[
-                'rounded-full px-2 py-1 text-[10.5px] font-semibold transition-colors',
-                props.range === range
-                  ? 'bg-base-100 text-base-content/76 shadow-sm'
-                  : 'text-base-content/38 hover:text-base-content/62',
-              ].join(' ')}
-            >
-              {label}
-            </button>
-          )}
-        </For>
-      </div>
-    </div>
-
-    <div class="max-h-[420px] overflow-y-auto p-2">
-      <Show
-        when={!props.loading}
-        fallback={
-          <div class="flex items-center justify-center gap-2 px-4 py-10 text-[12.5px] font-medium text-base-content/35">
-            <Loader2 size={14} class="animate-spin" />
-            Cargando...
-          </div>
-        }
-      >
-        <Show
-          when={props.stories.length > 0}
-          fallback={
-            <div class="px-4 py-10 text-center">
-              <CheckCircle2 size={18} class="mx-auto text-base-content/20" />
-              <p class="mt-2 text-[12.5px] font-medium text-base-content/35">
-                {props.loaded ? 'Sin historias hechas en este rango.' : 'Abre para cargar historias hechas.'}
-              </p>
+    <div
+      ref={props.panelRef}
+      class="flex h-[min(820px,88vh)] w-[min(1180px,94vw)] min-h-0 flex-col overflow-hidden rounded-[24px] border border-base-content/[0.08] bg-base-100/96"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div class="flex items-center justify-between gap-4 border-b border-base-content/[0.06] px-5 py-4">
+        <div class="flex min-w-0 items-center gap-3">
+          <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-status-done/10 text-status-done">
+            <CheckCircle2 size={18} />
+          </span>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h2 class="truncate text-[15px] font-semibold text-base-content/86">Hecho</h2>
+              <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-base-content/[0.055] px-1.5 text-[10.5px] font-semibold text-base-content/48 tabular-nums">
+                {props.count}
+              </span>
             </div>
-          }
-        >
-          <div class="space-y-1">
-            <For each={props.stories}>
-              {(story) => {
-                const project = () => props.getProject(story.project_id);
-                return (
-                  <button
-                    type="button"
-                    onClick={() => props.onOpenStory(story)}
-                    onContextMenu={(event) => props.onMenuOpen(event, story)}
-                    class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-base-content/[0.035]"
-                  >
-                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-status-done" />
-                    <span class="min-w-0 flex-1">
-                      <span class="block truncate text-[12.5px] font-semibold text-base-content/76">{story.title}</span>
-                      <span class="mt-0.5 flex items-center gap-2 text-[10.5px] font-medium text-base-content/32">
-                        <Show when={project()}>
-                          <span
-                            class="rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-none"
-                            style={{
-                              color: project()!.color,
-                              'background-color': `${project()!.color}14`,
-                            }}
-                          >
-                            {project()!.prefix}
-                          </span>
-                        </Show>
-                        <Show when={story.completed_at}>
-                          <span>{new Date(story.completed_at!).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</span>
-                        </Show>
-                      </span>
-                    </span>
-                    <ExternalLink size={13} class="shrink-0 text-base-content/18 opacity-0 transition-opacity group-hover:opacity-100" />
-                  </button>
-                );
-              }}
+            <p class="mt-0.5 text-[11px] font-medium text-base-content/35">Historias completadas según tus filtros actuales</p>
+          </div>
+        </div>
+
+        <div class="flex shrink-0 items-center gap-2">
+          <div class="flex rounded-full bg-base-content/[0.04] p-0.5">
+            <For each={[
+              ['week', 'Semana'],
+              ['month', 'Mes'],
+              ['all', 'Todo'],
+            ] as [DoneRange, string][]}>
+              {([range, label]) => (
+                <button
+                  type="button"
+                  onClick={() => props.onRangeChange(range)}
+                  class={[
+                    'rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors',
+                    props.range === range
+                      ? 'bg-base-100 text-base-content/78'
+                      : 'text-base-content/40 hover:text-base-content/68',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              )}
             </For>
           </div>
-        </Show>
-      </Show>
+          <button
+            type="button"
+            onClick={props.onClose}
+            class="inline-flex h-9 w-9 items-center justify-center rounded-full text-base-content/42 transition-colors hover:bg-base-content/[0.055] hover:text-base-content/72"
+            aria-label="Cerrar Hecho"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+
+      <div class="grid min-h-0 flex-1 grid-cols-[340px_minmax(0,1fr)]">
+        <aside class="min-h-0 border-r border-base-content/[0.06] bg-base-content/[0.015]">
+          <div class="flex h-full min-h-0 flex-col">
+            <div class="flex items-center justify-between px-4 py-3">
+              <p class="text-[11px] font-bold uppercase tracking-[0.08em] text-base-content/28">Completadas</p>
+              <Show when={props.loading}>
+                <Loader2 size={14} class="animate-spin text-base-content/32" />
+              </Show>
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+              <Show
+                when={!props.loading}
+                fallback={
+                  <div class="flex items-center justify-center gap-2 px-4 py-12 text-[12.5px] font-medium text-base-content/35">
+                    <Loader2 size={14} class="animate-spin" />
+                    Cargando...
+                  </div>
+                }
+              >
+                <Show
+                  when={props.stories.length > 0}
+                  fallback={
+                    <div class="px-5 py-14 text-center">
+                      <CheckCircle2 size={20} class="mx-auto text-base-content/18" />
+                      <p class="mt-2 text-[12.5px] font-medium text-base-content/35">
+                        {props.loaded ? 'Sin historias hechas en este rango.' : 'Abre para cargar historias hechas.'}
+                      </p>
+                    </div>
+                  }
+                >
+                  <div class="space-y-1">
+                    <For each={props.stories}>
+                      {(story) => {
+                        const project = () => props.getProject(story.project_id);
+                        const selected = () => props.selectedStory?.id === story.id;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => props.onSelectStory(story)}
+                            onContextMenu={(event) => props.onMenuOpen(event, story)}
+                            class={[
+                              'group flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition-colors',
+                              selected()
+                                ? 'bg-status-done/[0.08] text-base-content ring-1 ring-status-done/20'
+                                : 'hover:bg-base-content/[0.035]',
+                            ].join(' ')}
+                          >
+                            <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-status-done" />
+                            <span class="min-w-0 flex-1">
+                              <span class="block line-clamp-2 text-[12.5px] font-semibold leading-snug text-base-content/78">{story.title}</span>
+                              <span class="mt-1.5 flex items-center gap-2 text-[10.5px] font-medium text-base-content/34">
+                                <Show when={project()}>
+                                  <span
+                                    class="rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-none"
+                                    style={{
+                                      color: project()!.color,
+                                      'background-color': `${project()!.color}14`,
+                                    }}
+                                  >
+                                    {project()!.prefix}
+                                  </span>
+                                </Show>
+                                <Show when={story.completed_at}>
+                                  <span>{new Date(story.completed_at!).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</span>
+                                </Show>
+                              </span>
+                            </span>
+                            <ExternalLink size={13} class="mt-0.5 shrink-0 text-base-content/18 opacity-0 transition-opacity group-hover:opacity-100" />
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </Show>
+              </Show>
+            </div>
+          </div>
+        </aside>
+
+        <section class="min-h-0 bg-base-100 p-3">
+          <Show
+            when={props.selectedStory}
+            keyed
+            fallback={
+              <div class="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-base-content/[0.08] text-center">
+                <CheckCircle2 size={24} class="text-base-content/18" />
+                <p class="mt-3 text-[13px] font-semibold text-base-content/48">Selecciona una historia</p>
+                <p class="mt-1 max-w-[260px] text-[12px] font-medium leading-relaxed text-base-content/32">
+                  Usa la lista para revisar contenido, adjuntos y propiedades sin salir de Hecho.
+                </p>
+              </div>
+            }
+          >
+            {(story) => (
+              <StoryDetail
+                story={story}
+                embedded
+                onClose={props.onClearSelection}
+                onDeleted={() => props.onStoryDeleted(story)}
+                onUpdated={(id, fields) => props.onStoryUpdated(story, fields)}
+              />
+            )}
+          </Show>
+        </section>
+      </div>
     </div>
   </div>
 );

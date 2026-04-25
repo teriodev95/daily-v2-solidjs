@@ -97,6 +97,7 @@ interface Props {
   onDeleted?: () => void;
   onUpdated?: (storyId: string, fields: Record<string, unknown>) => void;
   zIndex?: number;
+  embedded?: boolean;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -170,7 +171,7 @@ const StoryDetail: Component<Props> = (props) => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
     pendingFlush?.();
-    document.body.style.overflow = '';
+    if (!props.embedded) document.body.style.overflow = '';
   });
 
   const scheduleSave = (fields: Record<string, unknown>) => {
@@ -213,8 +214,8 @@ const StoryDetail: Component<Props> = (props) => {
   const [detailLoaded, setDetailLoaded] = createSignal(false);
 
   onMount(async () => {
-    // Lock body scroll while modal is open
-    document.body.style.overflow = 'hidden';
+    // Lock body scroll while the standalone modal is open.
+    if (!props.embedded) document.body.style.overflow = 'hidden';
 
     // Paste handler for file uploads
     const handlePaste = (e: ClipboardEvent) => {
@@ -409,12 +410,16 @@ const StoryDetail: Component<Props> = (props) => {
 
   return (
     <div
-      class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center"
-      style={{ "z-index": props.zIndex ?? 100 }}
-      onClick={() => props.onClose()}
+      class={props.embedded
+        ? 'h-full min-h-0'
+        : 'fixed inset-0 bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center'}
+      style={props.embedded ? undefined : { "z-index": props.zIndex ?? 100 }}
+      onClick={() => { if (!props.embedded) props.onClose(); }}
     >
       <div
-        class="story-detail-modal bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl shadow-black w-full sm:max-w-3xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[92vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] relative"
+        class={props.embedded
+          ? 'story-detail-modal h-full min-h-0 w-full overflow-y-auto overflow-x-hidden rounded-2xl border border-transparent bg-base-100/72 ring-1 ring-inset ring-base-content/[0.055] [clip-path:inset(0_round_1rem)] relative'
+          : 'story-detail-modal bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl shadow-black w-full sm:max-w-3xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[92vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] relative'}
         style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}
         onClick={(e) => e.stopPropagation()}
       >
