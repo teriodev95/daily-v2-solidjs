@@ -268,6 +268,19 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     setCardMenu(null);
   };
 
+  const focusStoryById = (source: KanbanResponse | null, storyId: string) => {
+    if (!source) return false;
+    for (const status of COLUMN_ORDER) {
+      const index = (source[status].items as Story[]).findIndex((story) => story.id === storyId);
+      if (index >= 0) {
+        setFocusedColumn(status);
+        setFocusedIndex(index);
+        return true;
+      }
+    }
+    return false;
+  };
+
   const moveStoryFromMenu = async (story: Story, status: StoryStatus) => {
     if (story.status === status || menuBusy()) return;
     const current = buckets();
@@ -455,6 +468,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       return;
     }
     setBuckets(moved.next);
+    focusStoryById(moved.next, storyId);
     cleanupDrag();
     try {
       const updated = await api.stories.move(storyId, {
@@ -463,9 +477,11 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
         after_id: afterId,
       });
       applyRealtimeStory(updated as Story, beforeId, afterId);
+      queueMicrotask(() => focusStoryById(buckets(), storyId));
     } catch (err) {
       console.error('move failed', err);
       setBuckets(snapshot);
+      focusStoryById(snapshot, storyId);
       showToast('No se pudo mover la tarea');
     }
   };
