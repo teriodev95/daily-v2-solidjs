@@ -7,7 +7,8 @@ import { useOnceReady } from '../lib/onceReady';
 import {
   CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle, ChevronDown, ChevronRight,
   Plus, Package, Target, Play, RotateCcw, Check, CalendarDays,
-  Eye, Trash2, ArrowRightCircle, Flag, XCircle, RefreshCw, Archive, Send, Search, ClipboardList
+  Eye, Trash2, ArrowRightCircle, Flag, XCircle, RefreshCw, Archive, Send, Search, ClipboardList,
+  ExternalLink, Clipboard, EyeOff, Inbox, PlayCircle, CheckCircle2
 } from 'lucide-solid';
 import { isRecurring, isRecurringOnDate, frequencyLabel, shouldShowRecurringInActive, toLocalDateStr } from '../lib/recurrence';
 import StoryDetail from '../components/StoryDetail';
@@ -328,6 +329,8 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   // ─── Context menu ───
   const [ctxMenu, setCtxMenu] = createSignal<{ story?: Story; goal?: { id: string, text: string }; assignment?: Assignment; x: number; y: number } | null>(null);
+  const [ctxMenuBusy, setCtxMenuBusy] = createSignal<string | null>(null);
+  const [confirmingStoryDelete, setConfirmingStoryDelete] = createSignal(false);
 
   const openCtxMenu = (e: MouseEvent, story: Story) => {
     e.preventDefault();
@@ -336,6 +339,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     const x = Math.max(8, Math.min(e.clientX, window.innerWidth - menuW - 8));
     const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuH - 8));
     setCtxMenu({ story, x, y });
+    setConfirmingStoryDelete(false);
   };
 
   const openGoalCtxMenu = (e: MouseEvent, goal: { id: string, text: string }) => {
@@ -347,11 +351,42 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     setCtxMenu({ goal, x, y });
   };
 
-  const closeCtxMenu = () => setCtxMenu(null);
+  const closeCtxMenu = () => {
+    setCtxMenu(null);
+    setConfirmingStoryDelete(false);
+  };
 
   const ctxMoveAndClose = (storyId: string, status: StoryStatus) => {
     closeCtxMenu();
     moveStory(storyId, status);
+  };
+
+  const copyText = async (text: string) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  };
+
+  const ctxCopyStoryLink = async (story: Story) => {
+    if (ctxMenuBusy()) return;
+    setCtxMenuBusy('copy');
+    try {
+      const response = await api.stories.createShareToken(story.id);
+      await copyText(response.share_url);
+      closeCtxMenu();
+    } finally {
+      setCtxMenuBusy(null);
+    }
   };
 
   // ─── Delete with undo toast ───
@@ -390,6 +425,20 @@ const ReportPage: Component<ReportPageProps> = (props) => {
           return next;
         });
       });
+  };
+
+  const ctxHardDeleteStory = async (story: Story) => {
+    if (ctxMenuBusy()) return;
+    setCtxMenuBusy('delete');
+    try {
+      await api.stories.delete(story.id);
+      setLocalStories(prev => prev.filter(s => s.id !== story.id));
+      if (selectedStory()?.id === story.id) setSelectedStory(null);
+      closeCtxMenu();
+      props.onStoryDeleted?.();
+    } finally {
+      setCtxMenuBusy(null);
+    }
   };
 
   const restoreHiddenStory = async (story: Story) => {
@@ -505,14 +554,11 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     });
   }
 
-  // Status move options for context menu
-  const statusOptions = (current: StoryStatus): { label: string; status: StoryStatus; icon: any; color: string }[] => {
-    const opts: { label: string; status: StoryStatus; icon: any; color: string }[] = [];
-    if (current !== 'in_progress') opts.push({ label: 'En progreso', status: 'in_progress', icon: Play, color: 'text-ios-blue-500' });
-    if (current !== 'todo' && current !== 'backlog') opts.push({ label: 'Por hacer', status: 'todo', icon: Package, color: 'text-orange-500' });
-    if (current !== 'backlog') opts.push({ label: 'Backlog', status: 'backlog', icon: Package, color: 'text-base-content/40' });
-    if (current !== 'done') opts.push({ label: 'Completada', status: 'done', icon: Check, color: 'text-ios-green-500' });
-    return opts;
+  const statusLabels: Record<StoryStatus, string> = {
+    backlog: 'Backlog',
+    todo: 'Por hacer',
+    in_progress: 'En progreso',
+    done: 'Hecho',
   };
 
   // ─── Inline quick-add ───
@@ -1166,61 +1212,22 @@ const ReportPage: Component<ReportPageProps> = (props) => {
         {(menu) => {
           if (menu().story) {
             const s = menu().story!;
-            const moves = statusOptions(s.status as StoryStatus);
             return (
-              <div
-                class="fixed z-[100] min-w-[180px] py-1.5 rounded-xl bg-base-100 border border-base-content/[0.08] shadow-xl shadow-black/20 animate-ctx-menu"
-                style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Title */}
-                <div class="px-3 py-1.5 text-[10px] font-semibold text-base-content/30 uppercase tracking-wider truncate">
-                  {s.code || s.title.slice(0, 24)}
-                </div>
-
-                {/* Open */}
-                <button
-                  onClick={() => { closeCtxMenu(); setSelectedStory(s); }}
-                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/70 hover:bg-base-content/5 transition-colors"
-                >
-                  <Eye size={14} class="shrink-0" />
-                  Abrir detalle
-                </button>
-
-                {/* Separator */}
-                <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
-
-                {/* Move options */}
-                <div class="px-2 py-1">
-                  <span class="px-1 text-[9px] font-semibold text-base-content/20 uppercase tracking-wider">Mover a</span>
-                </div>
-                <For each={moves}>
-                  {(opt) => {
-                    const Icon = opt.icon;
-                    return (
-                      <button
-                        onClick={() => ctxMoveAndClose(s.id, opt.status)}
-                        class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm hover:bg-base-content/5 transition-colors"
-                      >
-                        <Icon size={14} class={`shrink-0 ${opt.color}`} />
-                        <span>{opt.label}</span>
-                      </button>
-                    );
-                  }}
-                </For>
-
-                {/* Separator */}
-                <div class="my-1 h-px bg-base-content/[0.06] mx-2" />
-
-                {/* Hide from report/boards */}
-                <button
-                  onClick={() => ctxDelete(s)}
-                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-sm text-base-content/55 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
-                >
-                  <Archive size={14} class="shrink-0" />
-                  Ocultar
-                </button>
-              </div>
+              <StoryContextMenu
+                story={s}
+                x={menu().x}
+                y={menu().y}
+                busy={ctxMenuBusy()}
+                statusLabels={statusLabels}
+                confirmingDelete={confirmingStoryDelete()}
+                onOpen={() => { closeCtxMenu(); setSelectedStory(s); }}
+                onCopyLink={() => void ctxCopyStoryLink(s)}
+                onMove={(status) => ctxMoveAndClose(s.id, status)}
+                onHide={() => ctxDelete(s)}
+                onRequestDelete={() => setConfirmingStoryDelete(true)}
+                onCancelDelete={() => setConfirmingStoryDelete(false)}
+                onConfirmDelete={() => void ctxHardDeleteStory(s)}
+              />
             );
           } else if (menu().goal) {
             const g = menu().goal!;
@@ -1551,6 +1558,145 @@ const ReportSkeleton: Component = () => (
         <div class="h-12 rounded-xl bg-base-200/60" />
       </div>
     </div>
+  </div>
+);
+
+const STORY_STATUS_ORDER: StoryStatus[] = ['backlog', 'todo', 'in_progress', 'done'];
+
+const STORY_MENU_STATUS_ICONS: Record<StoryStatus, Component<{ size?: number }>> = {
+  backlog: Inbox,
+  todo: Circle,
+  in_progress: PlayCircle,
+  done: CheckCircle2,
+};
+
+const StoryContextMenu: Component<{
+  story: Story;
+  x: number;
+  y: number;
+  busy: string | null;
+  statusLabels: Record<StoryStatus, string>;
+  confirmingDelete: boolean;
+  onOpen: () => void;
+  onCopyLink: () => void;
+  onMove: (status: StoryStatus) => void;
+  onHide: () => void;
+  onRequestDelete: () => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: () => void;
+}> = (props) => (
+  <div
+    role="menu"
+    class="fixed z-[100] w-[220px] overflow-hidden rounded-2xl border border-base-content/[0.08] bg-base-100 py-1.5 shadow-xl shadow-black/20 animate-ctx-menu"
+    style={{ left: `${props.x}px`, top: `${props.y}px` }}
+    onClick={(event) => event.stopPropagation()}
+  >
+    <div class="border-b border-base-content/[0.06] px-3 py-2">
+      <p class="truncate text-[12px] font-semibold text-base-content/78">{props.story.title}</p>
+      <p class="mt-0.5 text-[10.5px] font-medium text-base-content/35">
+        {props.story.code || 'Historia de usuario'}
+      </p>
+    </div>
+
+    <button
+      type="button"
+      role="menuitem"
+      onClick={props.onOpen}
+      class="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-medium text-base-content/72 transition-colors hover:bg-base-content/[0.045] hover:text-base-content"
+    >
+      <ExternalLink size={14} />
+      Abrir detalle
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      disabled={props.busy === 'copy'}
+      onClick={props.onCopyLink}
+      class="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-medium text-base-content/72 transition-colors hover:bg-base-content/[0.045] hover:text-base-content disabled:opacity-50"
+    >
+      <Clipboard size={14} />
+      {props.busy === 'copy' ? 'Copiando...' : 'Copiar enlace'}
+    </button>
+
+    <div class="my-1 border-t border-base-content/[0.06]" />
+    <div class="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-base-content/28">
+      Mover a
+    </div>
+    <For each={STORY_STATUS_ORDER}>
+      {(status) => {
+        const Icon = STORY_MENU_STATUS_ICONS[status];
+        return (
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={props.story.status === status}
+            disabled={props.story.status === status || props.busy === `move-${status}`}
+            onClick={() => props.onMove(status)}
+            class="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[12.5px] font-medium text-base-content/68 transition-colors hover:bg-base-content/[0.045] hover:text-base-content disabled:opacity-45"
+          >
+            <span class="flex items-center gap-2">
+              <Icon size={13} />
+              {props.statusLabels[status]}
+            </span>
+            <Show when={props.story.status === status}>
+              <span class="h-1.5 w-1.5 rounded-full bg-ios-blue-500" />
+            </Show>
+          </button>
+        );
+      }}
+    </For>
+
+    <div class="my-1 border-t border-base-content/[0.06]" />
+    <button
+      type="button"
+      role="menuitem"
+      onClick={props.onHide}
+      class="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-medium text-base-content/52 transition-colors hover:bg-red-500/[0.07] hover:text-red-500"
+    >
+      <EyeOff size={14} />
+      Ocultar
+    </button>
+
+    <div class="my-1 border-t border-base-content/[0.06]" />
+    <Show
+      when={props.confirmingDelete}
+      fallback={
+        <button
+          type="button"
+          role="menuitem"
+          disabled={props.busy === 'delete'}
+          onClick={props.onRequestDelete}
+          class="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-medium text-red-500/78 transition-colors hover:bg-red-500/[0.08] hover:text-red-500 disabled:opacity-50"
+        >
+          <Trash2 size={14} />
+          Eliminar
+        </button>
+      }
+    >
+      <div class="px-3 py-2">
+        <p class="text-[12px] font-semibold text-red-500">¿Eliminar esta HU?</p>
+        <p class="mt-1 text-[11px] leading-snug text-base-content/42">Esta acción borra la historia y sus datos asociados.</p>
+        <div class="mt-2 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            disabled={props.busy === 'delete'}
+            onClick={props.onCancelDelete}
+            class="rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold text-base-content/48 transition-colors hover:bg-base-content/[0.055] hover:text-base-content/75 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={props.busy === 'delete'}
+            onClick={props.onConfirmDelete}
+            class="rounded-lg bg-red-500/12 px-2.5 py-1.5 text-[11.5px] font-semibold text-red-500 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+          >
+            {props.busy === 'delete' ? 'Eliminando...' : 'Sí, eliminar'}
+          </button>
+        </div>
+      </div>
+    </Show>
   </div>
 );
 
