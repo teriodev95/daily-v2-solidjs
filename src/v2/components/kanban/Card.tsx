@@ -175,8 +175,11 @@ export const KanbanCard: Component<KanbanCardProps> = (props) => {
       onDragEnd={handleDragEnd}
       class={[
         'group relative overflow-hidden bg-base-100 border border-base-content/[0.06] rounded-[14px] px-3.5 py-3',
-        'cursor-grab active:cursor-grabbing transition-all',
-        'hover:border-base-content/15 hover:shadow-sm hover:-translate-y-px',
+        // Narrow transition: only colors/shadow. Wider `transition-all` could
+        // animate layout properties and combine with `:hover` boundary changes
+        // to flicker (had a `-translate-y-px` here that produced exactly that).
+        'cursor-grab active:cursor-grabbing transition-[border-color,box-shadow,opacity] duration-150',
+        'hover:border-base-content/15 hover:shadow-sm',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-status-todo)]/40 focus-visible:ring-offset-1',
         props.selected ? 'ring-2 ring-[var(--color-status-todo)]/40 border-transparent' : '',
         props.dragging ? 'opacity-50' : '',

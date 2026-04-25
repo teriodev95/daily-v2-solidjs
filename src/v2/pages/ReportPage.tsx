@@ -3,6 +3,7 @@ import type { Story, StoryStatus, Assignment, WeekGoal, StoryCompletion, Learnin
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
+import { useOnceReady } from '../lib/onceReady';
 import {
   CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle, ChevronDown, ChevronRight,
   Plus, Package, Target, Play, RotateCcw, Check, CalendarDays,
@@ -83,6 +84,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     () => ({ uid: userId(), _r: props.refreshKey }),
     ({ uid }) => uid ? api.learnings.list() : Promise.resolve([]),
   );
+
+  // Skeleton only on first load; realtime/refetches keep showing stale data.
+  const ready = useOnceReady(reportData, userStories);
 
   const [selectedLearning, setSelectedLearning] = createSignal<Learning | null>(null);
 
@@ -766,7 +770,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
           </div>
         }
       />
-      <Show when={!reportData.loading && !userStories.loading} fallback={<ReportSkeleton />}>
+      <Show when={ready()} fallback={<ReportSkeleton />}>
         <div class="space-y-6">
 
           {/* Unified Goals & Assignments bar (sticky) */}

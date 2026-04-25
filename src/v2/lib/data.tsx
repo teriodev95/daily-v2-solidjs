@@ -1,5 +1,5 @@
 import {
-  createContext, useContext, createResource, Suspense,
+  createContext, useContext, createResource, createMemo, Show,
   type ParentComponent, type Accessor,
 } from 'solid-js';
 import type { User, Project } from '../types';
@@ -30,27 +30,43 @@ export const DataProvider: ParentComponent = (props) => {
   });
   const [projectList, { refetch: refetchProjects }] = createResource(() => api.projects.list());
 
+  // Reading `.latest` keeps the previous value during refetches, so consumers
+  // never re-suspend after the initial load. The full-screen "Cargando datos…"
+  // overlay is gated by `firstReady` (createMemo accumulator), which latches
+  // true once both resources have resolved at least once and never goes back.
   const value: DataContextValue = {
-    users: () => users() ?? [],
-    projects: () => projectList() ?? [],
-    getUserById: (id: string) => (users() ?? []).find(u => u.id === id),
-    getProjectById: (id: string) => (projectList() ?? []).find(p => p.id === id),
+    users: () => users.latest ?? [],
+    projects: () => projectList.latest ?? [],
+    getUserById: (id: string) => (users.latest ?? []).find(u => u.id === id),
+    getProjectById: (id: string) => (projectList.latest ?? []).find(p => p.id === id),
     refetchUsers: () => refetchUsers(),
     refetchProjects: () => refetchProjects(),
   };
 
+  // Latch on first settle (ready OR errored). A failed fetch shouldn't leave
+  // the user staring at an indefinite "Cargando datos…" — the app renders with
+  // empty arrays and the page-level UX surfaces the issue contextually.
+  const firstReady = createMemo<boolean>((prev) => {
+    if (prev) return true;
+    const settled = (s: string) => s === 'ready' || s === 'errored';
+    return settled(users.state) && settled(projectList.state);
+  }, false);
+
   return (
     <DataContext.Provider value={value}>
-      <Suspense fallback={
-        <div class="min-h-screen flex items-center justify-center bg-base-100">
-          <div class="flex flex-col items-center gap-3">
-            <span class="loading loading-spinner loading-md text-ios-blue-500" />
-            <span class="text-sm text-base-content/40">Cargando datos...</span>
+      <Show
+        when={firstReady()}
+        fallback={
+          <div class="min-h-screen flex items-center justify-center bg-base-100">
+            <div class="flex flex-col items-center gap-3">
+              <span class="loading loading-spinner loading-md text-ios-blue-500" />
+              <span class="text-sm text-base-content/40">Cargando datos...</span>
+            </div>
           </div>
-        </div>
-      }>
+        }
+      >
         {props.children}
-      </Suspense>
+      </Show>
     </DataContext.Provider>
   );
 };

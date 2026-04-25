@@ -6,6 +6,7 @@ import MobileTodayPage from '../pages/MobileTodayPage';
 import MobileCalendarPage from '../pages/MobileCalendarPage';
 import MobileQuickAddSheet from '../components/MobileQuickAddSheet';
 import InstallPrompt from '../../components/InstallPrompt';
+import SyncIndicator from '../../components/SyncIndicator';
 import { isDark, toggleTheme } from '../../lib/theme';
 
 type MobileTab = 'today' | 'calendar';
@@ -123,6 +124,8 @@ const MobileShell: Component = () => {
       />
 
       <InstallPrompt />
+
+      <SyncIndicator />
     </div>
   );
 };

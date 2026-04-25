@@ -1,4 +1,5 @@
 import { createSignal, createResource, For, Show, onCleanup, createMemo, useTransition, type Component } from 'solid-js';
+import { useOnceReady } from '../lib/onceReady';
 import type { WikiArticle } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
@@ -39,6 +40,10 @@ const WikiPage: Component<Props> = (props) => {
     () => ({ pid: selectedProjectId(), tag: selectedTag(), _r: props.refreshKey }),
     ({ pid, tag }) => pid ? api.wiki.list(pid, tag ?? undefined) : Promise.resolve([]),
   );
+
+  // Latch: only show "no hay artículos" once we've loaded at least once.
+  // Prevents the empty-state copy from flashing during refetches.
+  const articlesReady = useOnceReady(articles);
 
   api.team.getSettings().then(s => setSettings(s)).catch(() => {});
   api.auth.me().then(u => setCurrentUser(u as any)).catch(() => {});
@@ -407,7 +412,7 @@ const WikiPage: Component<Props> = (props) => {
               </div>
 
               {/* Estado Vacío (Empty State) Hermoso */}
-              <Show when={!articles.loading && filteredArticles().length === 0}>
+              <Show when={articlesReady() && filteredArticles().length === 0}>
                 <div class="flex flex-col items-center justify-center py-20 px-4 text-center mt-8 bg-base-content/[0.02] rounded-3xl border border-dashed border-base-content/[0.08]">
                   <div class="w-16 h-16 mb-5 rounded-full bg-base-content/[0.04] flex items-center justify-center">
                     <Ghost size={32} class="text-base-content/20 shrink-0" strokeWidth={1.5} />

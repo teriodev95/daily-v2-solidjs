@@ -25,6 +25,7 @@ import CopyForAgentButton from '../../components/CopyForAgentButton';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../../lib/mermaid';
 import { isDark } from '../../lib/theme';
 import { onRealtime } from '../../lib/realtime';
+import { createPulse } from '../../lib/usePulse';
 
 interface MobileStoryDetailProps {
   story: Story;
@@ -72,6 +73,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   const [confirming, setConfirming] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
   let editorEl: HTMLElement | undefined;
+  let titleRef: HTMLTextAreaElement | undefined;
   let editorFocused = false;
   let unmounted = false;
   const mermaidOpts = { shouldAbort: () => unmounted || editorFocused };
@@ -81,6 +83,9 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   }, { defer: true }));
   const [archiving, setArchiving] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal('');
+
+  // Per-field pulse for remote updates (matches desktop behavior).
+  const { pulse, isPulsing } = createPulse(800);
 
   let dateInputRef!: HTMLInputElement;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -142,28 +147,63 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
     document.addEventListener('paste', handlePaste);
     onCleanup(() => document.removeEventListener('paste', handlePaste));
 
-    const refetchDetail = async () => {
+    const refetchDetail = async (opts: { initial?: boolean } = {}) => {
       try {
         const detail = await api.stories.get(props.story.id);
-        setDueDate(detail.due_date || '');
-        setStatus(detail.status);
-        setEstimate(detail.estimate || 0);
-        setAssigneeId(detail.assignee_id || '');
-        setAssigneeIds(detail.assignees ?? []);
-        setProjectId((detail as Story).project_id || '');
-        setCriteriaList(detail.criteria ?? []);
+        const initial = opts.initial ?? false;
+        const apply = <T,>(key: string, prev: T, next: T, set: (v: T) => void) => {
+          if (prev === next) return;
+          set(next);
+          if (!initial) pulse(key);
+        };
+
+        apply('due_date', dueDate(), detail.due_date || '', setDueDate);
+        apply('status', status(), detail.status, setStatus);
+        apply('estimate', estimate(), detail.estimate || 0, setEstimate);
+        apply('assignee_id', assigneeId(), detail.assignee_id || '', setAssigneeId);
+        apply('project_id', projectId(), (detail as Story).project_id || '', setProjectId);
+
+        const newAssignees = detail.assignees ?? [];
+        const oldKey = [...assigneeIds()].sort().join(',');
+        const newKey = [...newAssignees].sort().join(',');
+        if (oldKey !== newKey) {
+          setAssigneeIds(newAssignees);
+          if (!initial) pulse('assignees');
+        }
+
+        const criteriaKey = (list: AcceptanceCriteria[]) =>
+          [...list]
+            .sort((a, b) => (a.sort_order - b.sort_order) || a.id.localeCompare(b.id))
+            .map(c => `${c.id}:${c.is_met}:${c.text}:${c.sort_order}`)
+            .join('|');
+        const newCriteriaList = detail.criteria ?? [];
+        if (criteriaKey(criteriaList()) !== criteriaKey(newCriteriaList)) {
+          setCriteriaList(newCriteriaList);
+          if (!initial) pulse('criteria');
+        }
+
         // Fields with active editors: skip if focused, otherwise update.
         const active = document.activeElement as HTMLElement | null;
-        if (active !== editorEl) setContent(detail.description || '');
-        if (!active || active.tagName !== 'TEXTAREA') {
-          setTitle(detail.title);
+        if (initial || active !== editorEl) {
+          const nextContent = detail.description || '';
+          if (nextContent !== content()) {
+            setContent(nextContent);
+            if (!initial) pulse('content');
+          }
+        }
+        const titleFocused = !!titleRef && active === titleRef;
+        if (initial || !titleFocused) {
+          if (detail.title !== title()) {
+            setTitle(detail.title);
+            if (!initial) pulse('title');
+          }
         }
       } catch {
         // Detail fetch is additive.
       }
     };
 
-    await refetchDetail();
+    await refetchDetail({ initial: true });
     setDetailLoaded(true);
 
     // Live sync: refetch this story when the server pushes `story.updated`
@@ -312,12 +352,16 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                 <div class="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => dateInputRef?.showPicker?.()}
+                    classList={{ 'animate-remote-pulse': isPulsing('due_date') }}
                     class="inline-flex items-center gap-1.5 rounded-full bg-base-content/[0.05] px-3 py-1.5 text-[11px] font-semibold text-base-content/65"
                   >
                     <CalendarDays size={12} />
                     {formatDateLabel(dueDate())}
                   </button>
-                  <span class="inline-flex items-center gap-1.5 rounded-full bg-base-content/[0.05] px-3 py-1.5 text-[11px] font-semibold text-base-content/65">
+                  <span
+                    classList={{ 'animate-remote-pulse': isPulsing('status') }}
+                    class="inline-flex items-center gap-1.5 rounded-full bg-base-content/[0.05] px-3 py-1.5 text-[11px] font-semibold text-base-content/65"
+                  >
                     <span class={`h-2 w-2 rounded-full ${
                       status() === 'done'
                         ? 'bg-ios-green-500'
@@ -331,6 +375,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                   </span>
                   <Show when={project()}>
                     <span
+                      classList={{ 'animate-remote-pulse': isPulsing('project_id') }}
                       class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold"
                       style={{ 'background-color': `${project()!.color}18`, color: project()!.color }}
                     >
@@ -362,18 +407,23 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
           </div>
 
           <div class="flex-1 overflow-y-auto px-4 py-4 pb-[calc(7rem+env(safe-area-inset-bottom))] space-y-5">
-            <textarea
-              value={title()}
-              rows={1}
-              class="w-full resize-none bg-transparent text-[29px] font-semibold leading-[1.05] tracking-tight text-base-content/92 outline-none placeholder:text-base-content/20"
-              placeholder="Nueva tarea"
-              ref={(element) => requestAnimationFrame(() => autoResize(element))}
-              onInput={(event) => {
-                setTitle(event.currentTarget.value);
-                autoResize(event.currentTarget);
-                if (event.currentTarget.value.trim()) scheduleSave({ title: event.currentTarget.value });
-              }}
-            />
+            <div
+              classList={{ 'animate-remote-pulse': isPulsing('title') }}
+              class="rounded-xl"
+            >
+              <textarea
+                value={title()}
+                rows={1}
+                class="w-full resize-none bg-transparent text-[29px] font-semibold leading-[1.05] tracking-tight text-base-content/92 outline-none placeholder:text-base-content/20"
+                placeholder="Nueva tarea"
+                ref={(element) => { titleRef = element; requestAnimationFrame(() => autoResize(element)); }}
+                onInput={(event) => {
+                  setTitle(event.currentTarget.value);
+                  autoResize(event.currentTarget);
+                  if (event.currentTarget.value.trim()) scheduleSave({ title: event.currentTarget.value });
+                }}
+              />
+            </div>
 
             <Show when={props.story.frequency}>
               <div class="inline-flex items-center gap-2 rounded-2xl border border-purple-500/18 bg-purple-500/10 px-3 py-2 text-[12px] font-semibold text-purple-400">
@@ -389,6 +439,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                   setAssigneeId(currentId);
                   await saveImmediate({ assignee_id: currentId || null });
                 }}
+                classList={{ 'animate-remote-pulse': isPulsing('assignee_id') || isPulsing('assignees') }}
                 class={`rounded-[24px] border px-4 py-3 text-left transition-all ${
                   assigneeId() === auth.user()?.id
                     ? 'border-ios-blue-500/25 bg-ios-blue-500/12 text-ios-blue-400'
@@ -400,7 +451,10 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                 <p class="mt-1 text-[11px] text-base-content/35">{auth.user()?.name.split(' ')[0] ?? 'Yo'}</p>
               </button>
 
-              <div class="rounded-[24px] border border-base-content/[0.06] bg-base-content/[0.03] px-4 py-3">
+              <div
+                classList={{ 'animate-remote-pulse': isPulsing('estimate') }}
+                class="rounded-[24px] border border-base-content/[0.06] bg-base-content/[0.03] px-4 py-3"
+              >
                 <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-base-content/25">Estimación</p>
                 <div class="mt-2 flex items-center gap-2">
                   <span class="text-[22px]">{estimates.find((item) => item.value === estimate())?.emoji ?? '•'}</span>
@@ -622,23 +676,31 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
             </section>
 
             {/* Content canvas */}
-            <ContentEditor
-              content={content()}
-              placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
-              onChange={(md) => {
-                scheduleSave({ description: md });
-              }}
-              class="px-1"
-              onEditorMount={(el) => {
-                editorEl = el;
-                void renderMermaid(el, isDark(), mermaidOpts);
-              }}
-              onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
-              onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
-            />
+            <div
+              classList={{ 'animate-remote-pulse': isPulsing('content') }}
+              class="rounded-xl"
+            >
+              <ContentEditor
+                content={content()}
+                placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
+                onChange={(md) => {
+                  scheduleSave({ description: md });
+                }}
+                class="px-1"
+                onEditorMount={(el) => {
+                  editorEl = el;
+                  void renderMermaid(el, isDark(), mermaidOpts);
+                }}
+                onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
+                onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
+              />
+            </div>
 
             <Show when={criteriaList().length > 0}>
-              <section class="space-y-3 rounded-[28px] border border-base-content/[0.07] bg-base-content/[0.03] p-4">
+              <section
+                classList={{ 'animate-remote-pulse': isPulsing('criteria') }}
+                class="space-y-3 rounded-[28px] border border-base-content/[0.07] bg-base-content/[0.03] p-4"
+              >
                 <div class="flex items-center gap-2 text-base-content/45">
                   <ClipboardCheck size={14} />
                   <h3 class="text-[11px] font-bold uppercase tracking-[0.12em]">

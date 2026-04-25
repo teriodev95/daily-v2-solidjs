@@ -21,6 +21,7 @@ import StoryDetail from './components/StoryDetail';
 import InstallPrompt from './components/InstallPrompt';
 import AgentBootstrapModal from './components/AgentBootstrapModal';
 import UpdateToast from './components/UpdateToast';
+import SyncIndicator from './components/SyncIndicator';
 import MobileShell from './mobile/shell/MobileShell';
 import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
@@ -30,6 +31,24 @@ type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calend
 
 const AppShell: Component = () => {
   const auth = useAuth();
+  const user = () => auth.user();
+
+  // Realtime: connect when user is available, disconnect otherwise. Lives
+  // above the mobile early-return so both desktop and mobile shells share
+  // the same connection — without this, mobile users never receive Centrifugo
+  // events and live updates / sync indicator stay silent.
+  createEffect(() => {
+    const u = user();
+    if (u?.team_id) {
+      setRealtimeActor(u.id);
+      void connectRealtime(u.team_id);
+    } else {
+      setRealtimeActor(null);
+      disconnectRealtime();
+    }
+  });
+  onCleanup(() => disconnectRealtime());
+
   // Default to 'tasks' on mobile, 'report' on desktop
   const isMobile = window.innerWidth < 640;
   if (isMobile) return <MobileShell />;
@@ -102,21 +121,6 @@ const AppShell: Component = () => {
     }
     return t;
   };
-
-  const user = () => auth.user();
-
-  // Realtime: connect when user is available, disconnect otherwise.
-  createEffect(() => {
-    const u = user();
-    if (u?.team_id) {
-      setRealtimeActor(u.id);
-      void connectRealtime(u.team_id);
-    } else {
-      setRealtimeActor(null);
-      disconnectRealtime();
-    }
-  });
-  onCleanup(() => disconnectRealtime());
 
   // Mirror the local activeTab signal into the shared one so pages can tell
   // whether they're the foreground tab and skip realtime refetches if not.
@@ -373,6 +377,9 @@ const AppShell: Component = () => {
 
       {/* PWA install prompt */}
       <InstallPrompt />
+
+      {/* Realtime sync indicator (top-right, idle = invisible) */}
+      <SyncIndicator />
     </div>
   );
 };
