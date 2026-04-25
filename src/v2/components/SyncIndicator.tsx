@@ -13,6 +13,20 @@ type SyncState = 'idle' | 'syncing' | 'synced' | 'offline';
 
 const SYNCING_MIN_MS = 350; // keep "Sincronizando" visible at least this long
 const SYNCED_HOLD_MS = 1100; // how long "Actualizado" stays before fading
+const DATA_EVENT_PREFIXES = [
+  'assignment.',
+  'completion.',
+  'doc.',
+  'goal.',
+  'project.',
+  'report.',
+  'story.',
+  'team.',
+  'wiki.',
+];
+
+const shouldShowSyncForEvent = (type: string): boolean =>
+  DATA_EVENT_PREFIXES.some((prefix) => type.startsWith(prefix));
 
 const SyncIndicator: Component = () => {
   const [state, setState] = createSignal<SyncState>('idle');
@@ -38,8 +52,8 @@ const SyncIndicator: Component = () => {
       }
     });
 
-    const unsubEvent = onRealtime(() => {
-      if (!online) return;
+    const unsubEvent = onRealtime((event) => {
+      if (!online || !shouldShowSyncForEvent(event.type)) return;
       clearTimeout(toSyncedTimer);
       clearTimeout(toIdleTimer);
       setState('syncing');
