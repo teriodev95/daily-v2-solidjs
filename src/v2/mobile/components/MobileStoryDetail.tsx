@@ -2,7 +2,8 @@ import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type Com
 import type { AcceptanceCriteria, Story, User } from '../../types';
 import { useAuth } from '../../lib/auth';
 import { useData } from '../../lib/data';
-import { api } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
+import ConflictBanner from '../../components/ConflictBanner';
 import {
   Archive,
   CalendarDays,
@@ -19,13 +20,16 @@ import {
   X,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../../lib/recurrence';
+import { formatTimeAgo } from '../../lib/relativeDate';
 import AttachmentSection from '../../components/AttachmentSection';
 import { ContentEditor } from '../../components/ContentEditor';
 import CopyForAgentButton from '../../components/CopyForAgentButton';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../../lib/mermaid';
 import { isDark } from '../../lib/theme';
-import { onRealtime } from '../../lib/realtime';
+import { onRealtime, onRealtimeStatus } from '../../lib/realtime';
 import { createPulse } from '../../lib/usePulse';
+import { usePresence, type PresenceMode } from '../../lib/presence';
+import PresenceAvatars from '../../components/PresenceAvatars';
 
 interface MobileStoryDetailProps {
   story: Story;
@@ -87,45 +91,92 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   // Per-field pulse for remote updates (matches desktop behavior).
   const { pulse, isPulsing } = createPulse(800);
 
+  // Presence: editing mode while title or content is focused.
+  const [titleHasFocus, setTitleHasFocus] = createSignal(false);
+  const [editorActive, setEditorActive] = createSignal(false);
+  const presenceMode = (): PresenceMode =>
+    titleHasFocus() || editorActive() ? 'editing' : 'viewing';
+  usePresence(`story:${props.story.id}`, () => true, presenceMode);
+
   let dateInputRef!: HTMLInputElement;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
   let attachmentUploadRef: ((file: File) => Promise<void>) | undefined;
+  // Captured by scheduleSave; lets onCleanup fire any pending payload before
+  // unmount so a fast close doesn't drop the user's last edits.
+  let pendingFlush: (() => void) | undefined;
+
+  // Optimistic concurrency for `description`. See StoryDetail.tsx for context.
+  const [baseVersion, setBaseVersion] = createSignal<string>(props.story.updated_at);
+  const [pendingRemoteContent, setPendingRemoteContent] = createSignal<string | null>(null);
 
   onCleanup(() => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
+    pendingFlush?.();
     document.body.style.overflow = '';
   });
+
+  const buildPayload = (fields: Record<string, unknown>): Record<string, unknown> =>
+    'description' in fields ? { ...fields, expected_updated_at: baseVersion() } : fields;
+
+  const handleSaveError = (err: unknown, fields: Record<string, unknown>): boolean => {
+    if (
+      'description' in fields &&
+      err instanceof ApiError &&
+      err.status === 409 &&
+      err.body?.current?.description !== undefined
+    ) {
+      const remote = err.body.current;
+      if (remote.updated_at) setBaseVersion(remote.updated_at);
+      setPendingRemoteContent(remote.description ?? '');
+      setSaveStatus('idle');
+      return true;
+    }
+    return false;
+  };
 
   const scheduleSave = (fields: Record<string, unknown>) => {
     clearTimeout(debounceTimer);
     setSaveStatus('idle');
-    debounceTimer = setTimeout(async () => {
-      setSaveStatus('saving');
-      try {
-        await api.stories.update(props.story.id, fields);
-        props.onUpdated?.(props.story.id, fields);
-        setSaveStatus('saved');
-        clearTimeout(savedTimer);
-        savedTimer = setTimeout(() => setSaveStatus('idle'), 1500);
-      } catch {
-        setSaveStatus('idle');
-      }
-    }, 600);
+    const fire = () => {
+      pendingFlush = undefined;
+      void saveImmediate(fields);
+    };
+    pendingFlush = fire;
+    debounceTimer = setTimeout(fire, 600);
   };
 
   const saveImmediate = async (fields: Record<string, unknown>) => {
     setSaveStatus('saving');
     try {
-      await api.stories.update(props.story.id, fields);
+      const updated = await api.stories.update(props.story.id, buildPayload(fields));
+      if ((updated as any)?.updated_at) setBaseVersion((updated as any).updated_at);
       props.onUpdated?.(props.story.id, fields);
       setSaveStatus('saved');
       clearTimeout(savedTimer);
       savedTimer = setTimeout(() => setSaveStatus('idle'), 1500);
-    } catch {
-      setSaveStatus('idle');
+    } catch (err) {
+      if (!handleSaveError(err, fields)) setSaveStatus('idle');
     }
+  };
+
+  const acceptRemote = () => {
+    const remote = pendingRemoteContent();
+    if (remote === null) return;
+    // Defensive: ContentEditor skips its sync effect while focused. Blur so
+    // the remote text definitely renders even if the user reached the
+    // banner via keyboard navigation.
+    editorEl?.blur();
+    setContent(remote);
+    setPendingRemoteContent(null);
+    pulse('content');
+  };
+
+  const keepMine = () => {
+    setPendingRemoteContent(null);
+    clearTimeout(debounceTimer);
+    void saveImmediate({ description: content() });
   };
 
   onMount(async () => {
@@ -184,13 +235,17 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
 
         // Fields with active editors: skip if focused, otherwise update.
         const active = document.activeElement as HTMLElement | null;
+        const nextContent = detail.description || '';
         if (initial || active !== editorEl) {
-          const nextContent = detail.description || '';
           if (nextContent !== content()) {
             setContent(nextContent);
             if (!initial) pulse('content');
           }
+          if (!initial) setPendingRemoteContent(null);
+        } else if (nextContent !== content()) {
+          setPendingRemoteContent(nextContent);
         }
+        if ((detail as any).updated_at) setBaseVersion((detail as any).updated_at);
         const titleFocused = !!titleRef && active === titleRef;
         if (initial || !titleFocused) {
           if (detail.title !== title()) {
@@ -214,6 +269,16 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
       void refetchDetail();
     });
     onCleanup(unsub);
+
+    // Catch up after WS reconnects: events emitted while offline are lost,
+    // so re-pull on every false→true transition. Skip the first synchronous
+    // emission — we just fetched.
+    let firstStatusEmission = true;
+    const unsubStatus = onRealtimeStatus((on) => {
+      if (firstStatusEmission) { firstStatusEmission = false; return; }
+      if (on) void refetchDetail();
+    });
+    onCleanup(unsubStatus);
   });
 
   const activeProjects = () => data.projects().filter((project) => project.status === 'active');
@@ -393,6 +458,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
               </div>
 
               <div class="flex items-center gap-1.5 shrink-0">
+                <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={2} />
                 <CopyForAgentButton
                   entity={{ type: 'story', id: props.story.id, title: title() }}
                 />
@@ -417,6 +483,8 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                 class="w-full resize-none bg-transparent text-[29px] font-semibold leading-[1.05] tracking-tight text-base-content/92 outline-none placeholder:text-base-content/20"
                 placeholder="Nueva tarea"
                 ref={(element) => { titleRef = element; requestAnimationFrame(() => autoResize(element)); }}
+                onFocus={() => setTitleHasFocus(true)}
+                onBlur={() => setTitleHasFocus(false)}
                 onInput={(event) => {
                   setTitle(event.currentTarget.value);
                   autoResize(event.currentTarget);
@@ -676,6 +744,13 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
             </section>
 
             {/* Content canvas */}
+            <Show when={pendingRemoteContent() !== null}>
+              <ConflictBanner
+                actorName={null}
+                onAcceptRemote={acceptRemote}
+                onKeepMine={keepMine}
+              />
+            </Show>
             <div
               classList={{ 'animate-remote-pulse': isPulsing('content') }}
               class="rounded-xl"
@@ -691,8 +766,8 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                   editorEl = el;
                   void renderMermaid(el, isDark(), mermaidOpts);
                 }}
-                onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
-                onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
+                onEditorFocus={() => { editorFocused = true; setEditorActive(true); if (editorEl) revertMermaid(editorEl); }}
+                onEditorBlur={() => { editorFocused = false; setEditorActive(false); if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
               />
             </div>
 
@@ -746,6 +821,19 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                 }}
               />
             </Show>
+
+            {/* Created/updated metadata — small footer above destructive actions. */}
+            <div class="flex items-center gap-2 px-1 text-[11px] text-base-content/30 font-medium">
+              <span title={new Date(props.story.created_at).toLocaleString('es-MX')}>
+                Creado {formatTimeAgo(props.story.created_at)}
+              </span>
+              <Show when={props.story.updated_at && props.story.updated_at !== props.story.created_at}>
+                <span class="text-base-content/15">·</span>
+                <span title={new Date(props.story.updated_at).toLocaleString('es-MX')}>
+                  Actualizado {formatTimeAgo(props.story.updated_at)}
+                </span>
+              </Show>
+            </div>
 
             <section class="space-y-3 rounded-[28px] border border-base-content/[0.07] bg-base-content/[0.03] p-4">
               <Show when={canArchive()}>

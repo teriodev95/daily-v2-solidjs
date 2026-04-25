@@ -22,6 +22,8 @@ import InstallPrompt from './components/InstallPrompt';
 import AgentBootstrapModal from './components/AgentBootstrapModal';
 import UpdateToast from './components/UpdateToast';
 import SyncIndicator from './components/SyncIndicator';
+import OnlineUsers from './components/OnlineUsers';
+import { usePresence } from './lib/presence';
 import MobileShell from './mobile/shell/MobileShell';
 import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
@@ -48,6 +50,12 @@ const AppShell: Component = () => {
     }
   });
   onCleanup(() => disconnectRealtime());
+
+  // Team-wide online presence: every authenticated session beats on the
+  // shared `online` scope. Mobile users beat too (so desktop teammates see
+  // them in the OnlineUsers widget), but the widget itself only renders
+  // on desktop.
+  usePresence('online', () => !!user(), () => 'viewing');
 
   // Default to 'tasks' on mobile, 'report' on desktop
   const isMobile = window.innerWidth < 640;
@@ -380,6 +388,9 @@ const AppShell: Component = () => {
 
       {/* Realtime sync indicator (top-right, idle = invisible) */}
       <SyncIndicator />
+
+      {/* Online teammates pill (bottom-right, desktop only) */}
+      <OnlineUsers />
     </div>
   );
 };

@@ -289,8 +289,8 @@ const Column: Component<ColumnProps> = (props) => {
       }
     >
       <div
-        class={`group flex-1 min-w-0 flex flex-col gap-2 rounded-xl p-1.5 transition-all duration-200 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
-          props.isDragOver ? 'ring-2 ring-inset scale-[1.01]' : ''
+        class={`group flex-1 min-w-0 flex flex-col gap-2 rounded-xl p-1.5 transition-[background-color,box-shadow] duration-150 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+          props.isDragOver ? 'ring-2 ring-inset' : ''
         }`}
         role="region"
         aria-label={props.label}

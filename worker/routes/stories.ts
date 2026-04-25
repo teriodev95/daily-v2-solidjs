@@ -401,6 +401,31 @@ stories.patch('/:id', async (c) => {
   delete (fields as any).purpose;
   delete (fields as any).objective;
 
+  const expectedUpdatedAt = (fields as any).expected_updated_at;
+  delete (fields as any).expected_updated_at;
+
+  if (typeof expectedUpdatedAt === 'string') {
+    const [existing] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
+    if (existing && existing.updated_at !== expectedUpdatedAt) {
+      const currentCriteria = await db
+        .select()
+        .from(schema.acceptanceCriteria)
+        .where(eq(schema.acceptanceCriteria.story_id, id));
+      const currentAssigneeLinks = await db
+        .select()
+        .from(schema.storyAssignees)
+        .where(eq(schema.storyAssignees.story_id, id));
+      return c.json({
+        error: 'version_conflict',
+        current: parseRecurrenceDays({
+          ...existing,
+          assignees: currentAssigneeLinks.map(a => a.user_id),
+          criteria: currentCriteria,
+        }),
+      }, 409);
+    }
+  }
+
   // Validate known fields
   if (fields.priority !== undefined) {
     const validPriorities = ['low', 'medium', 'high', 'critical'];
@@ -429,7 +454,8 @@ stories.patch('/:id', async (c) => {
 
   if (assignees !== undefined) {
     const extraAssignees = Array.isArray(assignees)
-      ? [...new Set(assignees.filter((uid): uid is string => typeof uid === 'string' && uid && uid !== storyAfterFields?.assignee_id))]
+      ? [...new Set(assignees.filter((uid): uid is string =>
+          typeof uid === 'string' && uid.length > 0 && uid !== storyAfterFields?.assignee_id))]
       : [];
 
     await db.delete(schema.storyAssignees).where(eq(schema.storyAssignees.story_id, id));

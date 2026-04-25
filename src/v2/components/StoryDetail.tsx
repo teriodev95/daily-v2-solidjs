@@ -1,14 +1,16 @@
 import { createSignal, createEffect, on, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import { onRealtime } from '../lib/realtime';
+import { onRealtime, onRealtimeStatus } from '../lib/realtime';
 import type { Story, AcceptanceCriteria, User } from '../types';
 import { useData } from '../lib/data';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
+import ConflictBanner from '../components/ConflictBanner';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
   ClipboardCheck, Trash2,
   Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban, Archive, AlertCircle,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
+import { formatTimeAgo } from '../lib/relativeDate';
 import AttachmentSection from './AttachmentSection';
 import { ContentEditor } from './ContentEditor';
 import DatePickerPopover from './DatePickerPopover';
@@ -16,6 +18,8 @@ import CopyForAgentButton from './CopyForAgentButton';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
 import { isDark } from '../lib/theme';
 import { createPulse } from '../lib/usePulse';
+import { usePresence, type PresenceMode } from '../lib/presence';
+import PresenceAvatars from '../components/PresenceAvatars';
 
 const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   critical: { label: 'Crítica', color: 'text-red-500', bg: 'bg-red-500/10', icon: Flame },
@@ -129,45 +133,104 @@ const StoryDetail: Component<Props> = (props) => {
   // Per-field pulse for remote updates (Notion-style "someone else touched this").
   const { pulse, isPulsing } = createPulse(800);
 
+  // Presence: announce viewing/editing on the same channel everyone else
+  // is subscribed to. The mode flips to 'editing' while title or content
+  // is focused; resting is 'viewing'.
+  const [titleHasFocus, setTitleHasFocus] = createSignal(false);
+  const [editorActive, setEditorActive] = createSignal(false);
+  const presenceMode = (): PresenceMode =>
+    titleHasFocus() || editorActive() ? 'editing' : 'viewing';
+  usePresence(`story:${props.story.id}`, () => true, presenceMode);
+
   // Save state
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>('idle');
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  // Captured by `scheduleSave`; lets `onCleanup` fire any pending payload
+  // before unmount so a fast modal close doesn't drop the user's last edits.
+  let pendingFlush: (() => void) | undefined;
+
+  // Optimistic concurrency for `description`. We track the `updated_at` we
+  // observed last and send it as `expected_updated_at` on description PATCHes.
+  // On 409 the server returns the current row; we surface a banner so the user
+  // can choose to take the remote text or push their local on top.
+  const [baseVersion, setBaseVersion] = createSignal<string>(props.story.updated_at);
+  const [pendingRemoteContent, setPendingRemoteContent] = createSignal<string | null>(null);
 
   onCleanup(() => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
+    // Last-ditch flush: fire-and-forget any pending debounced save before
+    // the modal is gone. Any error/banner UI is moot at this point.
+    pendingFlush?.();
     document.body.style.overflow = '';
   });
+
+  // Description PATCHes piggyback `expected_updated_at`; other fields stay
+  // last-write-wins so we don't surprise users editing chips.
+  const buildPayload = (fields: Record<string, unknown>): Record<string, unknown> =>
+    'description' in fields ? { ...fields, expected_updated_at: baseVersion() } : fields;
+
+  const handleSaveError = (err: unknown, fields: Record<string, unknown>): boolean => {
+    if (
+      'description' in fields &&
+      err instanceof ApiError &&
+      err.status === 409 &&
+      err.body?.current?.description !== undefined
+    ) {
+      const remote = err.body.current;
+      // Bump the base so the next attempt (e.g. "Pisar con la mía") will pass.
+      if (remote.updated_at) setBaseVersion(remote.updated_at);
+      setPendingRemoteContent(remote.description ?? '');
+      setSaveStatus('idle');
+      return true;
+    }
+    return false;
+  };
 
   const scheduleSave = (fields: Record<string, unknown>) => {
     clearTimeout(debounceTimer);
     setSaveStatus('idle');
-    debounceTimer = setTimeout(async () => {
-      setSaveStatus('saving');
-      try {
-        await api.stories.update(props.story.id, fields);
-        setSaveStatus('saved');
-        props.onUpdated?.(props.story.id, fields);
-        clearTimeout(savedTimer);
-        savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
-      } catch {
-        setSaveStatus('error');
-      }
-    }, 800);
+    const fire = () => {
+      pendingFlush = undefined;
+      void saveImmediate(fields);
+    };
+    pendingFlush = fire;
+    debounceTimer = setTimeout(fire, 800);
   };
 
   const saveImmediate = async (fields: Record<string, unknown>) => {
     setSaveStatus('saving');
     try {
-      await api.stories.update(props.story.id, fields);
+      const updated = await api.stories.update(props.story.id, buildPayload(fields));
+      if ((updated as any)?.updated_at) setBaseVersion((updated as any).updated_at);
       setSaveStatus('saved');
       props.onUpdated?.(props.story.id, fields);
       clearTimeout(savedTimer);
       savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch {
-      setSaveStatus('error');
+    } catch (err) {
+      if (!handleSaveError(err, fields)) setSaveStatus('error');
     }
+  };
+
+  const acceptRemote = () => {
+    const remote = pendingRemoteContent();
+    if (remote === null) return;
+    // Defensive: ContentEditor skips its sync effect while the editor has
+    // focus, so blur explicitly to guarantee the remote text is rendered
+    // even if the user reached the banner via keyboard navigation.
+    editorEl?.blur();
+    setContent(remote);
+    setPendingRemoteContent(null);
+    pulse('content');
+  };
+
+  const keepMine = () => {
+    setPendingRemoteContent(null);
+    // Cancel any debounced save and force one immediately with the current
+    // baseVersion (which now matches the remote, so the PATCH will succeed).
+    clearTimeout(debounceTimer);
+    void saveImmediate({ description: content() });
   };
 
   // Attachment paste upload ref
@@ -246,13 +309,22 @@ const StoryDetail: Component<Props> = (props) => {
 
         // Skip fields the user is actively editing so we don't stomp on typing.
         const active = document.activeElement as HTMLElement | null;
+        const nextContent = detail.description || '';
         if (initial || active !== editorEl) {
-          const nextContent = detail.description || '';
           if (nextContent !== content()) {
             setContent(nextContent);
             if (!initial) pulse('content');
           }
+          // No conflict pending while editor is unfocused: clear any leftover.
+          if (!initial) setPendingRemoteContent(null);
+        } else if (nextContent !== content()) {
+          // User has the editor focused and the remote content diverges from
+          // what they're typing. Don't stomp — surface a banner instead.
+          setPendingRemoteContent(nextContent);
         }
+        // Always advance baseVersion: the user has been notified (via banner
+        // or applied content), so future saves shouldn't 409 on this version.
+        if ((detail as any).updated_at) setBaseVersion((detail as any).updated_at);
         const titleFocused = !!titleRef && active === titleRef;
         if (initial || !titleFocused) {
           if (detail.title !== title()) {
@@ -272,6 +344,16 @@ const StoryDetail: Component<Props> = (props) => {
       void refetchDetail();
     });
     onCleanup(unsubRT);
+
+    // Catch up after WS reconnects: events emitted while offline are lost,
+    // so re-pull the detail on every false→true transition. The first sync
+    // emission from `onRealtimeStatus` is skipped — we just fetched.
+    let firstStatusEmission = true;
+    const unsubStatus = onRealtimeStatus((on) => {
+      if (firstStatusEmission) { firstStatusEmission = false; return; }
+      if (on) void refetchDetail();
+    });
+    onCleanup(unsubStatus);
   });
 
   const project = () => projectId() ? data.getProjectById(projectId()) : null;
@@ -642,6 +724,7 @@ const StoryDetail: Component<Props> = (props) => {
 
             {/* Spacer + save + share + close */}
             <div class="flex items-center gap-1.5 ml-auto">
+              <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={3} showEditingPointer />
               <Show when={saveStatus() === 'saved' || saveStatus() === 'error'}>
                 <span class="flex items-center gap-1 transition-opacity">
                   <Show when={saveStatus() === 'saved'}>
@@ -710,6 +793,8 @@ const StoryDetail: Component<Props> = (props) => {
               class="w-full text-xl sm:text-[26px] font-extrabold leading-tight text-base-content bg-transparent resize-none outline-none overflow-hidden px-1 py-1 placeholder:text-base-content/20"
               placeholder="Título de la historia"
               ref={(el) => { titleRef = el; requestAnimationFrame(() => autoResize(el)); }}
+              onFocus={() => setTitleHasFocus(true)}
+              onBlur={() => setTitleHasFocus(false)}
               onInput={(e) => {
                 const val = e.currentTarget.value;
                 setTitle(val);
@@ -720,6 +805,13 @@ const StoryDetail: Component<Props> = (props) => {
           </div>
 
           {/* Content canvas */}
+          <Show when={pendingRemoteContent() !== null}>
+            <ConflictBanner
+              actorName={null}
+              onAcceptRemote={acceptRemote}
+              onKeepMine={keepMine}
+            />
+          </Show>
           <div
             classList={{ 'animate-remote-pulse': isPulsing('content') }}
             class="rounded-xl"
@@ -734,8 +826,8 @@ const StoryDetail: Component<Props> = (props) => {
                 editorEl = el;
                 void renderMermaid(el, isDark(), mermaidOpts);
               }}
-              onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
-              onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
+              onEditorFocus={() => { editorFocused = true; setEditorActive(true); if (editorEl) revertMermaid(editorEl); }}
+              onEditorBlur={() => { editorFocused = false; setEditorActive(false); if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
             />
           </div>
 
@@ -797,8 +889,21 @@ const StoryDetail: Component<Props> = (props) => {
             </div>
           </Show>
 
+          {/* Created/updated metadata — small footer above destructive actions. */}
+          <div class="pt-5 mt-3 border-t border-base-content/[0.04] flex items-center gap-2 text-[11px] text-base-content/30 font-medium">
+            <span title={new Date(props.story.created_at).toLocaleString('es-MX')}>
+              Creado {formatTimeAgo(props.story.created_at)}
+            </span>
+            <Show when={props.story.updated_at && props.story.updated_at !== props.story.created_at}>
+              <span class="text-base-content/15">·</span>
+              <span title={new Date(props.story.updated_at).toLocaleString('es-MX')}>
+                Actualizado {formatTimeAgo(props.story.updated_at)}
+              </span>
+            </Show>
+          </div>
+
           {/* Delete */}
-          <div class="pt-6 mt-4 border-t border-base-content/[0.04]">
+          <div class="pt-5 mt-2">
             <Show when={canArchive()}>
               <div class="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-base-content/[0.06] bg-base-content/[0.02] px-4 py-3">
                 <div class="min-w-0">
