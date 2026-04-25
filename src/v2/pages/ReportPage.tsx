@@ -1,16 +1,16 @@
-import { createSignal, createResource, createEffect, onCleanup, For, Show, type Component } from 'solid-js';
+import { createSignal, createResource, createEffect, createMemo, onCleanup, For, Show, type Component } from 'solid-js';
 import type { Story, StoryStatus, Assignment, WeekGoal, StoryCompletion, Learning } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import { useOnceReady } from '../lib/onceReady';
 import {
-  CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle, ChevronDown, ChevronRight,
-  Plus, Package, Target, Play, RotateCcw, Check, CalendarDays,
+  CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle,
+  Plus, Target, RotateCcw, Check, CalendarDays,
   Eye, Trash2, ArrowRightCircle, Flag, XCircle, RefreshCw, Archive, Send, Search, ClipboardList,
   ExternalLink, Clipboard, EyeOff, Inbox, PlayCircle, CheckCircle2
 } from 'lucide-solid';
-import { isRecurring, isRecurringOnDate, frequencyLabel, shouldShowRecurringInActive, toLocalDateStr } from '../lib/recurrence';
+import { isRecurring, frequencyLabel } from '../lib/recurrence';
 import StoryDetail from '../components/StoryDetail';
 import LearningDetail from '../components/LearningDetail';
 import ShareReportModal from '../components/ShareReportModal';
@@ -18,6 +18,9 @@ import TopNavigation from '../components/TopNavigation';
 import HeaderSearchBar from '../components/HeaderSearchBar';
 import type { ReportCategory } from '../types';
 import { playInteractionSuccess } from '../lib/interactionMotion';
+import { getReportDateWindow, getReportStoryDateKey, isRecurringReportCompletion, selectDailyReportStories } from '../lib/reportSelectors';
+import { activeTab } from '../lib/activeTab';
+import { useRealtimeRefetch } from '../lib/realtime';
 
 interface ReportPageProps {
   onCreateStory?: (category: ReportCategory) => void;
@@ -31,7 +34,6 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const auth = useAuth();
   const data = useData();
   const [selectedStory, setSelectedStory] = createSignal<Story | null>(null);
-  const [backlogCollapsed, setBacklogCollapsed] = createSignal(true);
   const [selectedAssignment, setSelectedAssignment] = createSignal<Assignment | null>(null);
   const [showShareModal, setShowShareModal] = createSignal(false);
   const [showHiddenStories, setShowHiddenStories] = createSignal(false);
@@ -55,10 +57,11 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     }
   });
 
-  const today = toLocalDateStr(new Date());
+  const reportWindow = getReportDateWindow(new Date());
+  const today = reportWindow.todayKey;
   const userId = () => auth.user()?.id ?? '';
 
-  const [reportData] = createResource(
+  const [reportData, { refetch: refetchReport }] = createResource(
     () => ({ date: today, uid: userId(), _r: props.refreshKey }),
     ({ date }) => api.reports.getByDate(date).catch(() => null),
   );
@@ -92,25 +95,34 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   const [selectedLearning, setSelectedLearning] = createSignal<Learning | null>(null);
 
-  // Recurring completions for today
-  const [todayCompletions, { mutate: mutateCompletions }] = createResource(
-    () => ({ uid: userId(), date: today }),
-    ({ uid, date }) => uid ? api.completions.list(date, date) : Promise.resolve([]),
+  const [reportCompletions, { mutate: mutateCompletions, refetch: refetchCompletions }] = createResource(
+    () => ({ uid: userId(), from: reportWindow.yesterdayStartKey, to: reportWindow.todayKey }),
+    ({ uid, from, to }) => uid ? api.completions.list(from, to) : Promise.resolve([]),
   );
 
   const todayCompletionSet = (): Set<string> => {
     const set = new Set<string>();
-    for (const c of todayCompletions() ?? []) {
-      set.add(c.story_id);
+    for (const completion of reportCompletions() ?? []) {
+      if (completion.completion_date === today) set.add(completion.story_id);
     }
     return set;
   };
+
+  useRealtimeRefetch(
+    ['story.', 'completion.', 'report.'],
+    () => {
+      refetchStories();
+      refetchCompletions();
+      refetchReport();
+    },
+    { isActive: () => activeTab() === 'report' },
+  );
 
 
   const toggleRecurringCompletion = (storyId: string) => {
     const completed = todayCompletionSet().has(storyId);
     if (completed) {
-      mutateCompletions(prev => (prev ?? []).filter(c => c.story_id !== storyId));
+      mutateCompletions(prev => (prev ?? []).filter(c => !(c.story_id === storyId && c.completion_date === today)));
       api.completions.delete(storyId, today).catch(() => {});
     } else {
       playInteractionSuccess({ source: 'report', tone: 'success' });
@@ -220,61 +232,20 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     saveReport('impediments', next);
   };
 
-  // Date helpers
   const yesterdayRange = () => {
-    const now = new Date();
-    const day = now.getDay();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    if (day === 1) {
-      const satStart = new Date(todayStart);
-      satStart.setDate(satStart.getDate() - 2);
-      return { start: satStart, end: todayStart, isWeekend: true };
-    }
-    const yesterdayStart = new Date(todayStart);
-    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-    return { start: yesterdayStart, end: todayStart, isWeekend: false };
+    return {
+      start: reportWindow.yesterdayStart,
+      end: reportWindow.today,
+      isWeekend: reportWindow.isWeekendWindow,
+    };
   };
 
-  const todayStartDate = () => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  };
-
-  // Filtered lists
-  const completedYesterday = () => {
-    const { start, end } = yesterdayRange();
-    return localStories().filter(s => {
-      if (s.status !== 'done' || !s.completed_at) return false;
-      const d = new Date(s.completed_at);
-      return d >= start && d < end;
-    });
-  };
-
-  const completedToday = () => {
-    const start = todayStartDate();
-    return localStories().filter(s => {
-      if (s.status !== 'done' || !s.completed_at) return false;
-      return new Date(s.completed_at) >= start;
-    });
-  };
-
-  const todayStr = toLocalDateStr(new Date());
-  const activeStories = () => {
-    const all = localStories();
-    const normal = all.filter(s => {
-      if (s.status !== 'in_progress' && s.status !== 'todo') return false;
-      if (s.frequency) return false; // recurring handled separately below
-      const dateStr = s.due_date || s.scheduled_date;
-      if (dateStr) return dateStr <= todayStr;
-      return true;
-    });
-    // Merge recurring that apply today
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
-    const recurring = all.filter(s => isRecurring(s) && isRecurringOnDate(s, todayDate));
-    return [...normal, ...recurring];
-  };
-  const backlogStories = () => localStories().filter(s => s.status === 'backlog');
+  const reportSelection = createMemo(() =>
+    selectDailyReportStories(localStories(), reportCompletions() ?? [], reportWindow.today),
+  );
+  const completedYesterday = () => reportSelection().completedYesterday;
+  const completedToday = () => reportSelection().completedToday;
+  const activeStories = () => reportSelection().pendingToday;
   const myGoals = () => goalsList() ?? [];
   const myAssignments = () => (assignmentsList() ?? []) as Assignment[];
 
@@ -284,7 +255,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   };
 
   const formatCompletedDay = (dateStr: string) => {
-    const d = new Date(dateStr);
+    const d = new Date(dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`);
     const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
     return days[d.getDay()];
   };
@@ -899,26 +870,39 @@ const ReportPage: Component<ReportPageProps> = (props) => {
               <div class="space-y-2">
                 {/* Today's completions */}
                 <For each={completedToday()}>
-                  {(story) => (
-                    <div
-                      onContextMenu={(e) => openCtxMenu(e, story)}
-                      onClick={() => setSelectedStory(story)}
-                      class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-all group ${cardClass(story.id)}`}
-                    >
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'in_progress'); }}
-                        class="p-1.5 rounded-md text-base-content/15 sm:text-base-content/0 group-hover:text-base-content/20 hover:!text-amber-500 hover:!bg-amber-500/10 transition-all shrink-0"
-                        title="Reabrir"
+                  {(story) => {
+                    const completedByOccurrence = () => isRecurringReportCompletion(story);
+                    return (
+                      <div
+                        onContextMenu={(e) => !completedByOccurrence() && openCtxMenu(e, story)}
+                        onClick={() => setSelectedStory(story)}
+                        class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-all group ${cardClass(story.id)}`}
                       >
-                        <RotateCcw size={14} />
-                      </button>
-                      <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                        <span class="text-sm text-base-content/40 line-through flex-1 truncate">{story.title}</span>
-                        <ProjectBadge story={story} />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (completedByOccurrence()) toggleRecurringCompletion(story.id);
+                            else moveStory(story.id, 'in_progress');
+                          }}
+                          class="p-1.5 rounded-md text-base-content/15 sm:text-base-content/0 group-hover:text-base-content/20 hover:!text-amber-500 hover:!bg-amber-500/10 transition-all shrink-0"
+                          title={completedByOccurrence() ? 'Desmarcar de hoy' : 'Reabrir'}
+                        >
+                          <RotateCcw size={14} />
+                        </button>
+                        <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
+                          <span class="text-sm text-base-content/40 line-through flex-1 truncate">{story.title}</span>
+                          <Show when={completedByOccurrence()}>
+                            <span class="text-[9px] font-bold text-purple-500/60 bg-purple-500/10 px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
+                              <RefreshCw size={8} />
+                              {frequencyLabel(story)}
+                            </span>
+                          </Show>
+                          <ProjectBadge story={story} />
+                        </div>
+                        <span class="text-[9px] text-base-content/15 shrink-0">hoy</span>
                       </div>
-                      <span class="text-[9px] text-base-content/15 shrink-0">hoy</span>
-                    </div>
-                  )}
+                    );
+                  }}
                 </For>
                 {/* Yesterday's completions */}
                 <Show when={completedYesterday().length > 0}>
@@ -934,12 +918,17 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   <For each={completedYesterday()}>
                     {(story) => {
                       const proj = getProject(story.project_id);
+                      const completedDate = () => story.report_completion_date ?? story.completed_at ?? '';
+                      const completedByOccurrence = () => isRecurringReportCompletion(story);
                       return (
-                        <button onContextMenu={(e) => openCtxMenu(e, story)} onClick={() => setSelectedStory(story)} class="w-full text-left flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 hover:bg-base-200/60 transition-all cursor-pointer">
+                        <button onContextMenu={(e) => !completedByOccurrence() && openCtxMenu(e, story)} onClick={() => setSelectedStory(story)} class="w-full text-left flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 hover:bg-base-200/60 transition-all cursor-pointer">
                           <CheckCircle size={13} class="text-ios-green-500/30 shrink-0" />
                           <span class="text-sm text-base-content/30 flex-1 truncate">{story.title}</span>
-                          <Show when={yesterdayRange().isWeekend && story.completed_at}>
-                            <span class="text-[9px] text-base-content/15 capitalize">{formatCompletedDay(story.completed_at!)}</span>
+                          <Show when={completedByOccurrence()}>
+                            <RefreshCw size={11} class="text-purple-500/35 shrink-0" />
+                          </Show>
+                          <Show when={yesterdayRange().isWeekend && completedDate()}>
+                            <span class="text-[9px] text-base-content/15 capitalize">{formatCompletedDay(completedDate())}</span>
                           </Show>
                           <Show when={story.code}>
                             <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0" style={{ "background-color": `${proj?.color ?? '#525252'}10`, color: `${proj?.color ?? '#525252'}80` }}>{story.code}</span>
@@ -1027,10 +1016,10 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                           {/* Date badge for non-recurring */}
                           <Show when={!isRec()}>
                             {(() => {
-                              const dateStr = story.due_date || story.scheduled_date;
+                              const dateStr = getReportStoryDateKey(story, today);
                               if (!dateStr) return null;
-                              const isOverdue = dateStr < todayStr;
-                              const isToday = dateStr === todayStr;
+                              const isOverdue = dateStr < today;
+                              const isToday = dateStr === today;
                               const d = new Date(dateStr + 'T12:00:00');
                               const label = `${d.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][d.getMonth()]}`;
                               return (
@@ -1064,56 +1053,6 @@ const ReportPage: Component<ReportPageProps> = (props) => {
               </div>
             </section>
           </div>
-
-          {/* Backlog — collapsible */}
-          <section>
-            <button
-              onClick={() => setBacklogCollapsed(v => !v)}
-              class="flex items-center gap-3 mb-4 w-full text-left group"
-            >
-              <div class="w-9 h-9 rounded-full bg-base-content/[0.06] flex items-center justify-center">
-                <Package size={18} class="text-base-content/40" />
-              </div>
-              <div class="flex-1">
-                <h2 class="text-sm font-bold">Backlog <span class="text-base-content/25 font-normal ml-1">({backlogStories().length})</span></h2>
-                <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Pendiente de priorizar</p>
-              </div>
-              <span class="text-base-content/20 group-hover:text-base-content/40 transition-colors">
-                <Show when={backlogCollapsed()} fallback={<ChevronDown size={16} />}>
-                  <ChevronRight size={16} />
-                </Show>
-              </span>
-            </button>
-            <Show when={!backlogCollapsed()}>
-              <div class="space-y-2">
-                <For each={backlogStories()}>
-                  {(story) => (
-                    <div
-                      onContextMenu={(e) => openCtxMenu(e, story)}
-                      onClick={() => setSelectedStory(story)}
-                      class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 cursor-pointer hover:bg-base-200/70 transition-all group ${cardClass(story.id)}`}
-                    >
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'todo'); }}
-                        class="p-1.5 rounded-md text-base-content/15 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all shrink-0"
-                        title="Mover a trabajo activo"
-                      >
-                        <Play size={14} />
-                      </button>
-                      <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                        <span class="text-sm text-base-content/35 flex-1 truncate">{story.title}</span>
-                        <ProjectBadge story={story} />
-                      </div>
-                    </div>
-                  )}
-                </For>
-                <InlineAdd status="backlog" placeholder="Agregar al backlog..." />
-              </div>
-            </Show>
-          </section>
-
-
-
 
           {/* Learning */}
           <section>
@@ -1436,7 +1375,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
           completedYesterday={completedYesterday()}
           completedToday={completedToday()}
           activeStories={activeStories()}
-          backlogStories={backlogStories()}
+          backlogStories={[]}
           goals={myGoals()}
           assignments={myAssignments()}
           report={report()}

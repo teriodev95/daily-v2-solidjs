@@ -6,6 +6,34 @@ import { publish, teamChannel } from '../lib/realtime';
 
 const completions = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+const userCanAccessStory = async (
+  db: Variables['db'],
+  user: Variables['user'],
+  storyId: string,
+) => {
+  const [story] = await db
+    .select()
+    .from(schema.stories)
+    .where(eq(schema.stories.id, storyId))
+    .limit(1);
+
+  if (!story || story.team_id !== user.teamId) return null;
+  if (story.assignee_id === user.userId || story.created_by === user.userId) return story;
+
+  const [link] = await db
+    .select()
+    .from(schema.storyAssignees)
+    .where(
+      and(
+        eq(schema.storyAssignees.story_id, storyId),
+        eq(schema.storyAssignees.user_id, user.userId),
+      ),
+    )
+    .limit(1);
+
+  return link ? story : null;
+};
+
 // List completions for the authenticated user in a date range
 completions.get('/', async (c) => {
   const user = c.get('user');
@@ -37,6 +65,12 @@ completions.post('/', async (c) => {
 
   if (!body.story_id || !body.completion_date) {
     return c.json({ error: 'story_id and completion_date required' }, 400);
+  }
+
+  const story = await userCanAccessStory(db, user, body.story_id);
+  if (!story || !story.is_active) return c.json({ error: 'Story not found' }, 404);
+  if (!story.frequency || (story.status !== 'todo' && story.status !== 'in_progress')) {
+    return c.json({ error: 'Only active recurring stories can be completed by occurrence' }, 400);
   }
 
   // Check if already exists
@@ -91,6 +125,9 @@ completions.delete('/', async (c) => {
   if (!body.story_id || !body.completion_date) {
     return c.json({ error: 'story_id and completion_date required' }, 400);
   }
+
+  const story = await userCanAccessStory(db, user, body.story_id);
+  if (!story) return c.json({ error: 'Story not found' }, 404);
 
   await db
     .delete(schema.storyCompletions)

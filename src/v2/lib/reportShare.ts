@@ -4,6 +4,8 @@ export interface ReportSharePayload {
   completedYesterday: Story[];
   completedToday: Story[];
   activeStories: Story[];
+  /** Kept for backwards compatibility with existing callers. Backlog is not
+   * part of the daily commitment report and is intentionally ignored. */
   backlogStories: Story[];
   goals: WeekGoal[];
   assignments: Assignment[];
@@ -35,6 +37,15 @@ const parseItems = (raw: string | undefined | null): string[] => {
   }
 };
 
+const uniqueStories = (stories: Story[]) => {
+  const seen = new Set<string>();
+  return stories.filter((story) => {
+    if (seen.has(story.id)) return false;
+    seen.add(story.id);
+    return true;
+  });
+};
+
 export const buildTelegramReportText = (payload: ReportSharePayload) => {
   const lines: string[] = [];
 
@@ -53,7 +64,7 @@ export const buildTelegramReportText = (payload: ReportSharePayload) => {
   lines.push('');
 
   lines.push('**🎯 ¿EN QUÉ ME ENFOCARÉ HOY?**');
-  const todayItems = [...payload.completedToday, ...payload.activeStories];
+  const todayItems = uniqueStories([...payload.completedToday, ...payload.activeStories]);
   if (todayItems.length > 0) {
     todayItems.forEach((story) => {
       lines.push(`▪️ ${story.title.toUpperCase()}`);
@@ -103,11 +114,6 @@ export const buildTelegramReportText = (payload: ReportSharePayload) => {
         : '';
       lines.push(`▪️ ${assignment.title}${due}`);
     });
-  }
-
-  if (payload.backlogStories.length > 0) {
-    lines.push('');
-    lines.push(`📦 **${payload.backlogStories.length} ${payload.backlogStories.length === 1 ? 'tarea' : 'tareas'} en la pila**`);
   }
 
   lines.push('');

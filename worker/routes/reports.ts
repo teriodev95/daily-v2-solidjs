@@ -1,14 +1,42 @@
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gte, lte } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
+import { buildDailyReportModel, parseReportDateKey, reportCompletionRange } from '../../src/v2/lib/reportSelectors';
 
 const reports = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+const resolveReportUserId = async (
+  db: Variables['db'],
+  requester: Variables['user'],
+  requestedUserId: string | undefined,
+) => {
+  const userId = requestedUserId ?? requester.userId;
+  if (userId === requester.userId) return userId;
+  if (requester.role !== 'admin') return null;
+
+  const [target] = await db
+    .select({ id: schema.users.id, team_id: schema.users.team_id })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+
+  if (!target || target.team_id !== requester.teamId) return null;
+  return userId;
+};
+
+const weekNumberForDate = (dateKey: string) => {
+  const date = parseReportDateKey(dateKey);
+  const start = new Date(date.getFullYear(), 0, 1);
+  const diff = date.getTime() - start.getTime();
+  return Math.ceil((diff / 86400000 + start.getDay() + 1) / 7);
+};
 
 reports.get('/', async (c) => {
   const user = c.get('user');
   const db = c.get('db');
-  const userId = c.req.query('user_id') ?? user.userId;
+  const userId = await resolveReportUserId(db, user, c.req.query('user_id'));
+  if (!userId) return c.json({ error: 'Not found' }, 404);
   const weekNumber = c.req.query('week_number');
 
   let rows = await db
@@ -17,7 +45,7 @@ reports.get('/', async (c) => {
     .where(eq(schema.dailyReports.user_id, userId));
 
   if (weekNumber) {
-    rows = rows.filter(r => r.week_number === parseInt(weekNumber));
+    rows = rows.filter(r => r.week_number === parseInt(weekNumber, 10));
   }
 
   return c.json(rows);
@@ -27,7 +55,8 @@ reports.get('/:date', async (c) => {
   const user = c.get('user');
   const db = c.get('db');
   const date = c.req.param('date');
-  const userId = c.req.query('user_id') ?? user.userId;
+  const userId = await resolveReportUserId(db, user, c.req.query('user_id'));
+  if (!userId) return c.json({ error: 'Not found' }, 404);
 
   const [report] = await db
     .select()
@@ -40,7 +69,17 @@ reports.get('/:date', async (c) => {
     )
     .limit(1);
 
-  if (!report) return c.json({ error: 'Not found' }, 404);
+  const now = new Date().toISOString();
+  const reportRow = report ?? {
+    id: '',
+    user_id: userId,
+    report_date: date,
+    week_number: weekNumberForDate(date),
+    learning: '',
+    impediments: '',
+    created_at: now,
+    updated_at: now,
+  };
 
   // Also get stories by category for this user
   const allAssignees = await db.select().from(schema.storyAssignees).where(eq(schema.storyAssignees.user_id, userId));
@@ -61,13 +100,34 @@ reports.get('/:date', async (c) => {
   }
 
   const withAssignees = (stories: typeof userStories) =>
-    stories.map(s => ({ ...s, assignees: assigneeMap.get(s.id) ?? [] }));
+    stories.map(s => ({
+      ...s,
+      recurrence_days: s.recurrence_days ? JSON.parse(s.recurrence_days) : null,
+      assignees: assigneeMap.get(s.id) ?? [],
+    }));
+
+  const reportDate = parseReportDateKey(date);
+  const completionRange = reportCompletionRange(reportDate);
+  const completions = await db
+    .select()
+    .from(schema.storyCompletions)
+    .where(
+      and(
+        eq(schema.storyCompletions.user_id, userId),
+        gte(schema.storyCompletions.completion_date, completionRange.from),
+        lte(schema.storyCompletions.completion_date, completionRange.to),
+      ),
+    );
+
+  const model = buildDailyReportModel(withAssignees(userStories) as any, [], completions, reportDate);
 
   return c.json({
-    ...report,
-    yesterday: withAssignees(userStories.filter(s => s.category === 'yesterday').sort((a, b) => a.sort_order - b.sort_order)),
-    today: withAssignees(userStories.filter(s => s.category === 'today').sort((a, b) => a.sort_order - b.sort_order)),
-    backlog: withAssignees(userStories.filter(s => s.category === 'backlog').sort((a, b) => a.sort_order - b.sort_order)),
+    ...reportRow,
+    yesterday: model.completedYesterday,
+    today: model.activeStories,
+    backlog: [],
+    completed_today: model.completedToday,
+    pending_today: model.activeStories,
   });
 });
 

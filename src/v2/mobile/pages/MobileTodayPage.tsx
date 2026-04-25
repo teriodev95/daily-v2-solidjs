@@ -14,7 +14,9 @@ import type { Assignment, Story, StoryCompletion } from '../../types';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useData } from '../../lib/data';
-import { isRecurring, toLocalDateStr } from '../../lib/recurrence';
+import { isRecurring } from '../../lib/recurrence';
+import { reportCompletionRange } from '../../lib/reportSelectors';
+import { useRealtimeRefetch } from '../../lib/realtime';
 import MobileShareReportSheet from '../components/MobileShareReportSheet';
 import MobileAssignmentDetail from '../components/MobileAssignmentDetail';
 import MobileStoryDetail from '../components/MobileStoryDetail';
@@ -32,15 +34,16 @@ const MobileTodayPage: Component<MobileTodayPageProps> = (props) => {
   const [showShare, setShowShare] = createSignal(false);
   const [completingIds, setCompletingIds] = createSignal<Set<string>>(new Set());
 
-  const todayKey = toLocalDateStr(new Date());
+  const completionRange = reportCompletionRange(new Date());
+  const todayKey = completionRange.to;
   const userId = () => auth.user()?.id ?? '';
 
-  const [reportData] = createResource(
+  const [reportData, { refetch: refetchReport }] = createResource(
     () => ({ date: todayKey, uid: userId(), _r: props.refreshKey }),
     ({ date, uid }) => uid ? api.reports.getByDate(date).catch(() => null) : Promise.resolve(null),
   );
 
-  const [stories] = createResource(
+  const [stories, { refetch: refetchStories }] = createResource(
     () => ({ uid: userId(), _r: props.refreshKey }),
     ({ uid }) => uid ? api.stories.list({ assignee_id: uid }) : Promise.resolve([]),
   );
@@ -54,9 +57,9 @@ const MobileTodayPage: Component<MobileTodayPageProps> = (props) => {
     ({ uid }) => uid ? api.assignments.list({ assigned_to: uid, status: 'open' }) : Promise.resolve([]),
   );
 
-  const [todayCompletions, { mutate: mutateCompletions }] = createResource(
-    () => ({ uid: userId(), date: todayKey }),
-    ({ uid, date }) => uid ? api.completions.list(date, date) : Promise.resolve([]),
+  const [todayCompletions, { mutate: mutateCompletions, refetch: refetchCompletions }] = createResource(
+    () => ({ uid: userId(), from: completionRange.from, to: completionRange.to }),
+    ({ uid, from, to }) => uid ? api.completions.list(from, to) : Promise.resolve([]),
   );
 
   const [localStories, setLocalStories] = createSignal<Story[]>([]);
@@ -72,22 +75,28 @@ const MobileTodayPage: Component<MobileTodayPageProps> = (props) => {
     if (fetched) setLocalAssignments(fetched as Assignment[]);
   });
 
-  const todayView = () => getTodayView(localStories(), localAssignments());
+  const todayView = () => getTodayView(localStories(), localAssignments(), todayCompletions() ?? []);
   const report = () => reportData();
   const goals = () => goalsList() ?? [];
 
   const todayCompletionSet = (): Set<string> => {
     const set = new Set<string>();
     for (const completion of todayCompletions() ?? []) {
-      set.add(completion.story_id);
+      if (completion.completion_date === todayKey) set.add(completion.story_id);
     }
     return set;
   };
 
+  useRealtimeRefetch(['story.', 'completion.', 'report.'], () => {
+    refetchStories();
+    refetchCompletions();
+    refetchReport();
+  });
+
   const toggleRecurringCompletion = (storyId: string) => {
     const completed = todayCompletionSet().has(storyId);
     if (completed) {
-      mutateCompletions(prev => (prev ?? []).filter(completion => completion.story_id !== storyId));
+      mutateCompletions(prev => (prev ?? []).filter(completion => !(completion.story_id === storyId && completion.completion_date === todayKey)));
       api.completions.delete(storyId, todayKey).catch(() => {});
       return;
     }
@@ -501,7 +510,7 @@ const MobileTodayPage: Component<MobileTodayPageProps> = (props) => {
           completedYesterday={todayView().completedYesterday}
           completedToday={todayView().completedToday}
           activeStories={todayView().agenda.concat(todayView().active)}
-          backlogStories={todayView().backlog}
+          backlogStories={[]}
           goals={goals()}
           assignments={todayView().assignments}
           report={report()}
