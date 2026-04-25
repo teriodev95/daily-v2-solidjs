@@ -2,8 +2,7 @@ import { createSignal, createEffect, on, onMount, onCleanup, For, Show, type Com
 import { onRealtime, onRealtimeStatus } from '../lib/realtime';
 import type { Story, AcceptanceCriteria, User } from '../types';
 import { useData } from '../lib/data';
-import { api, ApiError } from '../lib/api';
-import ConflictBanner from '../components/ConflictBanner';
+import { api } from '../lib/api';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
   ClipboardCheck, Trash2,
@@ -20,6 +19,7 @@ import { isDark } from '../lib/theme';
 import { createPulse } from '../lib/usePulse';
 import { usePresence, type PresenceMode } from '../lib/presence';
 import PresenceAvatars from '../components/PresenceAvatars';
+import { openDoc, closeDoc, type YDocHandle } from '../lib/yjsDoc';
 
 const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   critical: { label: 'Crítica', color: 'text-red-500', bg: 'bg-red-500/10', icon: Flame },
@@ -150,43 +150,19 @@ const StoryDetail: Component<Props> = (props) => {
   // before unmount so a fast modal close doesn't drop the user's last edits.
   let pendingFlush: (() => void) | undefined;
 
-  // Optimistic concurrency for `description`. We track the `updated_at` we
-  // observed last and send it as `expected_updated_at` on description PATCHes.
-  // On 409 the server returns the current row; we surface a banner so the user
-  // can choose to take the remote text or push their local on top.
-  const [baseVersion, setBaseVersion] = createSignal<string>(props.story.updated_at);
-  const [pendingRemoteContent, setPendingRemoteContent] = createSignal<string | null>(null);
+  // Yjs handle for the description. Created on mount; the editor binds
+  // bidirectionally to `yDoc.text`. The doc handles concurrent edits,
+  // making conflict banners and `expected_updated_at` unnecessary for
+  // description. Chips still go through last-write-wins PATCHes below.
+  const yDoc: YDocHandle = openDoc(props.story.id);
+  onCleanup(() => closeDoc(props.story.id));
 
   onCleanup(() => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
-    // Last-ditch flush: fire-and-forget any pending debounced save before
-    // the modal is gone. Any error/banner UI is moot at this point.
     pendingFlush?.();
     document.body.style.overflow = '';
   });
-
-  // Description PATCHes piggyback `expected_updated_at`; other fields stay
-  // last-write-wins so we don't surprise users editing chips.
-  const buildPayload = (fields: Record<string, unknown>): Record<string, unknown> =>
-    'description' in fields ? { ...fields, expected_updated_at: baseVersion() } : fields;
-
-  const handleSaveError = (err: unknown, fields: Record<string, unknown>): boolean => {
-    if (
-      'description' in fields &&
-      err instanceof ApiError &&
-      err.status === 409 &&
-      err.body?.current?.description !== undefined
-    ) {
-      const remote = err.body.current;
-      // Bump the base so the next attempt (e.g. "Pisar con la mía") will pass.
-      if (remote.updated_at) setBaseVersion(remote.updated_at);
-      setPendingRemoteContent(remote.description ?? '');
-      setSaveStatus('idle');
-      return true;
-    }
-    return false;
-  };
 
   const scheduleSave = (fields: Record<string, unknown>) => {
     clearTimeout(debounceTimer);
@@ -202,35 +178,14 @@ const StoryDetail: Component<Props> = (props) => {
   const saveImmediate = async (fields: Record<string, unknown>) => {
     setSaveStatus('saving');
     try {
-      const updated = await api.stories.update(props.story.id, buildPayload(fields));
-      if ((updated as any)?.updated_at) setBaseVersion((updated as any).updated_at);
+      await api.stories.update(props.story.id, fields);
       setSaveStatus('saved');
       props.onUpdated?.(props.story.id, fields);
       clearTimeout(savedTimer);
       savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch (err) {
-      if (!handleSaveError(err, fields)) setSaveStatus('error');
+    } catch {
+      setSaveStatus('error');
     }
-  };
-
-  const acceptRemote = () => {
-    const remote = pendingRemoteContent();
-    if (remote === null) return;
-    // Defensive: ContentEditor skips its sync effect while the editor has
-    // focus, so blur explicitly to guarantee the remote text is rendered
-    // even if the user reached the banner via keyboard navigation.
-    editorEl?.blur();
-    setContent(remote);
-    setPendingRemoteContent(null);
-    pulse('content');
-  };
-
-  const keepMine = () => {
-    setPendingRemoteContent(null);
-    // Cancel any debounced save and force one immediately with the current
-    // baseVersion (which now matches the remote, so the PATCH will succeed).
-    clearTimeout(debounceTimer);
-    void saveImmediate({ description: content() });
   };
 
   // Attachment paste upload ref
@@ -307,24 +262,8 @@ const StoryDetail: Component<Props> = (props) => {
           if (!initial) pulse('criteria');
         }
 
-        // Skip fields the user is actively editing so we don't stomp on typing.
+        // `description` is owned by Yjs now; we don't touch it here.
         const active = document.activeElement as HTMLElement | null;
-        const nextContent = detail.description || '';
-        if (initial || active !== editorEl) {
-          if (nextContent !== content()) {
-            setContent(nextContent);
-            if (!initial) pulse('content');
-          }
-          // No conflict pending while editor is unfocused: clear any leftover.
-          if (!initial) setPendingRemoteContent(null);
-        } else if (nextContent !== content()) {
-          // User has the editor focused and the remote content diverges from
-          // what they're typing. Don't stomp — surface a banner instead.
-          setPendingRemoteContent(nextContent);
-        }
-        // Always advance baseVersion: the user has been notified (via banner
-        // or applied content), so future saves shouldn't 409 on this version.
-        if ((detail as any).updated_at) setBaseVersion((detail as any).updated_at);
         const titleFocused = !!titleRef && active === titleRef;
         if (initial || !titleFocused) {
           if (detail.title !== title()) {
@@ -804,24 +743,13 @@ const StoryDetail: Component<Props> = (props) => {
             />
           </div>
 
-          {/* Content canvas */}
-          <Show when={pendingRemoteContent() !== null}>
-            <ConflictBanner
-              actorName={null}
-              onAcceptRemote={acceptRemote}
-              onKeepMine={keepMine}
-            />
-          </Show>
-          <div
-            classList={{ 'animate-remote-pulse': isPulsing('content') }}
-            class="rounded-xl"
-          >
+          {/* Content canvas — Yjs-backed; concurrent edits converge live. */}
+          <div class="rounded-xl">
             <ContentEditor
               content={content()}
+              ytext={yDoc.text}
               placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
-              onChange={(md) => {
-                scheduleSave({ description: md });
-              }}
+              onChange={(md) => setContent(md)}
               onEditorMount={(el) => {
                 editorEl = el;
                 void renderMermaid(el, isDark(), mermaidOpts);

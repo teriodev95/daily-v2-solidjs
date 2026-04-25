@@ -1,6 +1,8 @@
 import { createEffect, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
+import type * as Y from 'yjs';
+import { applyTextDiff, getCaretOffset, setCaretOffset } from '../lib/textBinding';
 
 const turndown = new TurndownService({
   headingStyle: 'atx',
@@ -35,6 +37,11 @@ interface ContentEditorProps {
   onEditorMount?: (el: HTMLElement) => void;
   onEditorFocus?: () => void;
   onEditorBlur?: () => void;
+  // Optional CRDT source. When provided, the editor binds bidirectionally
+  // to the Y.Text: local edits are diffed and applied as ops (origin
+  // 'local'); remote ops re-render the DOM while preserving the caret.
+  // `props.content` is ignored in this mode — Yjs is the source of truth.
+  ytext?: Y.Text;
 }
 
 export function ContentEditor(props: ContentEditorProps) {
@@ -52,7 +59,9 @@ export function ContentEditor(props: ContentEditorProps) {
     clearTimeout(convertTimer);
     convertTimer = undefined;
     const md = turndown.turndown(editorRef.innerHTML).trim();
+    const prev = lastContent;
     lastContent = md;
+    if (props.ytext) applyTextDiff(props.ytext, prev, md);
     props.onChange(md);
   };
 
@@ -66,22 +75,41 @@ export function ContentEditor(props: ContentEditorProps) {
   };
 
   onMount(() => {
-    lastContent = props.content || '';
-    editorRef.innerHTML = toHtml(lastContent);
-    setHasContent(!!lastContent.trim());
+    const initial = props.ytext ? props.ytext.toString() : (props.content || '');
+    lastContent = initial;
+    editorRef.innerHTML = toHtml(initial);
+    setHasContent(!!initial.trim());
 
     props.onEditorMount?.(editorRef);
 
-    // Sync prop → DOM when `content` changes from outside (realtime refetch,
-    // parent re-fetch). Rebuilds innerHTML only when the editor does NOT have
-    // focus — preserves cursor/selection for the user who is typing.
-    createEffect(on(() => props.content ?? '', (incoming) => {
-      if (incoming === lastContent) return;
-      if (document.activeElement === editorRef) return; // user is editing — skip
-      lastContent = incoming;
-      editorRef.innerHTML = toHtml(incoming);
-      setHasContent(!!incoming.trim());
-    }, { defer: true }));
+    if (props.ytext) {
+      // CRDT mode — watch remote ops and re-render. Skip our own ops to
+      // avoid feedback loops (we already updated the DOM optimistically).
+      const ytext = props.ytext;
+      const observer = (_evt: Y.YTextEvent, tx: Y.Transaction) => {
+        if (tx.origin === 'local') return;
+        const incoming = ytext.toString();
+        if (incoming === lastContent) return;
+        lastContent = incoming;
+        const focused = document.activeElement === editorRef;
+        const caret = focused ? getCaretOffset(editorRef) : null;
+        editorRef.innerHTML = toHtml(incoming);
+        setHasContent(!!incoming.trim());
+        if (caret !== null) setCaretOffset(editorRef, caret);
+        props.onChange(incoming);
+      };
+      ytext.observe(observer);
+      onCleanup(() => ytext.unobserve(observer));
+    } else {
+      // Plain mode — parent owns the markdown signal and pushes it back in.
+      createEffect(on(() => props.content ?? '', (incoming) => {
+        if (incoming === lastContent) return;
+        if (document.activeElement === editorRef) return; // user is editing — skip
+        lastContent = incoming;
+        editorRef.innerHTML = toHtml(incoming);
+        setHasContent(!!incoming.trim());
+      }, { defer: true }));
+    }
 
     props.onReady?.({
       insertAtEnd: (markdown: string) => {
@@ -90,6 +118,9 @@ export function ContentEditor(props: ContentEditorProps) {
         lastContent = newMd;
         editorRef.innerHTML = toHtml(newMd);
         setHasContent(true);
+        if (props.ytext) {
+          applyTextDiff(props.ytext, currentMd, newMd);
+        }
         props.onChange(newMd);
       },
     });
@@ -100,8 +131,10 @@ export function ContentEditor(props: ContentEditorProps) {
     setHasContent(!!text);
 
     if (!text) {
+      const prev = lastContent;
       editorRef.innerHTML = '';
       lastContent = '';
+      if (props.ytext && prev) applyTextDiff(props.ytext, prev, '');
       props.onChange('');
       return;
     }
@@ -110,7 +143,9 @@ export function ContentEditor(props: ContentEditorProps) {
     clearTimeout(convertTimer);
     convertTimer = setTimeout(() => {
       const md = turndown.turndown(editorRef.innerHTML).trim();
+      const prev = lastContent;
       lastContent = md;
+      if (props.ytext) applyTextDiff(props.ytext, prev, md);
       props.onChange(md);
     }, 50);
   };

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, blob } from 'drizzle-orm/sqlite-core';
 
 export const teams = sqliteTable('teams', {
   id: text('id').primaryKey(),
@@ -201,6 +201,17 @@ export const storyShareTokens = sqliteTable('story_share_tokens', {
   expires_at: text('expires_at').notNull(),   // ISO string, required (always expires)
   created_at: text('created_at').notNull(),
   revoked_at: text('revoked_at'),
+});
+
+// Append-only log of Yjs binary updates for `stories.description`. Replaying
+// every row for a story_id rebuilds the canonical Y.Doc state. Avoids the
+// read-modify-write race that storing a single merged blob would have
+// (D1 has no multi-statement transactions in worker requests).
+export const storyDocUpdates = sqliteTable('story_doc_updates', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  story_id: text('story_id').notNull().references(() => stories.id, { onDelete: 'cascade' }),
+  update: blob('update', { mode: 'buffer' }).notNull(),
+  created_at: text('created_at').notNull(),
 });
 
 // Re-export wiki share tokens table from its feature folder so Drizzle's

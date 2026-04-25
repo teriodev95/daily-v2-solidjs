@@ -2,8 +2,7 @@ import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type Com
 import type { AcceptanceCriteria, Story, User } from '../../types';
 import { useAuth } from '../../lib/auth';
 import { useData } from '../../lib/data';
-import { api, ApiError } from '../../lib/api';
-import ConflictBanner from '../../components/ConflictBanner';
+import { api } from '../../lib/api';
 import {
   Archive,
   CalendarDays,
@@ -30,6 +29,7 @@ import { onRealtime, onRealtimeStatus } from '../../lib/realtime';
 import { createPulse } from '../../lib/usePulse';
 import { usePresence, type PresenceMode } from '../../lib/presence';
 import PresenceAvatars from '../../components/PresenceAvatars';
+import { openDoc, closeDoc, type YDocHandle } from '../../lib/yjsDoc';
 
 interface MobileStoryDetailProps {
   story: Story;
@@ -106,9 +106,9 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   // unmount so a fast close doesn't drop the user's last edits.
   let pendingFlush: (() => void) | undefined;
 
-  // Optimistic concurrency for `description`. See StoryDetail.tsx for context.
-  const [baseVersion, setBaseVersion] = createSignal<string>(props.story.updated_at);
-  const [pendingRemoteContent, setPendingRemoteContent] = createSignal<string | null>(null);
+  // Yjs handle for description (CRDT). Bypasses the chip save flow below.
+  const yDoc: YDocHandle = openDoc(props.story.id);
+  onCleanup(() => closeDoc(props.story.id));
 
   onCleanup(() => {
     clearTimeout(debounceTimer);
@@ -116,25 +116,6 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
     pendingFlush?.();
     document.body.style.overflow = '';
   });
-
-  const buildPayload = (fields: Record<string, unknown>): Record<string, unknown> =>
-    'description' in fields ? { ...fields, expected_updated_at: baseVersion() } : fields;
-
-  const handleSaveError = (err: unknown, fields: Record<string, unknown>): boolean => {
-    if (
-      'description' in fields &&
-      err instanceof ApiError &&
-      err.status === 409 &&
-      err.body?.current?.description !== undefined
-    ) {
-      const remote = err.body.current;
-      if (remote.updated_at) setBaseVersion(remote.updated_at);
-      setPendingRemoteContent(remote.description ?? '');
-      setSaveStatus('idle');
-      return true;
-    }
-    return false;
-  };
 
   const scheduleSave = (fields: Record<string, unknown>) => {
     clearTimeout(debounceTimer);
@@ -150,33 +131,14 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   const saveImmediate = async (fields: Record<string, unknown>) => {
     setSaveStatus('saving');
     try {
-      const updated = await api.stories.update(props.story.id, buildPayload(fields));
-      if ((updated as any)?.updated_at) setBaseVersion((updated as any).updated_at);
+      await api.stories.update(props.story.id, fields);
       props.onUpdated?.(props.story.id, fields);
       setSaveStatus('saved');
       clearTimeout(savedTimer);
       savedTimer = setTimeout(() => setSaveStatus('idle'), 1500);
-    } catch (err) {
-      if (!handleSaveError(err, fields)) setSaveStatus('idle');
+    } catch {
+      setSaveStatus('idle');
     }
-  };
-
-  const acceptRemote = () => {
-    const remote = pendingRemoteContent();
-    if (remote === null) return;
-    // Defensive: ContentEditor skips its sync effect while focused. Blur so
-    // the remote text definitely renders even if the user reached the
-    // banner via keyboard navigation.
-    editorEl?.blur();
-    setContent(remote);
-    setPendingRemoteContent(null);
-    pulse('content');
-  };
-
-  const keepMine = () => {
-    setPendingRemoteContent(null);
-    clearTimeout(debounceTimer);
-    void saveImmediate({ description: content() });
   };
 
   onMount(async () => {
@@ -233,19 +195,8 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
           if (!initial) pulse('criteria');
         }
 
-        // Fields with active editors: skip if focused, otherwise update.
+        // `description` is owned by Yjs now; we don't touch it here.
         const active = document.activeElement as HTMLElement | null;
-        const nextContent = detail.description || '';
-        if (initial || active !== editorEl) {
-          if (nextContent !== content()) {
-            setContent(nextContent);
-            if (!initial) pulse('content');
-          }
-          if (!initial) setPendingRemoteContent(null);
-        } else if (nextContent !== content()) {
-          setPendingRemoteContent(nextContent);
-        }
-        if ((detail as any).updated_at) setBaseVersion((detail as any).updated_at);
         const titleFocused = !!titleRef && active === titleRef;
         if (initial || !titleFocused) {
           if (detail.title !== title()) {
@@ -743,24 +694,13 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
               </div>
             </section>
 
-            {/* Content canvas */}
-            <Show when={pendingRemoteContent() !== null}>
-              <ConflictBanner
-                actorName={null}
-                onAcceptRemote={acceptRemote}
-                onKeepMine={keepMine}
-              />
-            </Show>
-            <div
-              classList={{ 'animate-remote-pulse': isPulsing('content') }}
-              class="rounded-xl"
-            >
+            {/* Content canvas — Yjs-backed; concurrent edits converge live. */}
+            <div class="rounded-xl">
               <ContentEditor
                 content={content()}
+                ytext={yDoc.text}
                 placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
-                onChange={(md) => {
-                  scheduleSave({ description: md });
-                }}
+                onChange={(md) => setContent(md)}
                 class="px-1"
                 onEditorMount={(el) => {
                   editorEl = el;
