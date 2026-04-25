@@ -832,6 +832,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
               project={project}
               assignee={assignee}
               otherAssignees={others}
+              entryIndex={index}
               focused={focusedColumn() === status && focusedIndex() === index}
               dragging={draggingId() === story.id}
               suppressClick={suppressCardClick()}
@@ -850,7 +851,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   };
 
   return (
-    <div class="space-y-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div class="kanban-board-enter space-y-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <TopNavigation
         breadcrumbs={[{ label: 'Proyectos', icon: <FolderKanban size={14} /> }]}
         center={
@@ -863,7 +864,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       />
 
       <div class="relative px-1">
-        <div class="flex items-start gap-2">
+        <div class="flex items-center gap-2">
           <div class="min-w-0 flex-1">
             <FilterBar
               scope={scope()}

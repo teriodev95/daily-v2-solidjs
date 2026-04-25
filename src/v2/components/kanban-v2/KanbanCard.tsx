@@ -12,6 +12,7 @@ interface KanbanCardProps {
   focused?: boolean;
   dragging?: boolean;
   suppressClick?: boolean;
+  entryIndex?: number;
   onOpen: () => void;
   onMenuOpen: (event: MouseEvent, story: Story) => void;
   onPointerDownCard: (event: PointerEvent, story: Story, element: HTMLElement) => void;
@@ -133,7 +134,7 @@ const KanbanCard: Component<KanbanCardProps> = (props) => {
       onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
       class={[
-        'group relative overflow-hidden rounded-xl border bg-base-100 px-3 py-2.5',
+        'kanban-card-enter group relative overflow-hidden rounded-xl border bg-base-100 px-3 py-2.5',
         'border-base-content/[0.10] shadow-[0_1px_2px_rgba(31,35,41,0.035),0_3px_10px_rgba(31,35,41,0.022)]',
         'transition-[border-color,background-color,opacity] duration-150',
         'cursor-pointer select-none hover:bg-base-content/[0.018] hover:border-base-content/[0.16]',
@@ -141,6 +142,9 @@ const KanbanCard: Component<KanbanCardProps> = (props) => {
         props.focused ? 'border-ios-blue-500 ring-1 ring-ios-blue-500/25' : '',
         props.dragging ? 'opacity-35' : '',
       ].filter(Boolean).join(' ')}
+      style={{
+        '--kanban-card-delay': `${Math.min((props.entryIndex ?? 0) * 28, 168)}ms`,
+      }}
     >
       <button
         type="button"

@@ -39,6 +39,13 @@ const STATUS_ICONS: Record<StoryStatus, Component<{ size?: number }>> = {
   done: CheckCircle2,
 };
 
+const COLUMN_MOTION_INDEX: Record<StoryStatus, number> = {
+  backlog: 0,
+  todo: 1,
+  in_progress: 2,
+  done: 3,
+};
+
 const DropPlaceholder: Component<{ height: number | null }> = (props) => (
   <div
     class="my-0.5 rounded-xl border border-dashed border-ios-blue-500/28 bg-ios-blue-500/[0.045] shadow-[inset_0_0_0_1px_rgba(0,122,255,0.025)]"
@@ -111,10 +118,13 @@ const KanbanColumn: Component<KanbanColumnProps> = (props) => {
     <section
       data-kanban-column-status={props.status}
       class={[
-        'flex min-w-[228px] flex-1 flex-col rounded-2xl border border-base-content/[0.035] px-1.5 pb-1.5 pt-1',
+        'kanban-column-enter flex min-w-[228px] flex-1 flex-col rounded-2xl border border-base-content/[0.035] px-1.5 pb-1.5 pt-1',
         props.focused ? 'ring-1 ring-base-content/[0.075]' : '',
       ].filter(Boolean).join(' ')}
-      style={columnSurface()}
+      style={{
+        ...columnSurface(),
+        '--kanban-column-delay': `${COLUMN_MOTION_INDEX[props.status] * 45}ms`,
+      }}
       aria-label={props.label}
     >
       <header class="flex h-10 items-center justify-between gap-2 px-2">

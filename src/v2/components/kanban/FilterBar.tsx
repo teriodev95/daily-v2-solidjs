@@ -111,7 +111,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
 
   const chipClass = (active: boolean) =>
     [
-      'inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] transition-all whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-base-content/20',
+      'inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] leading-none transition-all whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-base-content/20',
       active
         ? 'bg-base-100 text-base-content font-semibold ring-2 shadow-sm shadow-base-content/5'
         : 'bg-base-100 border border-base-content/[0.08] text-base-content/62 font-semibold hover:bg-base-content/5 hover:text-base-content/78',
@@ -119,17 +119,17 @@ const FilterBar: Component<FilterBarProps> = (props) => {
 
   const scopeBtnClass = (active: boolean) =>
     [
-      'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium transition-all',
+      'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium leading-none transition-all',
       active
         ? 'bg-base-100 shadow-sm text-base-content'
         : 'text-base-content/50 hover:text-base-content/80',
     ].join(' ');
 
   return (
-    <div class="flex items-start gap-2.5">
+    <div class="flex min-h-10 items-center gap-2.5">
       {/* Scope segmented control */}
       <div
-        class="inline-flex rounded-full border border-base-content/[0.08] bg-base-200/60 p-1 shrink-0"
+        class="inline-flex h-10 shrink-0 items-center rounded-full border border-base-content/[0.08] bg-base-200/60 p-1"
         role="group"
         aria-label="Ámbito del tablero"
       >
@@ -157,7 +157,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
       <div class="flex-1 min-w-0 relative">
         <div
           ref={chipsRowRef}
-          class="flex flex-wrap gap-1.5 px-1 py-1 -mx-1 max-h-10 overflow-hidden"
+          class="flex h-10 max-h-10 flex-wrap items-center gap-1.5 overflow-hidden px-1 py-1 -mx-1"
           aria-label="Filtrar por proyecto"
         >
           <For each={props.allProjects}>
@@ -191,7 +191,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
       </div>
 
       {/* Overflow dropdown + Limpiar */}
-      <div class="flex items-center gap-2 shrink-0 relative" ref={moreWrapRef}>
+      <div class="relative flex h-10 shrink-0 items-center gap-1.5" ref={moreWrapRef}>
         <Show when={hiddenIds().length > 0}>
           <button
             type="button"
@@ -247,12 +247,12 @@ const FilterBar: Component<FilterBarProps> = (props) => {
         <Show when={props.selectedProjectIds.length > 0}>
           <button
             type="button"
-            class="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-base-content/45 transition-all hover:bg-base-content/5 hover:text-base-content/72"
+            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base-content/36 transition-colors hover:bg-base-content/[0.045] hover:text-base-content/68 focus:outline-none focus-visible:ring-2 focus-visible:ring-base-content/18"
             onClick={() => props.onClearProjects()}
             aria-label="Limpiar filtros de proyecto"
+            title="Limpiar filtros"
           >
-            <X size={12} />
-            Limpiar
+            <X size={14} />
           </button>
         </Show>
       </div>
