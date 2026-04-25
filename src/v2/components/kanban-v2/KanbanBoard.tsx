@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type Component } from 'solid-js';
-import { CheckCircle2, Circle, Clipboard, Command, ExternalLink, EyeOff, FolderKanban, Inbox, PlayCircle, Trash2, X } from 'lucide-solid';
-import type { Story, StoryStatus } from '../../types';
+import { CheckCircle2, ChevronDown, Circle, Clipboard, Command, ExternalLink, EyeOff, FolderKanban, Inbox, Loader2, PlayCircle, Trash2, X } from 'lucide-solid';
+import type { Project, Story, StoryStatus } from '../../types';
 import { api, type KanbanResponse } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useData } from '../../lib/data';
@@ -67,6 +67,12 @@ interface CardMenuState {
 
 const FILTERS_STORAGE_KEY = 'kanban_v2_filters_v1';
 const DRAG_THRESHOLD = 6;
+const BOARD_COLUMN_ORDER: StoryStatus[] = ['backlog', 'todo', 'in_progress'];
+const DONE_RANGE_LABELS: Record<DoneRange, string> = {
+  week: 'Esta semana',
+  month: 'Este mes',
+  all: 'Siempre',
+};
 
 const isStory = (value: unknown): value is Story =>
   !!value && typeof value === 'object' && typeof (value as any).id === 'string' && typeof (value as any).status === 'string';
@@ -98,16 +104,23 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   });
   const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
   const [toast, setToast] = createSignal<{ message: string; kind: 'error' | 'success' } | null>(null);
+  const [donePanelOpen, setDonePanelOpen] = createSignal(false);
+  const [doneStories, setDoneStories] = createSignal<Story[]>([]);
+  const [doneLoading, setDoneLoading] = createSignal(false);
+  const [doneLoaded, setDoneLoaded] = createSignal(false);
 
   let filtersLoaded = false;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let clickSuppressTimer: ReturnType<typeof setTimeout> | undefined;
   let previousUserSelect = '';
   let previousCursor = '';
+  let donePanelRef: HTMLDivElement | undefined;
 
   const visible = createMemo(() => visibleBuckets(buckets(), searchQuery()));
   const draggingId = () => activeDrag()?.started ? activeDrag()!.story.id : null;
   const activeProjects = () => data.projects().filter((project) => project.status === 'active');
+  const doneCount = () => buckets()?.done.total ?? 0;
+  const doneRangeLabel = () => DONE_RANGE_LABELS[doneRange()];
 
   const showToast = (message: string, kind: 'error' | 'success' = 'error') => {
     setToast({ message, kind });
@@ -193,6 +206,44 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     return true;
   };
 
+  const doneCompletedAfter = () => {
+    if (doneRange() === 'all') return undefined;
+    const days = doneRange() === 'week' ? 7 : 30;
+    return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  };
+
+  const sortDoneStories = (stories: Story[]) =>
+    [...stories].sort((a, b) => (b.completed_at ?? b.updated_at).localeCompare(a.completed_at ?? a.updated_at));
+
+  const loadDoneStories = async () => {
+    if (!donePanelOpen()) return;
+    setDoneLoading(true);
+    try {
+      const response = await api.stories.listPaged({
+        status: 'done',
+        limit: 200,
+        offset: 0,
+        completed_after: doneCompletedAfter(),
+      });
+      const filtered = (response.data as Story[]).filter(matchesCurrentFilters);
+      setDoneStories(sortDoneStories(filtered));
+      setDoneLoaded(true);
+    } catch (err) {
+      console.error('done stories load failed', err);
+      showToast('No se pudo cargar Hecho');
+    } finally {
+      setDoneLoading(false);
+    }
+  };
+
+  const patchDonePanelStory = (story: Story) => {
+    setDoneStories((current) => {
+      const without = current.filter((item) => item.id !== story.id);
+      if (story.status !== 'done' || !matchesCurrentFilters(story)) return without;
+      return sortDoneStories([story, ...without]);
+    });
+  };
+
   const applyRealtimeStory = (story: Story, beforeId: string | null = null, afterId: string | null = null) => {
     setBuckets((current) => {
       if (!current) return current;
@@ -202,6 +253,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
         : updateStory(current, story, matchesCurrentFilters);
     });
     setSelectedStory((current) => current?.id === story.id ? { ...current, ...story } : current);
+    if (donePanelOpen()) patchDonePanelStory(story);
   };
 
   const handleRealtime = (event: RealtimeEvent) => {
@@ -211,6 +263,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       if (!id) return void loadKanban({ silent: true });
       setBuckets((current) => current ? deleteStory(current, id) : current);
       setSelectedStory((current) => current?.id === id ? null : current);
+      setDoneStories((current) => current.filter((story) => story.id !== id));
       return;
     }
 
@@ -260,7 +313,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   const openStory = (story: Story) => {
     const current = visible();
     const status = current ? COLUMN_ORDER.find((item) => (current[item].items as Story[]).some((s) => s.id === story.id)) : null;
-    if (status) {
+    if (status && BOARD_COLUMN_ORDER.includes(status)) {
       const index = ((current?.[status].items ?? []) as Story[]).findIndex((item) => item.id === story.id);
       setFocusedColumn(status);
       setFocusedIndex(Math.max(0, index));
@@ -271,7 +324,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
 
   const focusStoryById = (source: KanbanResponse | null, storyId: string) => {
     if (!source) return false;
-    for (const status of COLUMN_ORDER) {
+    for (const status of BOARD_COLUMN_ORDER) {
       const index = (source[status].items as Story[]).findIndex((story) => story.id === storyId);
       if (index >= 0) {
         setFocusedColumn(status);
@@ -285,11 +338,12 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   const moveStoryFromMenu = async (story: Story, status: StoryStatus) => {
     if (story.status === status || menuBusy()) return;
     const current = buckets();
-    if (!current) return;
     const snapshot = current;
     setMenuBusy(`move-${status}`);
-    const moved = moveStory(current, story.id, status, null, null);
-    if (moved.story) setBuckets(moved.next);
+    if (current) {
+      const moved = moveStory(current, story.id, status, null, null);
+      if (moved.story) setBuckets(moved.next);
+    }
     if (status === 'done' && story.status !== 'done') {
       playInteractionSuccess({ source: 'kanban', tone: 'success' });
     }
@@ -303,7 +357,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       setCardMenu(null);
     } catch (err) {
       console.error('menu move failed', err);
-      setBuckets(snapshot);
+      if (snapshot) setBuckets(snapshot);
       showToast('No se pudo mover la historia');
     } finally {
       setMenuBusy(null);
@@ -313,9 +367,9 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   const hideStoryFromMenu = async (story: Story) => {
     if (menuBusy()) return;
     const current = buckets();
-    if (!current) return;
     setMenuBusy('hide');
-    setBuckets(deleteStory(current, story.id));
+    if (current) setBuckets(deleteStory(current, story.id));
+    setDoneStories((stories) => stories.filter((item) => item.id !== story.id));
     try {
       await api.stories.update(story.id, { is_active: false });
       setSelectedStory((item) => item?.id === story.id ? null : item);
@@ -324,7 +378,8 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       showToast('Historia ocultada', 'success');
     } catch (err) {
       console.error('hide story failed', err);
-      setBuckets(current);
+      if (current) setBuckets(current);
+      if (donePanelOpen()) void loadDoneStories();
       showToast('No se pudo ocultar la historia');
     } finally {
       setMenuBusy(null);
@@ -353,6 +408,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     try {
       await api.stories.delete(story.id);
       setBuckets((current) => current ? deleteStory(current, story.id) : current);
+      setDoneStories((stories) => stories.filter((item) => item.id !== story.id));
       setSelectedStory((item) => item?.id === story.id ? null : item);
       setCardMenu(null);
       setConfirmingMenuDelete(false);
@@ -591,7 +647,8 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     }
     if (event.key.toLowerCase() === 'n') {
       event.preventDefault();
-      bumpQuickAdd(focusedColumn());
+      const column = BOARD_COLUMN_ORDER.includes(focusedColumn()) ? focusedColumn() : 'todo';
+      bumpQuickAdd(column);
       return;
     }
     if (event.key === 'Enter') {
@@ -612,9 +669,9 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     }
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault();
-      const current = COLUMN_ORDER.indexOf(focusedColumn());
+      const current = Math.max(0, BOARD_COLUMN_ORDER.indexOf(focusedColumn()));
       const delta = event.key === 'ArrowLeft' ? -1 : 1;
-      const next = COLUMN_ORDER[Math.max(0, Math.min(COLUMN_ORDER.length - 1, current + delta))];
+      const next = BOARD_COLUMN_ORDER[Math.max(0, Math.min(BOARD_COLUMN_ORDER.length - 1, current + delta))];
       setFocusedColumn(next);
       setFocusedIndex(0);
     }
@@ -633,6 +690,10 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       const onPointerDown = (event: PointerEvent) => {
         const target = event.target;
         if (target instanceof HTMLElement && target.closest('[data-kanban-card-menu]')) return;
+        if (target instanceof HTMLElement && target.closest('[data-done-metric]')) return;
+        if (donePanelOpen() && donePanelRef && target instanceof Node && !donePanelRef.contains(target)) {
+          setDonePanelOpen(false);
+        }
         setCardMenu(null);
         setConfirmingMenuDelete(false);
       };
@@ -666,6 +727,15 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     selectedProjectIds();
     doneRange();
     scheduleSaveFilters();
+  });
+
+  createEffect(() => {
+    if (!donePanelOpen()) return;
+    scope();
+    selectedProjectIds();
+    doneRange();
+    props.refreshKey;
+    void loadDoneStories();
   });
 
   const renderColumn = (status: StoryStatus) => {
@@ -734,20 +804,47 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
         }
       />
 
-      <div class="px-1">
-        <FilterBar
-          scope={scope()}
-          onScopeChange={setScope}
-          allProjects={activeProjects()}
-          selectedProjectIds={selectedProjectIds()}
-          onToggleProject={toggleProject}
-          onClearProjects={() => setSelectedProjectIds([])}
-        />
+      <div class="relative px-1">
+        <div class="flex items-start gap-2">
+          <div class="min-w-0 flex-1">
+            <FilterBar
+              scope={scope()}
+              onScopeChange={setScope}
+              allProjects={activeProjects()}
+              selectedProjectIds={selectedProjectIds()}
+              onToggleProject={toggleProject}
+              onClearProjects={() => setSelectedProjectIds([])}
+            />
+          </div>
+          <DoneMetric
+            count={doneCount()}
+            rangeLabel={doneRangeLabel()}
+            open={donePanelOpen()}
+            onClick={() => setDonePanelOpen((open) => !open)}
+          />
+        </div>
+
+        <Show when={donePanelOpen()}>
+          <DoneStoriesPanel
+            panelRef={(element) => { donePanelRef = element; }}
+            stories={doneStories()}
+            loading={doneLoading()}
+            loaded={doneLoaded()}
+            range={doneRange()}
+            onRangeChange={setDoneRange}
+            onOpenStory={(story) => {
+              setDonePanelOpen(false);
+              openStory(story);
+            }}
+            onMenuOpen={openCardMenu}
+            getProject={(id) => id ? data.getProjectById(id) ?? null : null}
+          />
+        </Show>
       </div>
 
       <Show when={!loading() || buckets()} fallback={<KanbanSkeleton />}>
-        <div class="grid grid-cols-4 items-start gap-3 pb-4">
-          <For each={COLUMN_ORDER}>
+        <div class="grid grid-cols-3 items-start gap-3 pb-4">
+          <For each={BOARD_COLUMN_ORDER}>
             {(status) => (
               <div class="min-w-0">{renderColumn(status)}</div>
             )}
@@ -789,12 +886,12 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
               props.onStoryDeleted?.();
             }}
             onUpdated={(id, fields) => {
+              const nextStory = { ...story(), ...fields } as Story;
               setBuckets((current) => {
                 if (!current) return current;
-                const currentStory = story();
-                const nextStory = { ...currentStory, ...fields } as Story;
                 return updateStory(current, nextStory, matchesCurrentFilters);
               });
+              patchDonePanelStory(nextStory);
             }}
           />
         )}
@@ -818,6 +915,142 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     </div>
   );
 };
+
+const DoneMetric: Component<{
+  count: number;
+  rangeLabel: string;
+  open: boolean;
+  onClick: () => void;
+}> = (props) => (
+  <button
+    type="button"
+    data-done-metric
+    onClick={props.onClick}
+    class={[
+      'inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-3 text-left transition-all',
+      'border-base-content/[0.08] bg-base-100 text-base-content/62 shadow-sm hover:bg-base-content/[0.035] hover:text-base-content/82',
+      props.open ? 'ring-2 ring-status-done/30' : '',
+    ].filter(Boolean).join(' ')}
+    aria-expanded={props.open}
+    aria-haspopup="dialog"
+    title="Ver historias hechas"
+  >
+    <span class="h-1.5 w-1.5 rounded-full bg-status-done" aria-hidden="true" />
+    <span class="text-[12.5px] font-semibold tabular-nums">{props.count}</span>
+    <span class="hidden text-[12.5px] font-medium text-base-content/45 xl:inline">{props.rangeLabel}</span>
+    <ChevronDown size={13} class={`transition-transform ${props.open ? 'rotate-180' : ''}`} />
+  </button>
+);
+
+const DoneStoriesPanel: Component<{
+  panelRef: (element: HTMLDivElement) => void;
+  stories: Story[];
+  loading: boolean;
+  loaded: boolean;
+  range: DoneRange;
+  onRangeChange: (range: DoneRange) => void;
+  onOpenStory: (story: Story) => void;
+  onMenuOpen: (event: MouseEvent, story: Story) => void;
+  getProject: (projectId: string | null) => Project | null;
+}> = (props) => (
+  <div
+    ref={props.panelRef}
+    role="dialog"
+    aria-label="Historias hechas"
+    class="absolute right-1 top-[calc(100%+0.5rem)] z-40 w-[360px] overflow-hidden rounded-2xl border border-base-content/[0.08] bg-base-100 shadow-xl shadow-black/15"
+  >
+    <div class="flex items-start justify-between gap-3 border-b border-base-content/[0.06] px-4 py-3">
+      <div>
+        <p class="text-[12px] font-semibold text-base-content/82">Hecho</p>
+        <p class="mt-0.5 text-[10.5px] font-medium text-base-content/35">Historias completadas</p>
+      </div>
+      <div class="flex rounded-full bg-base-content/[0.035] p-0.5">
+        <For each={[
+          ['week', 'Semana'],
+          ['month', 'Mes'],
+          ['all', 'Todo'],
+        ] as [DoneRange, string][]}>
+          {([range, label]) => (
+            <button
+              type="button"
+              onClick={() => props.onRangeChange(range)}
+              class={[
+                'rounded-full px-2 py-1 text-[10.5px] font-semibold transition-colors',
+                props.range === range
+                  ? 'bg-base-100 text-base-content/76 shadow-sm'
+                  : 'text-base-content/38 hover:text-base-content/62',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          )}
+        </For>
+      </div>
+    </div>
+
+    <div class="max-h-[420px] overflow-y-auto p-2">
+      <Show
+        when={!props.loading}
+        fallback={
+          <div class="flex items-center justify-center gap-2 px-4 py-10 text-[12.5px] font-medium text-base-content/35">
+            <Loader2 size={14} class="animate-spin" />
+            Cargando...
+          </div>
+        }
+      >
+        <Show
+          when={props.stories.length > 0}
+          fallback={
+            <div class="px-4 py-10 text-center">
+              <CheckCircle2 size={18} class="mx-auto text-base-content/20" />
+              <p class="mt-2 text-[12.5px] font-medium text-base-content/35">
+                {props.loaded ? 'Sin historias hechas en este rango.' : 'Abre para cargar historias hechas.'}
+              </p>
+            </div>
+          }
+        >
+          <div class="space-y-1">
+            <For each={props.stories}>
+              {(story) => {
+                const project = () => props.getProject(story.project_id);
+                return (
+                  <button
+                    type="button"
+                    onClick={() => props.onOpenStory(story)}
+                    onContextMenu={(event) => props.onMenuOpen(event, story)}
+                    class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-base-content/[0.035]"
+                  >
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-status-done" />
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-[12.5px] font-semibold text-base-content/76">{story.title}</span>
+                      <span class="mt-0.5 flex items-center gap-2 text-[10.5px] font-medium text-base-content/32">
+                        <Show when={project()}>
+                          <span
+                            class="rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-none"
+                            style={{
+                              color: project()!.color,
+                              'background-color': `${project()!.color}14`,
+                            }}
+                          >
+                            {project()!.prefix}
+                          </span>
+                        </Show>
+                        <Show when={story.completed_at}>
+                          <span>{new Date(story.completed_at!).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</span>
+                        </Show>
+                      </span>
+                    </span>
+                    <ExternalLink size={13} class="shrink-0 text-base-content/18 opacity-0 transition-opacity group-hover:opacity-100" />
+                  </button>
+                );
+              }}
+            </For>
+          </div>
+        </Show>
+      </Show>
+    </div>
+  </div>
+);
 
 const DragGhost: Component<{ drag: PointerDragState }> = (props) => (
   <div

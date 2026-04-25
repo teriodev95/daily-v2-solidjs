@@ -111,25 +111,25 @@ const FilterBar: Component<FilterBarProps> = (props) => {
 
   const chipClass = (active: boolean) =>
     [
-      'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] transition-all whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-base-content/20',
+      'inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] transition-all whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-base-content/20',
       active
-        ? 'bg-base-100 text-base-content font-semibold ring-2 shadow-md shadow-base-content/5'
-        : 'bg-base-100 border border-base-content/[0.08] text-base-content/70 font-medium hover:bg-base-content/5',
+        ? 'bg-base-100 text-base-content font-semibold ring-2 shadow-sm shadow-base-content/5'
+        : 'bg-base-100 border border-base-content/[0.08] text-base-content/62 font-semibold hover:bg-base-content/5 hover:text-base-content/78',
     ].join(' ');
 
   const scopeBtnClass = (active: boolean) =>
     [
-      'inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[13px] font-medium transition-all',
+      'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium transition-all',
       active
         ? 'bg-base-100 shadow-sm text-base-content'
         : 'text-base-content/50 hover:text-base-content/80',
     ].join(' ');
 
   return (
-    <div class="flex items-start gap-3 flex-wrap">
+    <div class="flex items-start gap-2.5">
       {/* Scope segmented control */}
       <div
-        class="inline-flex p-1 rounded-full bg-base-200/60 border border-base-content/[0.08] shrink-0"
+        class="inline-flex rounded-full border border-base-content/[0.08] bg-base-200/60 p-1 shrink-0"
         role="group"
         aria-label="Ámbito del tablero"
       >
@@ -157,7 +157,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
       <div class="flex-1 min-w-0 relative">
         <div
           ref={chipsRowRef}
-          class="flex flex-wrap gap-2 py-1 px-1 -mx-1 max-h-[2.75rem] overflow-hidden"
+          class="flex flex-wrap gap-1.5 px-1 py-1 -mx-1 max-h-10 overflow-hidden"
           aria-label="Filtrar por proyecto"
         >
           <For each={props.allProjects}>
@@ -174,16 +174,15 @@ const FilterBar: Component<FilterBarProps> = (props) => {
                   title={`${project.prefix} · ${project.name}`}
                 >
                   <span
-                    class="w-2 h-2 rounded-full shrink-0"
+                    class="h-1.5 w-1.5 rounded-full shrink-0"
                     style={{ background: project.color }}
                     aria-hidden="true"
                   />
                   <span
-                    class={`font-semibold ${active() ? 'text-base-content/70' : 'text-base-content/50'}`}
+                    class={active() ? 'text-base-content/82' : 'text-base-content/58'}
                   >
                     {project.prefix}
                   </span>
-                  <span>{project.name}</span>
                 </button>
               );
             }}
@@ -200,6 +199,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
             onClick={() => setMoreOpen((v) => !v)}
             aria-expanded={moreOpen()}
             aria-haspopup="menu"
+            title="Más proyectos"
           >
             <span>Más ({hiddenIds().length})</span>
             <ChevronDown
@@ -209,7 +209,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
           </button>
           <Show when={moreOpen()}>
             <div
-              class="absolute top-full right-0 mt-2 bg-base-100 border border-base-content/[0.08] rounded-xl shadow-lg p-2 min-w-[220px] max-w-[320px] z-40 flex flex-wrap gap-2"
+              class="absolute top-full right-0 z-40 mt-2 flex min-w-[220px] max-w-[320px] flex-wrap gap-1.5 rounded-2xl border border-base-content/[0.08] bg-base-100 p-2 shadow-lg"
               role="menu"
               aria-label="Más proyectos"
             >
@@ -224,18 +224,18 @@ const FilterBar: Component<FilterBarProps> = (props) => {
                       onClick={() => props.onToggleProject(project.id)}
                       role="menuitemcheckbox"
                       aria-checked={active()}
+                      title={`${project.prefix} · ${project.name}`}
                     >
                       <span
-                        class="w-2 h-2 rounded-full shrink-0"
+                        class="h-1.5 w-1.5 rounded-full shrink-0"
                         style={{ background: project.color }}
                         aria-hidden="true"
                       />
                       <span
-                        class={`font-semibold ${active() ? 'text-base-content/70' : 'text-base-content/50'}`}
+                        class={active() ? 'text-base-content/82' : 'text-base-content/58'}
                       >
                         {project.prefix}
                       </span>
-                      <span class="truncate">{project.name}</span>
                     </button>
                   );
                 }}
@@ -247,7 +247,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
         <Show when={props.selectedProjectIds.length > 0}>
           <button
             type="button"
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[12px] font-medium text-base-content/50 hover:text-base-content hover:bg-base-content/5 transition-all"
+            class="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-base-content/45 transition-all hover:bg-base-content/5 hover:text-base-content/72"
             onClick={() => props.onClearProjects()}
             aria-label="Limpiar filtros de proyecto"
           >
