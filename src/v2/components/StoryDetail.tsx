@@ -10,6 +10,7 @@ import {
   Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban, Archive, AlertCircle,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
+import { formatTimeAgo } from '../lib/relativeDate';
 import AttachmentSection from './AttachmentSection';
 import { ContentEditor } from './ContentEditor';
 import DatePickerPopover from './DatePickerPopover';
@@ -888,8 +889,21 @@ const StoryDetail: Component<Props> = (props) => {
             </div>
           </Show>
 
+          {/* Created/updated metadata — small footer above destructive actions. */}
+          <div class="pt-5 mt-3 border-t border-base-content/[0.04] flex items-center gap-2 text-[11px] text-base-content/30 font-medium">
+            <span title={new Date(props.story.created_at).toLocaleString('es-MX')}>
+              Creado {formatTimeAgo(props.story.created_at)}
+            </span>
+            <Show when={props.story.updated_at && props.story.updated_at !== props.story.created_at}>
+              <span class="text-base-content/15">·</span>
+              <span title={new Date(props.story.updated_at).toLocaleString('es-MX')}>
+                Actualizado {formatTimeAgo(props.story.updated_at)}
+              </span>
+            </Show>
+          </div>
+
           {/* Delete */}
-          <div class="pt-6 mt-4 border-t border-base-content/[0.04]">
+          <div class="pt-5 mt-2">
             <Show when={canArchive()}>
               <div class="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-base-content/[0.06] bg-base-content/[0.02] px-4 py-3">
                 <div class="min-w-0">

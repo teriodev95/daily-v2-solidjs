@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../../lib/recurrence';
+import { formatTimeAgo } from '../../lib/relativeDate';
 import AttachmentSection from '../../components/AttachmentSection';
 import { ContentEditor } from '../../components/ContentEditor';
 import CopyForAgentButton from '../../components/CopyForAgentButton';
@@ -820,6 +821,19 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                 }}
               />
             </Show>
+
+            {/* Created/updated metadata — small footer above destructive actions. */}
+            <div class="flex items-center gap-2 px-1 text-[11px] text-base-content/30 font-medium">
+              <span title={new Date(props.story.created_at).toLocaleString('es-MX')}>
+                Creado {formatTimeAgo(props.story.created_at)}
+              </span>
+              <Show when={props.story.updated_at && props.story.updated_at !== props.story.created_at}>
+                <span class="text-base-content/15">·</span>
+                <span title={new Date(props.story.updated_at).toLocaleString('es-MX')}>
+                  Actualizado {formatTimeAgo(props.story.updated_at)}
+                </span>
+              </Show>
+            </div>
 
             <section class="space-y-3 rounded-[28px] border border-base-content/[0.07] bg-base-content/[0.03] p-4">
               <Show when={canArchive()}>
