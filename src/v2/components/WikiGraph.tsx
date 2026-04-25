@@ -1,6 +1,7 @@
 import { createResource, onMount, onCleanup, Show, type Component } from 'solid-js';
 import type { WikiArticle } from '../types';
 import { api } from '../lib/api';
+import { useOnceReady } from '../lib/onceReady';
 import { X, Maximize2, Minimize2 } from 'lucide-solid';
 
 interface Props {
@@ -29,6 +30,10 @@ const WikiGraph: Component<Props> = (props) => {
     () => props.projectId,
     (pid) => api.wiki.graph(pid),
   );
+
+  // Latch — the "Cargando grafo…" overlay only shows on first load. On
+  // subsequent refetches the previous graph stays visible.
+  const graphReady = useOnceReady(graphData);
 
   onMount(async () => {
     // Dynamic import to avoid SSR issues
@@ -165,15 +170,15 @@ const WikiGraph: Component<Props> = (props) => {
         </button>
       </Show>
 
-      {/* Loading */}
-      <Show when={graphData.loading}>
+      {/* Loading — only on first load; refetches keep showing the previous graph. */}
+      <Show when={!graphReady()}>
         <div class="absolute inset-0 flex items-center justify-center bg-base-100/50">
           <span class="text-[12px] text-base-content/30">Cargando grafo...</span>
         </div>
       </Show>
 
       {/* Empty state */}
-      <Show when={!graphData.loading && graphData() && (graphData() as any).nodes?.length === 0}>
+      <Show when={graphReady() && (graphData() as any)?.nodes?.length === 0}>
         <div class="absolute inset-0 flex items-center justify-center">
           <span class="text-[12px] text-base-content/20">Sin artículos con conexiones</span>
         </div>

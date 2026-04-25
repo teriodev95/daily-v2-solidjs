@@ -1,4 +1,5 @@
 import { createSignal, createResource, onCleanup, onMount, For, Show, type Component } from 'solid-js';
+import { useOnceReady } from '../lib/onceReady';
 import { useRealtimeRefetch } from '../lib/realtime';
 import { activeTab as globalActiveTab } from '../lib/activeTab';
 import { useAuth } from '../lib/auth';
@@ -60,6 +61,11 @@ const AdminPage: Component = () => {
 
   const activeRecurring = () => (recurringList() ?? []).filter(s => s.is_active);
   const inactiveRecurring = () => (recurringList() ?? []).filter(s => !s.is_active);
+
+  // Latches: only show "vacío" copy after each list has loaded once. Without
+  // this the empty-state messages flicker during realtime refetches.
+  const assignmentsReady = useOnceReady(assignmentsList);
+  const recurringReady = useOnceReady(recurringList);
 
   onMount(() => {
     const unsub = useRealtimeRefetch(
@@ -426,7 +432,7 @@ const AdminPage: Component = () => {
 
             {/* Open assignments */}
             <div class="space-y-1">
-              <Show when={openAssignments().length === 0 && !assignmentsList.loading}>
+              <Show when={openAssignments().length === 0 && assignmentsReady()}>
                 <div class="text-center py-8 text-base-content/20 text-xs">
                   Sin encomiendas abiertas
                 </div>
@@ -539,7 +545,7 @@ const AdminPage: Component = () => {
 
             {/* Active recurring */}
             <div class="space-y-1">
-              <Show when={activeRecurring().length === 0 && !recurringList.loading}>
+              <Show when={activeRecurring().length === 0 && recurringReady()}>
                 <div class="text-center py-8 text-base-content/20 text-xs">
                   Sin tareas recurrentes
                 </div>

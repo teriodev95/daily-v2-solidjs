@@ -14,5 +14,5 @@ export const useOnceReady = (
 ): (() => boolean) =>
   createMemo<boolean>((prev) => {
     if (prev) return true;
-    return resources.every(r => r.state === 'ready' || r.state === 'errored' || r.state === 'refreshing');
+    return resources.every(r => r.state === 'ready' || r.state === 'errored');
   }, false);

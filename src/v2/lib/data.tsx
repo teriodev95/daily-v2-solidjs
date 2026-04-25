@@ -48,7 +48,7 @@ export const DataProvider: ParentComponent = (props) => {
   // empty arrays and the page-level UX surfaces the issue contextually.
   const firstReady = createMemo<boolean>((prev) => {
     if (prev) return true;
-    const settled = (s: string) => s === 'ready' || s === 'errored' || s === 'refreshing';
+    const settled = (s: string) => s === 'ready' || s === 'errored';
     return settled(users.state) && settled(projectList.state);
   }, false);
 
