@@ -1,8 +1,9 @@
 import { createSignal, createEffect, on, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import { onRealtime } from '../lib/realtime';
+import { onRealtime, onRealtimeStatus } from '../lib/realtime';
 import type { Story, AcceptanceCriteria, User } from '../types';
 import { useData } from '../lib/data';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
+import ConflictBanner from '../components/ConflictBanner';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
   ClipboardCheck, Trash2,
@@ -134,11 +135,40 @@ const StoryDetail: Component<Props> = (props) => {
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Optimistic concurrency for `description`. We track the `updated_at` we
+  // observed last and send it as `expected_updated_at` on description PATCHes.
+  // On 409 the server returns the current row; we surface a banner so the user
+  // can choose to take the remote text or push their local on top.
+  const [baseVersion, setBaseVersion] = createSignal<string>(props.story.updated_at);
+  const [pendingRemoteContent, setPendingRemoteContent] = createSignal<string | null>(null);
+
   onCleanup(() => {
     clearTimeout(debounceTimer);
     clearTimeout(savedTimer);
     document.body.style.overflow = '';
   });
+
+  // Description PATCHes piggyback `expected_updated_at`; other fields stay
+  // last-write-wins so we don't surprise users editing chips.
+  const buildPayload = (fields: Record<string, unknown>): Record<string, unknown> =>
+    'description' in fields ? { ...fields, expected_updated_at: baseVersion() } : fields;
+
+  const handleSaveError = (err: unknown, fields: Record<string, unknown>): boolean => {
+    if (
+      'description' in fields &&
+      err instanceof ApiError &&
+      err.status === 409 &&
+      err.body?.current?.description !== undefined
+    ) {
+      const remote = err.body.current;
+      // Bump the base so the next attempt (e.g. "Pisar con la mía") will pass.
+      if (remote.updated_at) setBaseVersion(remote.updated_at);
+      setPendingRemoteContent(remote.description ?? '');
+      setSaveStatus('idle');
+      return true;
+    }
+    return false;
+  };
 
   const scheduleSave = (fields: Record<string, unknown>) => {
     clearTimeout(debounceTimer);
@@ -146,13 +176,14 @@ const StoryDetail: Component<Props> = (props) => {
     debounceTimer = setTimeout(async () => {
       setSaveStatus('saving');
       try {
-        await api.stories.update(props.story.id, fields);
+        const updated = await api.stories.update(props.story.id, buildPayload(fields));
+        if ((updated as any)?.updated_at) setBaseVersion((updated as any).updated_at);
         setSaveStatus('saved');
         props.onUpdated?.(props.story.id, fields);
         clearTimeout(savedTimer);
         savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
-      } catch {
-        setSaveStatus('error');
+      } catch (err) {
+        if (!handleSaveError(err, fields)) setSaveStatus('error');
       }
     }, 800);
   };
@@ -160,14 +191,35 @@ const StoryDetail: Component<Props> = (props) => {
   const saveImmediate = async (fields: Record<string, unknown>) => {
     setSaveStatus('saving');
     try {
-      await api.stories.update(props.story.id, fields);
+      const updated = await api.stories.update(props.story.id, buildPayload(fields));
+      if ((updated as any)?.updated_at) setBaseVersion((updated as any).updated_at);
       setSaveStatus('saved');
       props.onUpdated?.(props.story.id, fields);
       clearTimeout(savedTimer);
       savedTimer = setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch {
-      setSaveStatus('error');
+    } catch (err) {
+      if (!handleSaveError(err, fields)) setSaveStatus('error');
     }
+  };
+
+  const acceptRemote = () => {
+    const remote = pendingRemoteContent();
+    if (remote === null) return;
+    // Defensive: ContentEditor skips its sync effect while the editor has
+    // focus, so blur explicitly to guarantee the remote text is rendered
+    // even if the user reached the banner via keyboard navigation.
+    editorEl?.blur();
+    setContent(remote);
+    setPendingRemoteContent(null);
+    pulse('content');
+  };
+
+  const keepMine = () => {
+    setPendingRemoteContent(null);
+    // Cancel any debounced save and force one immediately with the current
+    // baseVersion (which now matches the remote, so the PATCH will succeed).
+    clearTimeout(debounceTimer);
+    void saveImmediate({ description: content() });
   };
 
   // Attachment paste upload ref
@@ -246,13 +298,22 @@ const StoryDetail: Component<Props> = (props) => {
 
         // Skip fields the user is actively editing so we don't stomp on typing.
         const active = document.activeElement as HTMLElement | null;
+        const nextContent = detail.description || '';
         if (initial || active !== editorEl) {
-          const nextContent = detail.description || '';
           if (nextContent !== content()) {
             setContent(nextContent);
             if (!initial) pulse('content');
           }
+          // No conflict pending while editor is unfocused: clear any leftover.
+          if (!initial) setPendingRemoteContent(null);
+        } else if (nextContent !== content()) {
+          // User has the editor focused and the remote content diverges from
+          // what they're typing. Don't stomp — surface a banner instead.
+          setPendingRemoteContent(nextContent);
         }
+        // Always advance baseVersion: the user has been notified (via banner
+        // or applied content), so future saves shouldn't 409 on this version.
+        if ((detail as any).updated_at) setBaseVersion((detail as any).updated_at);
         const titleFocused = !!titleRef && active === titleRef;
         if (initial || !titleFocused) {
           if (detail.title !== title()) {
@@ -272,6 +333,16 @@ const StoryDetail: Component<Props> = (props) => {
       void refetchDetail();
     });
     onCleanup(unsubRT);
+
+    // Catch up after WS reconnects: events emitted while offline are lost,
+    // so re-pull the detail on every false→true transition. The first sync
+    // emission from `onRealtimeStatus` is skipped — we just fetched.
+    let firstStatusEmission = true;
+    const unsubStatus = onRealtimeStatus((on) => {
+      if (firstStatusEmission) { firstStatusEmission = false; return; }
+      if (on) void refetchDetail();
+    });
+    onCleanup(unsubStatus);
   });
 
   const project = () => projectId() ? data.getProjectById(projectId()) : null;
@@ -720,6 +791,13 @@ const StoryDetail: Component<Props> = (props) => {
           </div>
 
           {/* Content canvas */}
+          <Show when={pendingRemoteContent() !== null}>
+            <ConflictBanner
+              actorName={null}
+              onAcceptRemote={acceptRemote}
+              onKeepMine={keepMine}
+            />
+          </Show>
           <div
             classList={{ 'animate-remote-pulse': isPulsing('content') }}
             class="rounded-xl"

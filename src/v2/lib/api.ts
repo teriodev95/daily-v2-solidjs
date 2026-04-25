@@ -4,7 +4,10 @@ import type {
 } from '../types';
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  // `body` carries the parsed JSON response when the server returns a
+  // structured error (e.g. 409 conflict with the current row). Always check
+  // `status` before relying on a specific shape.
+  constructor(public status: number, message: string, public body?: any) {
     super(message);
   }
 }
@@ -32,7 +35,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, (body as any).error ?? res.statusText);
+    throw new ApiError(res.status, (body as any).error ?? res.statusText, body);
   }
 
   return res.json() as Promise<T>;
@@ -50,7 +53,7 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, (body as any).error ?? res.statusText);
+    throw new ApiError(res.status, (body as any).error ?? res.statusText, body);
   }
 
   return res.json() as Promise<T>;
