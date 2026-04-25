@@ -3,6 +3,7 @@ import type { Story, Assignment } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
+import { useOnceReady } from '../lib/onceReady';
 import {
   CheckCircle, Circle, ArrowRight, PackageCheck, Repeat,
   ChevronRight, Calendar, Flame, ArrowUp, ArrowDown,
@@ -51,6 +52,8 @@ const DashboardPage: Component<DashboardPageProps> = (props) => {
     api.goals.list({ user_id: uid })
   );
 
+  const ready = useOnceReady(stories);
+
   const myStories = () =>
     (stories() ?? []).filter(
       s => s.status !== 'done' && s.code !== null && s.frequency === null
@@ -81,7 +84,7 @@ const DashboardPage: Component<DashboardPageProps> = (props) => {
 
   return (
     <>
-      <Show when={!stories.loading} fallback={<DashboardSkeleton />}>
+      <Show when={ready()} fallback={<DashboardSkeleton />}>
         <div class="space-y-6">
 
           {/* Quick summary */}

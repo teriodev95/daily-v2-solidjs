@@ -3,6 +3,7 @@ dist
 # Lock files - use only npm
 pnpm-lock.yaml
 yarn.lock
+bun.lock
 # Environment files
 .env
 .env.local

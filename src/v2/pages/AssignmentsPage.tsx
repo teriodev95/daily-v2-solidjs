@@ -3,6 +3,7 @@ import type { AssignmentStatus } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
+import { useOnceReady } from '../lib/onceReady';
 import { PackageCheck, Clock, CheckCircle, Calendar } from 'lucide-solid';
 
 const AssignmentsPage: Component = () => {
@@ -11,6 +12,7 @@ const AssignmentsPage: Component = () => {
   const [filter, setFilter] = createSignal<'all' | 'mine' | AssignmentStatus>('mine');
 
   const [assignmentsList] = createResource(() => api.assignments.list());
+  const ready = useOnceReady(assignmentsList);
 
   const currentUser = () => auth.user();
 
@@ -28,7 +30,7 @@ const AssignmentsPage: Component = () => {
   };
 
   return (
-    <Show when={!assignmentsList.loading} fallback={<AssignmentsSkeleton />}>
+    <Show when={ready()} fallback={<AssignmentsSkeleton />}>
     <div class="space-y-4">
       <h1 class="text-lg font-bold">Encomiendas</h1>
 

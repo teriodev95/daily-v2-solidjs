@@ -15,6 +15,7 @@ import DatePickerPopover from './DatePickerPopover';
 import CopyForAgentButton from './CopyForAgentButton';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
 import { isDark } from '../lib/theme';
+import { createPulse } from '../lib/usePulse';
 
 const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   critical: { label: 'Crítica', color: 'text-red-500', bg: 'bg-red-500/10', icon: Flame },
@@ -115,6 +116,7 @@ const StoryDetail: Component<Props> = (props) => {
   const [showPriorityPicker, setShowPriorityPicker] = createSignal(false);
   const [showStatusPicker, setShowStatusPicker] = createSignal(false);
   let dateTriggerRef!: HTMLButtonElement;
+  let titleRef: HTMLTextAreaElement | undefined;
   let editorEl: HTMLElement | undefined;
   let editorFocused = false;
   let unmounted = false;
@@ -124,6 +126,9 @@ const StoryDetail: Component<Props> = (props) => {
   createEffect(on(isDark, (dark) => {
     if (editorEl && !editorFocused) void renderMermaid(editorEl, dark, mermaidOpts);
   }, { defer: true }));
+  // Per-field pulse for remote updates (Notion-style "someone else touched this").
+  const { pulse, isPulsing } = createPulse(800);
+
   // Save state
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>('idle');
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -202,20 +207,59 @@ const StoryDetail: Component<Props> = (props) => {
     const refetchDetail = async (opts: { initial?: boolean } = {}) => {
       try {
         const detail = await api.stories.get(props.story.id);
-        setCriteriaList(detail.criteria ?? []);
-        setAssigneeIds(detail.assignees ?? []);
-        setDueDate(detail.due_date || '');
-        setEstimate(detail.estimate || 0);
-        setAssigneeId(detail.assignee_id || '');
-        setProjectId((detail as any).project_id || '');
-        if (detail.priority) setPriority(detail.priority);
-        if (detail.status) setStatus(detail.status);
+        const initial = opts.initial ?? false;
+        // Diff-and-pulse: compare each field against its current local value;
+        // only update + pulse the ones that actually changed remotely.
+        const apply = <T,>(key: string, prev: T, next: T, set: (v: T) => void) => {
+          if (prev === next) return;
+          set(next);
+          if (!initial) pulse(key);
+        };
+
+        apply('due_date', dueDate(), detail.due_date || '', setDueDate);
+        apply('estimate', estimate(), detail.estimate || 0, setEstimate);
+        apply('assignee_id', assigneeId(), detail.assignee_id || '', setAssigneeId);
+        apply('project_id', projectId(), (detail as any).project_id || '', setProjectId);
+        if (detail.priority) apply('priority', priority(), detail.priority, setPriority);
+        if (detail.status) apply('status', status(), detail.status, setStatus);
+
+        const newAssignees = detail.assignees ?? [];
+        const oldKey = [...assigneeIds()].sort().join(',');
+        const newKey = [...newAssignees].sort().join(',');
+        if (oldKey !== newKey) {
+          setAssigneeIds(newAssignees);
+          if (!initial) pulse('assignees');
+        }
+
+        // Sort by sort_order then id so backend re-ordering of equivalent
+        // lists doesn't trigger a spurious pulse.
+        const criteriaKey = (list: AcceptanceCriteria[]) =>
+          [...list]
+            .sort((a, b) => (a.sort_order - b.sort_order) || a.id.localeCompare(b.id))
+            .map(c => `${c.id}:${c.is_met}:${c.text}:${c.sort_order}`)
+            .join('|');
+        const newCriteriaList = detail.criteria ?? [];
+        if (criteriaKey(criteriaList()) !== criteriaKey(newCriteriaList)) {
+          setCriteriaList(newCriteriaList);
+          if (!initial) pulse('criteria');
+        }
 
         // Skip fields the user is actively editing so we don't stomp on typing.
         const active = document.activeElement as HTMLElement | null;
-        if (opts.initial || active !== editorEl) setContent(detail.description || '');
-        const titleFocused = !!active && active.tagName === 'TEXTAREA';
-        if (opts.initial || !titleFocused) setTitle(detail.title);
+        if (initial || active !== editorEl) {
+          const nextContent = detail.description || '';
+          if (nextContent !== content()) {
+            setContent(nextContent);
+            if (!initial) pulse('content');
+          }
+        }
+        const titleFocused = !!titleRef && active === titleRef;
+        if (initial || !titleFocused) {
+          if (detail.title !== title()) {
+            setTitle(detail.title);
+            if (!initial) pulse('title');
+          }
+        }
       } catch { /* story detail is supplementary */ }
     };
 
@@ -348,6 +392,7 @@ const StoryDetail: Component<Props> = (props) => {
             <div class="relative">
               <button
                 onClick={() => setShowProjectPicker(v => !v)}
+                classList={{ 'animate-remote-pulse': isPulsing('project_id') }}
                 class={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all ${project()
                   ? 'hover:opacity-80'
                   : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08]'
@@ -398,6 +443,7 @@ const StoryDetail: Component<Props> = (props) => {
             <div class="relative">
               <button
                 onClick={() => setShowStatusPicker(v => !v)}
+                classList={{ 'animate-remote-pulse': isPulsing('status') }}
                 class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-base-content/[0.04] hover:bg-base-content/[0.07] transition-all"
               >
                 <span class={`w-2 h-2 rounded-full ${stat().color}`} />
@@ -428,6 +474,7 @@ const StoryDetail: Component<Props> = (props) => {
             <div class="relative">
               <button
                 onClick={() => setShowPriorityPicker(v => !v)}
+                classList={{ 'animate-remote-pulse': isPulsing('priority') }}
                 class={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all ${prio().bg} ${prio().color} hover:opacity-80`}
               >
                 {(() => { const PIcon = prio().icon; return <PIcon size={11} strokeWidth={2.5} />; })()}
@@ -465,6 +512,7 @@ const StoryDetail: Component<Props> = (props) => {
               <button
                 ref={dateTriggerRef}
                 onClick={() => setShowDatePicker(!showDatePicker())}
+                classList={{ 'animate-remote-pulse': isPulsing('due_date') }}
                 class={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
                   dueDate()
                     ? 'bg-ios-blue-500/10 text-ios-blue-500 hover:bg-ios-blue-500/15'
@@ -519,6 +567,7 @@ const StoryDetail: Component<Props> = (props) => {
             <div class="relative">
               <button
                 onClick={() => setShowEstimatePicker(!showEstimatePicker())}
+                classList={{ 'animate-remote-pulse': isPulsing('estimate') }}
                 class={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
                   estimate() > 0
                     ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/15'
@@ -556,7 +605,10 @@ const StoryDetail: Component<Props> = (props) => {
 
             {/* Assignee chip */}
             <Show when={currentAssignee()}>
-              <div class="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-base-content/[0.04]">
+              <div
+                classList={{ 'animate-remote-pulse': isPulsing('assignee_id') || isPulsing('assignees') }}
+                class="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-base-content/[0.04]"
+              >
                 <img src={currentAssignee()!.avatar_url!} alt="" class="w-5 h-5 rounded-full object-cover" title={currentAssignee()!.name} />
                 <span class="text-[11px] font-medium text-base-content/60">{currentAssignee()!.name.split(' ')[0]}</span>
               </div>
@@ -648,13 +700,16 @@ const StoryDetail: Component<Props> = (props) => {
         <div class="px-5 sm:px-8 py-5 sm:py-6 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-8 space-y-4 sm:space-y-5">
 
           {/* Title */}
-          <div class="overflow-hidden">
+          <div
+            classList={{ 'animate-remote-pulse': isPulsing('title') }}
+            class="overflow-hidden rounded-lg"
+          >
             <textarea
               value={title()}
               rows={1}
               class="w-full text-xl sm:text-[26px] font-extrabold leading-tight text-base-content bg-transparent resize-none outline-none overflow-hidden px-1 py-1 placeholder:text-base-content/20"
               placeholder="Título de la historia"
-              ref={(el) => { requestAnimationFrame(() => autoResize(el)); }}
+              ref={(el) => { titleRef = el; requestAnimationFrame(() => autoResize(el)); }}
               onInput={(e) => {
                 const val = e.currentTarget.value;
                 setTitle(val);
@@ -665,23 +720,31 @@ const StoryDetail: Component<Props> = (props) => {
           </div>
 
           {/* Content canvas */}
-          <ContentEditor
-            content={content()}
-            placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
-            onChange={(md) => {
-              scheduleSave({ description: md });
-            }}
-            onEditorMount={(el) => {
-              editorEl = el;
-              void renderMermaid(el, isDark(), mermaidOpts);
-            }}
-            onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
-            onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
-          />
+          <div
+            classList={{ 'animate-remote-pulse': isPulsing('content') }}
+            class="rounded-xl"
+          >
+            <ContentEditor
+              content={content()}
+              placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
+              onChange={(md) => {
+                scheduleSave({ description: md });
+              }}
+              onEditorMount={(el) => {
+                editorEl = el;
+                void renderMermaid(el, isDark(), mermaidOpts);
+              }}
+              onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
+              onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
+            />
+          </div>
 
           {/* Acceptance Criteria */}
           <Show when={criteria().length > 0}>
-            <section class="space-y-4 pt-2">
+            <section
+              classList={{ 'animate-remote-pulse': isPulsing('criteria') }}
+              class="space-y-4 pt-2 rounded-xl"
+            >
               <div class="flex items-center gap-3">
                 <div class="flex items-center gap-2 text-base-content/40">
                   <ClipboardCheck size={14} />

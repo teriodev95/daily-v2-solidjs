@@ -5,6 +5,7 @@ import CreateTokenModal from '../components/tokens/CreateTokenModal';
 import TokenRevealDialog from '../components/tokens/TokenRevealDialog';
 import { MODULES } from '../components/tokens/PermissionMatrix';
 import { api, type Token, type CreatedToken, type TokenScope } from '../lib/api';
+import { useOnceReady } from '../lib/onceReady';
 
 const moduleLabel = (key: string): string =>
   MODULES.find((m) => m.key === key)?.label ?? key;
@@ -45,6 +46,7 @@ const visibleScopes = (scopes: Record<string, TokenScope>): ScopeBadge[] => {
 
 const TokensPage: Component = () => {
   const [tokens, { refetch, mutate }] = createResource(() => api.tokens.list());
+  const ready = useOnceReady(tokens);
   const [showCreate, setShowCreate] = createSignal(false);
   const [revealed, setRevealed] = createSignal<{ token: string; name: string } | null>(null);
   const [copiedId, setCopiedId] = createSignal<string | null>(null);
@@ -168,7 +170,7 @@ const TokensPage: Component = () => {
         </div>
 
         {/* Content */}
-        <Show when={!tokens.loading} fallback={<TokensSkeleton />}>
+        <Show when={ready()} fallback={<TokensSkeleton />}>
           <Show
             when={activeTokens().length > 0}
             fallback={<EmptyState onCreate={() => setShowCreate(true)} />}

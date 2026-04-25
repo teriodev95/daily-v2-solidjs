@@ -21,6 +21,7 @@ import StoryDetail from './components/StoryDetail';
 import InstallPrompt from './components/InstallPrompt';
 import AgentBootstrapModal from './components/AgentBootstrapModal';
 import UpdateToast from './components/UpdateToast';
+import SyncIndicator from './components/SyncIndicator';
 import MobileShell from './mobile/shell/MobileShell';
 import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
@@ -373,6 +374,9 @@ const AppShell: Component = () => {
 
       {/* PWA install prompt */}
       <InstallPrompt />
+
+      {/* Realtime sync indicator (top-right, idle = invisible) */}
+      <SyncIndicator />
     </div>
   );
 };
