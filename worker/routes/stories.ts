@@ -17,6 +17,129 @@ const parseRecurrenceDays = (s: any) => ({
   recurrence_days: s.recurrence_days ? JSON.parse(s.recurrence_days) : null,
 });
 
+type StoryStatus = 'backlog' | 'todo' | 'in_progress' | 'done';
+
+const VALID_STATUSES: StoryStatus[] = ['backlog', 'todo', 'in_progress', 'done'];
+const ORDER_STEP = 1024;
+
+const attachAssignees = async <T extends { id: string }>(db: Variables['db'], rows: T[]) => {
+  if (rows.length === 0) return [];
+  const ids = new Set(rows.map((row) => row.id));
+  const assigneeMap = new Map<string, string[]>();
+  const allAssignees = await db.select().from(schema.storyAssignees);
+  for (const a of allAssignees) {
+    if (!ids.has(a.story_id)) continue;
+    const arr = assigneeMap.get(a.story_id) ?? [];
+    arr.push(a.user_id);
+    assigneeMap.set(a.story_id, arr);
+  }
+  return rows.map((row) => parseRecurrenceDays({ ...row, assignees: assigneeMap.get(row.id) ?? [] }));
+};
+
+const loadStoryWithAssignees = async (db: Variables['db'], storyId: string) => {
+  const [story] = await db.select().from(schema.stories).where(eq(schema.stories.id, storyId)).limit(1);
+  if (!story) return null;
+  const [shaped] = await attachAssignees(db, [story]);
+  return shaped ?? null;
+};
+
+const sortBoardRows = <T extends { sort_order: number; updated_at: string }>(rows: T[]) => {
+  const seen = new Set<number>();
+  const hasUsableManualOrder = rows.length > 0 && rows.every((row) => {
+    const order = Number(row.sort_order);
+    if (!Number.isFinite(order) || order <= 0 || seen.has(order)) return false;
+    seen.add(order);
+    return true;
+  });
+  return [...rows].sort((a, b) => {
+    if (hasUsableManualOrder) {
+      const byOrder = a.sort_order - b.sort_order;
+      if (byOrder !== 0) return byOrder;
+    }
+    return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
+  });
+};
+
+const normalizeStatusOrder = async (
+  db: Variables['db'],
+  teamId: string,
+  status: StoryStatus,
+) => {
+  const rows = await db
+    .select()
+    .from(schema.stories)
+    .where(and(
+      eq(schema.stories.team_id, teamId),
+      eq(schema.stories.status, status),
+      eq(schema.stories.is_active, true),
+    ));
+  const ordered = sortBoardRows(rows);
+  for (let i = 0; i < ordered.length; i += 1) {
+    await db
+      .update(schema.stories)
+      .set({ sort_order: (i + 1) * ORDER_STEP } as any)
+      .where(eq(schema.stories.id, ordered[i].id));
+  }
+};
+
+const nextTopOrder = async (
+  db: Variables['db'],
+  teamId: string,
+  status: StoryStatus,
+) => {
+  const rows = await db
+    .select({ sort_order: schema.stories.sort_order })
+    .from(schema.stories)
+    .where(and(
+      eq(schema.stories.team_id, teamId),
+      eq(schema.stories.status, status),
+      eq(schema.stories.is_active, true),
+    ));
+  const positive = rows
+    .map((row) => Number(row.sort_order))
+    .filter((order) => Number.isFinite(order) && order > 0);
+  if (positive.length === 0) return ORDER_STEP;
+  return Math.max(1, Math.min(...positive) - ORDER_STEP);
+};
+
+const calculateMoveOrder = async (
+  db: Variables['db'],
+  teamId: string,
+  toStatus: StoryStatus,
+  beforeId: string | null,
+  afterId: string | null,
+): Promise<number> => {
+  const loadNeighbor = async (id: string | null) => {
+    if (!id) return null;
+    const [row] = await db
+      .select({ id: schema.stories.id, status: schema.stories.status, sort_order: schema.stories.sort_order, team_id: schema.stories.team_id })
+      .from(schema.stories)
+      .where(eq(schema.stories.id, id))
+      .limit(1);
+    if (!row || row.team_id !== teamId || row.status !== toStatus) return null;
+    return row;
+  };
+
+  let before = await loadNeighbor(beforeId);
+  let after = await loadNeighbor(afterId);
+
+  if (!before && !after) return nextTopOrder(db, teamId, toStatus);
+  if (!after && before) return before.sort_order - ORDER_STEP;
+  if (after && !before) return after.sort_order + ORDER_STEP;
+  if (before && after && before.sort_order - after.sort_order > 1) {
+    return Math.floor((before.sort_order + after.sort_order) / 2);
+  }
+
+  await normalizeStatusOrder(db, teamId, toStatus);
+  before = await loadNeighbor(beforeId);
+  after = await loadNeighbor(afterId);
+  if (!before && !after) return nextTopOrder(db, teamId, toStatus);
+  if (!after && before) return before.sort_order - ORDER_STEP;
+  if (after && !before) return after.sort_order + ORDER_STEP;
+  if (before && after) return Math.floor((before.sort_order + after.sort_order) / 2);
+  return ORDER_STEP;
+};
+
 /**
  * Kanban view endpoint — returns 4 pre-paginated buckets (one per status)
  * in a single request. Designed for the kanban UI: avoids 4 round-trips and
@@ -120,41 +243,26 @@ stories.get('/kanban', async (c) => {
     : byStatus.done;
 
   // --- sort + cap per bucket --------------------------------------------
-  const byUpdatedDesc = (a: typeof filtered[number], b: typeof filtered[number]) =>
-    (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
   const byCompletedDesc = (a: typeof filtered[number], b: typeof filtered[number]) =>
     (b.completed_at ?? '').localeCompare(a.completed_at ?? '');
 
-  const backlogItems = [...byStatus.backlog].sort(byUpdatedDesc).slice(0, 10);
-  const todoItems = [...byStatus.todo].sort(byUpdatedDesc).slice(0, 10);
-  const inProgressItems = [...byStatus.in_progress].sort(byUpdatedDesc).slice(0, 20);
+  const backlogItems = sortBoardRows(byStatus.backlog).slice(0, 50);
+  const todoItems = sortBoardRows(byStatus.todo).slice(0, 50);
+  const inProgressItems = sortBoardRows(byStatus.in_progress).slice(0, 80);
   const doneItems = [...doneInRange].sort(byCompletedDesc).slice(0, 5);
 
-  // --- attach assignees for the stories actually returned ---------------
-  const returnedIds = new Set<string>();
-  for (const arr of [backlogItems, todoItems, inProgressItems, doneItems]) {
-    for (const s of arr) returnedIds.add(s.id);
-  }
-
-  const assigneeMap = new Map<string, string[]>();
-  if (returnedIds.size > 0) {
-    const allAssignees = await db.select().from(schema.storyAssignees);
-    for (const a of allAssignees) {
-      if (!returnedIds.has(a.story_id)) continue;
-      const arr = assigneeMap.get(a.story_id) ?? [];
-      arr.push(a.user_id);
-      assigneeMap.set(a.story_id, arr);
-    }
-  }
-
-  const shape = (s: typeof filtered[number]) =>
-    parseRecurrenceDays({ ...s, assignees: assigneeMap.get(s.id) ?? [] });
+  const [backlogShaped, todoShaped, inProgressShaped, doneShaped] = await Promise.all([
+    attachAssignees(db, backlogItems),
+    attachAssignees(db, todoItems),
+    attachAssignees(db, inProgressItems),
+    attachAssignees(db, doneItems),
+  ]);
 
   return c.json({
-    backlog:     { items: backlogItems.map(shape),    total: byStatus.backlog.length },
-    todo:        { items: todoItems.map(shape),       total: byStatus.todo.length },
-    in_progress: { items: inProgressItems.map(shape), total: byStatus.in_progress.length },
-    done:        { items: doneItems.map(shape),       total: doneInRange.length },
+    backlog:     { items: backlogShaped,    total: byStatus.backlog.length },
+    todo:        { items: todoShaped,       total: byStatus.todo.length },
+    in_progress: { items: inProgressShaped, total: byStatus.in_progress.length },
+    done:        { items: doneShaped,       total: doneInRange.length },
   });
 });
 
@@ -324,6 +432,10 @@ stories.post('/', async (c) => {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const extraAssignees = [...new Set((body.assignees ?? []).filter(uid => uid && uid !== body.assignee_id))];
+  const status = (body.status as StoryStatus | undefined) ?? 'backlog';
+  const sortOrder = typeof body.sort_order === 'number'
+    ? body.sort_order
+    : await nextTopOrder(db, user.teamId, status);
 
   await db.insert(schema.stories).values({
     id,
@@ -334,14 +446,14 @@ stories.post('/', async (c) => {
     description: body.description ?? '',
     priority: body.priority as any ?? 'medium',
     estimate: body.estimate ?? 0,
-    status: body.status as any ?? 'backlog',
+    status,
     category: body.category as any ?? null,
     assignee_id: body.assignee_id ?? null,
     created_by: user.userId,
     due_date: body.due_date ?? null,
     scheduled_date: body.scheduled_date ?? null,
     is_shared: body.is_shared ?? false,
-    sort_order: body.sort_order ?? 0,
+    sort_order: sortOrder,
     frequency: body.frequency as any ?? null,
     day_of_week: body.day_of_week ?? null,
     day_of_month: body.day_of_month ?? null,
@@ -357,14 +469,14 @@ stories.post('/', async (c) => {
     }
   }
 
-  const [created] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
-  const assigneeLinks = await db.select().from(schema.storyAssignees).where(eq(schema.storyAssignees.story_id, id));
+  const created = await loadStoryWithAssignees(db, id);
+  if (!created) return c.json({ error: 'Not found' }, 404);
 
   c.executionCtx.waitUntil(
-    publish(c.env, teamChannel(user.teamId), { type: 'story.created', id }, c.req.header('x-client-id')),
+    publish(c.env, teamChannel(user.teamId), { type: 'story.created', id, story: created }, c.req.header('x-client-id')),
   );
 
-  return c.json(parseRecurrenceDays({ ...created, assignees: assigneeLinks.map(a => a.user_id) }), 201);
+  return c.json(created, 201);
 });
 
 stories.get('/:id', async (c) => {
@@ -396,6 +508,10 @@ stories.patch('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
   const body = await c.req.json<Record<string, unknown>>();
+  const [existingBeforeUpdate] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
+  if (!existingBeforeUpdate || existingBeforeUpdate.team_id !== user.teamId) {
+    return c.json({ error: 'Not found' }, 404);
+  }
 
   const { assignees, ...fields } = body;
   delete (fields as any).purpose;
@@ -405,8 +521,7 @@ stories.patch('/:id', async (c) => {
   delete (fields as any).expected_updated_at;
 
   if (typeof expectedUpdatedAt === 'string') {
-    const [existing] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
-    if (existing && existing.updated_at !== expectedUpdatedAt) {
+    if (existingBeforeUpdate.updated_at !== expectedUpdatedAt) {
       const currentCriteria = await db
         .select()
         .from(schema.acceptanceCriteria)
@@ -418,7 +533,7 @@ stories.patch('/:id', async (c) => {
       return c.json({
         error: 'version_conflict',
         current: parseRecurrenceDays({
-          ...existing,
+          ...existingBeforeUpdate,
           assignees: currentAssigneeLinks.map(a => a.user_id),
           criteria: currentCriteria,
         }),
@@ -443,6 +558,13 @@ stories.patch('/:id', async (c) => {
   if (fields.recurrence_days !== undefined) {
     fields.recurrence_days = fields.recurrence_days ? JSON.stringify(fields.recurrence_days) : null;
   }
+  if (fields.status !== undefined && fields.status !== existingBeforeUpdate.status) {
+    if (fields.status === 'done' && !fields.completed_at) {
+      fields.completed_at = new Date().toISOString();
+    } else if (existingBeforeUpdate.status === 'done' && fields.status !== 'done' && fields.completed_at === undefined) {
+      fields.completed_at = null;
+    }
+  }
   if (Object.keys(fields).length > 0) {
     await db
       .update(schema.stories)
@@ -464,20 +586,89 @@ stories.patch('/:id', async (c) => {
     }
   }
 
-  const [updated] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
-  const assigneeLinks = await db.select().from(schema.storyAssignees).where(eq(schema.storyAssignees.story_id, id));
+  const updated = await loadStoryWithAssignees(db, id);
+  if (!updated) return c.json({ error: 'Not found' }, 404);
+  const changedFields = [
+    ...Object.keys(fields),
+    ...(assignees !== undefined ? ['assignees'] : []),
+  ];
 
   c.executionCtx.waitUntil(
-    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id }, c.req.header('x-client-id')),
+    publish(c.env, teamChannel(user.teamId), {
+      type: 'story.updated',
+      id,
+      story: updated,
+      previous_status: existingBeforeUpdate.status,
+      changed_fields: changedFields,
+    }, c.req.header('x-client-id')),
   );
 
-  return c.json(parseRecurrenceDays({ ...updated, assignees: assigneeLinks.map(a => a.user_id) }));
+  return c.json(updated);
+});
+
+stories.post('/:id/move', async (c) => {
+  const db = c.get('db');
+  const user = c.get('user');
+  const id = c.req.param('id');
+  const body = await c.req.json<{
+    to_status?: StoryStatus;
+    before_id?: string | null;
+    after_id?: string | null;
+  }>();
+
+  if (!body.to_status || !VALID_STATUSES.includes(body.to_status)) {
+    return c.json({ error: `to_status must be one of: ${VALID_STATUSES.join(', ')}`, field: 'to_status' }, 400);
+  }
+
+  const [story] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
+  if (!story || story.team_id !== user.teamId) return c.json({ error: 'Not found' }, 404);
+
+  const fromStatus = story.status as StoryStatus;
+  const toStatus = body.to_status;
+  const beforeId = body.before_id ?? null;
+  const afterId = body.after_id ?? null;
+  const sortOrder = await calculateMoveOrder(db, user.teamId, toStatus, beforeId, afterId);
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    status: toStatus,
+    sort_order: sortOrder,
+    updated_at: now,
+  };
+  if (fromStatus !== toStatus && toStatus === 'done') {
+    patch.completed_at = now;
+  } else if (fromStatus === 'done' && toStatus !== 'done') {
+    patch.completed_at = null;
+  }
+
+  await db
+    .update(schema.stories)
+    .set(patch as any)
+    .where(eq(schema.stories.id, id));
+
+  const updated = await loadStoryWithAssignees(db, id);
+  if (!updated) return c.json({ error: 'Not found' }, 404);
+
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), {
+      type: 'story.moved',
+      id,
+      story: updated,
+      from_status: fromStatus,
+      to_status: toStatus,
+      before_id: beforeId,
+      after_id: afterId,
+    }, c.req.header('x-client-id')),
+  );
+
+  return c.json(updated);
 });
 
 stories.delete('/:id', requireAdmin, async (c) => {
   const db = c.get('db');
   const user = c.get('user');
   const id = c.req.param('id');
+  const [story] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
+  if (!story || story.team_id !== user.teamId) return c.json({ error: 'Not found' }, 404);
 
   // Clean up R2 attachments
   const attachmentRows = await db
@@ -494,7 +685,11 @@ stories.delete('/:id', requireAdmin, async (c) => {
   await db.delete(schema.stories).where(eq(schema.stories.id, id));
 
   c.executionCtx.waitUntil(
-    publish(c.env, teamChannel(user.teamId), { type: 'story.deleted', id }, c.req.header('x-client-id')),
+    publish(c.env, teamChannel(user.teamId), {
+      type: 'story.deleted',
+      id,
+      previous_status: story.status,
+    }, c.req.header('x-client-id')),
   );
 
   return c.json({ ok: true });
@@ -520,9 +715,15 @@ stories.post('/:id/criteria', async (c) => {
   for (const row of rows) {
     await db.insert(schema.acceptanceCriteria).values(row);
   }
+  const story = await loadStoryWithAssignees(db, storyId);
 
   c.executionCtx.waitUntil(
-    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id: storyId }, c.req.header('x-client-id')),
+    publish(c.env, teamChannel(user.teamId), {
+      type: 'story.updated',
+      id: storyId,
+      story,
+      changed_fields: ['criteria'],
+    }, c.req.header('x-client-id')),
   );
 
   return c.json({ ok: true, count: rows.length }, 201);
@@ -548,9 +749,15 @@ stories.patch('/:id/criteria/:criteriaId', async (c) => {
     .limit(1);
 
   if (!updated) return c.json({ error: 'Not found' }, 404);
+  const story = await loadStoryWithAssignees(db, storyId);
 
   c.executionCtx.waitUntil(
-    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id: storyId }, c.req.header('x-client-id')),
+    publish(c.env, teamChannel(user.teamId), {
+      type: 'story.updated',
+      id: storyId,
+      story,
+      changed_fields: ['criteria'],
+    }, c.req.header('x-client-id')),
   );
 
   return c.json(updated);
@@ -563,9 +770,15 @@ stories.post('/:id/assignees', async (c) => {
   const { user_id } = await c.req.json<{ user_id: string }>();
 
   await db.insert(schema.storyAssignees).values({ story_id: storyId, user_id });
+  const story = await loadStoryWithAssignees(db, storyId);
 
   c.executionCtx.waitUntil(
-    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id: storyId }, c.req.header('x-client-id')),
+    publish(c.env, teamChannel(user.teamId), {
+      type: 'story.updated',
+      id: storyId,
+      story,
+      changed_fields: ['assignees'],
+    }, c.req.header('x-client-id')),
   );
 
   return c.json({ ok: true }, 201);
@@ -580,9 +793,15 @@ stories.delete('/:id/assignees/:uid', async (c) => {
   await db
     .delete(schema.storyAssignees)
     .where(and(eq(schema.storyAssignees.story_id, storyId), eq(schema.storyAssignees.user_id, uid)));
+  const story = await loadStoryWithAssignees(db, storyId);
 
   c.executionCtx.waitUntil(
-    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id: storyId }, c.req.header('x-client-id')),
+    publish(c.env, teamChannel(user.teamId), {
+      type: 'story.updated',
+      id: storyId,
+      story,
+      changed_fields: ['assignees'],
+    }, c.req.header('x-client-id')),
   );
 
   return c.json({ ok: true });

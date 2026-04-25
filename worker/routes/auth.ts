@@ -7,6 +7,12 @@ import { authMiddleware } from '../middleware/auth';
 
 const auth = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+function sessionCookie(value: string, maxAge: number, reqUrl: string) {
+  const isHttps = new URL(reqUrl).protocol === 'https:';
+  const sameSite = isHttps ? 'SameSite=None; Secure' : 'SameSite=Lax';
+  return `session=${value}; HttpOnly; ${sameSite}; Path=/; Max-Age=${maxAge}`;
+}
+
 auth.post('/login', async (c) => {
   const { email, password } = await c.req.json<{ email: string; password: string }>();
   const db = c.get('db');
@@ -34,7 +40,7 @@ auth.post('/login', async (c) => {
 
   c.header(
     'Set-Cookie',
-    `session=${token}; HttpOnly; SameSite=None; Secure; Path=/; Max-Age=604800`,
+    sessionCookie(token, 604800, c.req.url),
   );
 
   const { password: _, ...safeUser } = user;
@@ -49,7 +55,7 @@ auth.post('/logout', authMiddleware, async (c) => {
 
   c.header(
     'Set-Cookie',
-    'session=; HttpOnly; SameSite=None; Secure; Path=/; Max-Age=0',
+    sessionCookie('', 0, c.req.url),
   );
 
   return c.json({ ok: true });

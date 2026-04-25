@@ -203,6 +203,8 @@ export const api = {
       request<StoryWithAssignees>('/api/stories', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Record<string, unknown>) =>
       request<StoryWithAssignees>(`/api/stories/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    move: (id: string, data: { to_status: Story['status']; before_id: string | null; after_id: string | null }) =>
+      request<StoryWithAssignees>(`/api/stories/${id}/move`, { method: 'POST', body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<{ ok: boolean }>(`/api/stories/${id}`, { method: 'DELETE' }),
     addAssignee: (storyId: string, userId: string) =>

@@ -106,9 +106,19 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   // unmount so a fast close doesn't drop the user's last edits.
   let pendingFlush: (() => void) | undefined;
 
+  // Capture the story id locally — `props.story` is delivered through an
+  // upstream <Show>{(s) => ...}, so reading `props.story.id` from a cleanup
+  // that fires after unmount throws "stale value from <Show>" and aborts
+  // the teardown, leaving the modal stuck on screen.
+  const storyId = props.story.id;
+
   // Yjs handle for description (CRDT). Bypasses the chip save flow below.
-  const yDoc: YDocHandle = openDoc(props.story.id);
-  onCleanup(() => closeDoc(props.story.id));
+  const yDoc: YDocHandle = openDoc(storyId);
+  const [docReady, setDocReady] = createSignal(false);
+  yDoc.hydrated.finally(() => {
+    if (!unmounted) setDocReady(true);
+  });
+  onCleanup(() => closeDoc(storyId));
 
   onCleanup(() => {
     clearTimeout(debounceTimer);
@@ -162,7 +172,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
 
     const refetchDetail = async (opts: { initial?: boolean } = {}) => {
       try {
-        const detail = await api.stories.get(props.story.id);
+        const detail = await api.stories.get(storyId);
         const initial = opts.initial ?? false;
         const apply = <T,>(key: string, prev: T, next: T, set: (v: T) => void) => {
           if (prev === next) return;
@@ -209,14 +219,11 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
       }
     };
 
-    await refetchDetail({ initial: true });
-    setDetailLoaded(true);
-
     // Live sync: refetch this story when the server pushes `story.updated`
     // for our id (from another tab or another user).
     const unsub = onRealtime((ev) => {
       if (ev.type !== 'story.updated') return;
-      if ((ev as any).id !== props.story.id) return;
+      if ((ev as any).id !== storyId) return;
       void refetchDetail();
     });
     onCleanup(unsub);
@@ -230,6 +237,9 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
       if (on) void refetchDetail();
     });
     onCleanup(unsubStatus);
+
+    await refetchDetail({ initial: true });
+    setDetailLoaded(true);
   });
 
   const activeProjects = () => data.projects().filter((project) => project.status === 'active');
@@ -696,19 +706,24 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
 
             {/* Content canvas — Yjs-backed; concurrent edits converge live. */}
             <div class="rounded-xl">
-              <ContentEditor
-                content={content()}
-                ytext={yDoc.text}
-                placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
-                onChange={(md) => setContent(md)}
-                class="px-1"
-                onEditorMount={(el) => {
-                  editorEl = el;
-                  void renderMermaid(el, isDark(), mermaidOpts);
-                }}
-                onEditorFocus={() => { editorFocused = true; setEditorActive(true); if (editorEl) revertMermaid(editorEl); }}
-                onEditorBlur={() => { editorFocused = false; setEditorActive(false); if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
-              />
+              <Show
+                when={docReady()}
+                fallback={<div class="min-h-[200px] px-3 py-3 text-[15px] text-base-content/25">Cargando contenido...</div>}
+              >
+                <ContentEditor
+                  content={content()}
+                  ytext={yDoc.text}
+                  placeholder="Escribe aquí — **negrita**, _cursiva_, - listas, # títulos, `código`"
+                  onChange={(md) => setContent(md)}
+                  class="px-1"
+                  onEditorMount={(el) => {
+                    editorEl = el;
+                    void renderMermaid(el, isDark(), mermaidOpts);
+                  }}
+                  onEditorFocus={() => { editorFocused = true; setEditorActive(true); if (editorEl) revertMermaid(editorEl); }}
+                  onEditorBlur={() => { editorFocused = false; setEditorActive(false); if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
+                />
+              </Show>
             </div>
 
             <Show when={criteriaList().length > 0}>

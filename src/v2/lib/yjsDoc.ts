@@ -19,6 +19,7 @@ interface DocEntry {
   doc: Y.Doc;
   text: Y.Text;
   refCount: number;
+  hydrated: Promise<void>;
   // Buffer of locally-emitted updates queued for POST. We flush on a
   // microtask to coalesce burst typing into one HTTP request.
   pending: Uint8Array[];
@@ -103,13 +104,13 @@ export const openDoc = (storyId: string): YDocHandle => {
     return {
       doc: entry.doc,
       text: entry.text,
-      hydrated: Promise.resolve(),
+      hydrated: entry.hydrated,
     };
   }
 
   const doc = new Y.Doc();
   const text = doc.getText('description');
-  entry = { doc, text, refCount: 1, pending: [] };
+  entry = { doc, text, refCount: 1, pending: [], hydrated: Promise.resolve() };
   docs.set(storyId, entry);
 
   // Capture local updates and schedule a flush. Remote-origin updates are
@@ -121,8 +122,8 @@ export const openDoc = (storyId: string): YDocHandle => {
     entry!.flushTimer = setTimeout(() => flush(storyId, entry!), FLUSH_DELAY_MS);
   });
 
-  const hydrated = hydrate(storyId, entry);
-  return { doc, text, hydrated };
+  entry.hydrated = hydrate(storyId, entry);
+  return { doc, text, hydrated: entry.hydrated };
 };
 
 export const closeDoc = (storyId: string) => {

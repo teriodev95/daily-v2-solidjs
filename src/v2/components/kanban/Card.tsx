@@ -1,5 +1,5 @@
 import { For, Show, type Component, type JSX } from 'solid-js';
-import { RefreshCw, AlertCircle } from 'lucide-solid';
+import { GripVertical, RefreshCw, AlertCircle } from 'lucide-solid';
 import type { Story, Project, User, Priority, StoryStatus } from '../../types';
 import { formatRelativeDueDate, type DueVariant } from '../../lib/relativeDate';
 import PresenceAvatars from '../PresenceAvatars';
@@ -62,7 +62,6 @@ const Avatar: Component<{ user: User; ring?: boolean; title?: string }> = (props
         <div
           class={`w-[22px] h-[22px] rounded-full bg-base-content/10 text-base-content/65 flex items-center justify-center text-[10px] font-semibold select-none ${ringClass}`}
           aria-label={props.title ?? `Asignado a ${props.user.name}`}
-          title={props.title ?? props.user.name}
         >
           {initial()}
         </div>
@@ -72,7 +71,6 @@ const Avatar: Component<{ user: User; ring?: boolean; title?: string }> = (props
         src={props.user.avatar_url!}
         alt={props.user.name}
         class={`w-[22px] h-[22px] rounded-full object-cover ${ringClass}`}
-        title={props.title ?? props.user.name}
       />
     </Show>
   );
@@ -96,11 +94,6 @@ const AvatarStack: Component<{
         {(user, i) => (
           <div
             class={i() === 0 ? '' : '-ml-1.5'}
-            title={
-              i() === 0 && props.owner?.id === user.id
-                ? `Encargado: ${user.name}`
-                : user.name
-            }
           >
             <Avatar user={user} ring title={
               i() === 0 && props.owner?.id === user.id
@@ -113,7 +106,7 @@ const AvatarStack: Component<{
       <Show when={hidden() > 0}>
         <div
           class="-ml-1.5 w-[22px] h-[22px] rounded-full bg-base-content/10 text-base-content/60 flex items-center justify-center text-[9px] font-bold ring-2 ring-base-100"
-          title={`${hidden()} más`}
+          aria-label={`${hidden()} más`}
         >
           +{hidden()}
         </div>
@@ -124,20 +117,21 @@ const AvatarStack: Component<{
 
 // ─── Main Card ───────────────────────────────────────
 export const KanbanCard: Component<KanbanCardProps> = (props) => {
-  let dragJustHappened = false;
+  let cardRef: HTMLElement | undefined;
 
   const handleDragStart = (e: DragEvent) => {
-    dragJustHappened = true;
+    if (e.dataTransfer && cardRef) {
+      e.dataTransfer.setDragImage(cardRef, 16, 16);
+    }
     props.onDragStart?.(e);
   };
 
   const handleDragEnd = (e: DragEvent) => {
     props.onDragEnd?.(e);
-    setTimeout(() => { dragJustHappened = false; }, 0);
   };
 
   const handleClick: JSX.EventHandler<HTMLElement, MouseEvent> = (e) => {
-    if (dragJustHappened || e.defaultPrevented) return;
+    if (e.defaultPrevented) return;
     const target = e.target as HTMLElement;
     if (target.closest('[data-stop-card-click]')) return;
     props.onClick?.();
@@ -165,22 +159,19 @@ export const KanbanCard: Component<KanbanCardProps> = (props) => {
 
   return (
     <article
-      role="article"
+      ref={cardRef}
+      role={props.onClick ? 'button' : 'article'}
       aria-label={ariaLabel()}
-      title={`Prioridad: ${priorityLabel[props.story.priority]}`}
       tabindex={props.onClick ? 0 : undefined}
-      draggable={true}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
       class={[
         'group relative overflow-hidden bg-base-100 border border-base-content/[0.06] rounded-[14px] px-3.5 py-3',
         // Narrow transition: only colors/shadow. Wider `transition-all` could
         // animate layout properties and combine with `:hover` boundary changes
         // to flicker (had a `-translate-y-px` here that produced exactly that).
-        'cursor-grab active:cursor-grabbing transition-[border-color,box-shadow,opacity] duration-150',
-        'hover:border-base-content/15 hover:shadow-sm',
+        'cursor-pointer transition-opacity duration-150 shadow-none',
+        'hover:bg-base-content/[0.015]',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-status-todo)]/40 focus-visible:ring-offset-1',
         props.selected ? 'ring-2 ring-[var(--color-status-todo)]/40 border-transparent' : '',
         props.dragging ? 'opacity-50' : '',
@@ -196,21 +187,40 @@ export const KanbanCard: Component<KanbanCardProps> = (props) => {
       </Show>
 
       {/* ── Meta row (due + presence) ── */}
-      <div class="flex items-center justify-end gap-2 mb-2 min-h-[18px]">
-        <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={2} />
-        <Show when={due().variant !== 'none'}>
-          <span
-            class={[
-              'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap tabular-nums',
-              dueColorClass[due().variant],
-            ].join(' ')}
-          >
-            <Show when={due().variant === 'overdue'}>
-              <AlertCircle size={10} strokeWidth={2.4} />
-            </Show>
-            {due().label}
-          </span>
-        </Show>
+      <div class="flex items-center justify-between gap-2 mb-2 min-h-[22px]">
+        <span
+          data-stop-card-click
+          role="button"
+          aria-label="Arrastrar tarea"
+          draggable={true}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-base-content/35 cursor-grab active:cursor-grabbing hover:bg-base-content/[0.06] hover:text-base-content/60 transition-colors"
+        >
+          <GripVertical size={14} strokeWidth={2.2} aria-hidden="true" />
+        </span>
+
+        <div class="flex items-center justify-end gap-2 min-w-0">
+          <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={2} />
+          <Show when={due().variant !== 'none'}>
+            <span
+              class={[
+                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap tabular-nums',
+                dueColorClass[due().variant],
+              ].join(' ')}
+            >
+              <Show when={due().variant === 'overdue'}>
+                <AlertCircle size={10} strokeWidth={2.4} />
+              </Show>
+              {due().label}
+            </span>
+          </Show>
+        </div>
       </div>
 
       {/* ── Title ── */}
@@ -223,14 +233,14 @@ export const KanbanCard: Component<KanbanCardProps> = (props) => {
         <div class="mt-3 pt-2.5 border-t border-base-content/[0.05] flex items-center justify-between gap-2">
           <div class="flex items-center gap-2 text-[10.5px] text-base-content/40 min-w-0">
             <Show when={props.story.frequency}>
-              <span class="inline-flex items-center gap-1" title="Tarea recurrente">
+              <span class="inline-flex items-center gap-1" aria-label="Tarea recurrente">
                 <RefreshCw size={10} strokeWidth={2.2} />
                 <span>Recurrente</span>
               </span>
             </Show>
           </div>
           <Show when={hasAnyAssignee()}>
-            <div data-stop-card-click>
+            <div>
               <AvatarStack
                 owner={props.assignee ?? null}
                 others={props.otherAssignees ?? []}

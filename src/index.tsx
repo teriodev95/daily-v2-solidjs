@@ -14,15 +14,36 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   );
 }
 
-// Register service worker with periodic update checks
-registerSW({
-  onRegisteredSW(_swUrl, registration) {
-    if (registration) {
-      setInterval(() => {
-        registration.update();
-      }, 60_000);
+if (import.meta.env.DEV) {
+  void (async () => {
+    if (!('serviceWorker' in navigator)) return;
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    if (!registrations.length) return;
+
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
     }
-  },
-});
+
+    // A stale SW can keep controlling the current Chrome tab until reload.
+    if (navigator.serviceWorker.controller && !sessionStorage.getItem('dc-dev-sw-cleared')) {
+      sessionStorage.setItem('dc-dev-sw-cleared', '1');
+      window.location.reload();
+    }
+  })();
+} else {
+  // Register service worker with periodic update checks
+  registerSW({
+    onRegisteredSW(_swUrl, registration) {
+      if (registration) {
+        setInterval(() => {
+          registration.update();
+        }, 60_000);
+      }
+    },
+  });
+}
 
 render(() => <AppV2 />, root!);

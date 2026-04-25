@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { eq, asc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as Y from 'yjs';
-import type { Env, Variables, AppDb } from '../types';
+import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
 import { publish, teamChannel } from '../lib/realtime';
 
@@ -29,16 +29,66 @@ const toUint8 = (v: unknown): Uint8Array => {
   throw new Error('expected binary blob');
 };
 
-const buildDoc = async (db: AppDb, storyId: string): Promise<Y.Doc> => {
-  const rows = await db
-    .select({ update: schema.storyDocUpdates.update })
-    .from(schema.storyDocUpdates)
-    .where(eq(schema.storyDocUpdates.story_id, storyId))
-    .orderBy(asc(schema.storyDocUpdates.id));
+const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
+  bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+const toBase64 = (bytes: Uint8Array): string => {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    for (let j = 0; j < chunk.length; j += 1) {
+      binary += String.fromCharCode(chunk[j]);
+    }
+  }
+  return btoa(binary);
+};
+
+const insertUpdate = async (d1: D1Database, storyId: string, update: Uint8Array, createdAt: string) => {
+  await d1
+    .prepare('INSERT INTO story_doc_updates (story_id, "update", created_at) VALUES (?, ?, ?)')
+    .bind(storyId, toArrayBuffer(update), createdAt)
+    .run();
+};
+
+const buildDoc = async (d1: D1Database, storyId: string): Promise<Y.Doc> => {
+  const { results } = await d1
+    .prepare('SELECT "update" FROM story_doc_updates WHERE story_id = ? ORDER BY id ASC')
+    .bind(storyId)
+    .all<{ update: unknown }>();
   const doc = new Y.Doc();
-  for (const r of rows) {
+  for (const r of results ?? []) {
     try { Y.applyUpdate(doc, toUint8(r.update)); } catch { /* skip malformed */ }
   }
+  return doc;
+};
+
+const seedDocFromDescription = async (
+  d1: D1Database,
+  storyId: string,
+  description: string,
+): Promise<Y.Doc> => {
+  const doc = new Y.Doc();
+  doc.getText('description').insert(0, description);
+  const state = Y.encodeStateAsUpdate(doc);
+  await insertUpdate(d1, storyId, state, new Date().toISOString());
+  return doc;
+};
+
+const repairEmptyDocFromDescription = async (
+  d1: D1Database,
+  storyId: string,
+  doc: Y.Doc,
+  description: string,
+): Promise<Y.Doc> => {
+  // If a previous deploy wrote an empty/malformed Yjs update row, the mere
+  // presence of that row prevents first-open seeding from `stories.description`.
+  // Repair that state before the editor opens, otherwise the next keystroke can
+  // overwrite the markdown cache and make existing diagrams look lost.
+  if (doc.getText('description').length > 0 || !description) return doc;
+  doc.getText('description').insert(0, description);
+  const state = Y.encodeStateAsUpdate(doc);
+  await insertUpdate(d1, storyId, state, new Date().toISOString());
   return doc;
 };
 
@@ -50,37 +100,31 @@ const buildDoc = async (db: AppDb, storyId: string): Promise<Y.Doc> => {
 storyDoc.get('/:id/doc', async (c) => {
   const db = c.get('db');
   const storyId = c.req.param('id');
-  const rows = await db
-    .select({ id: schema.storyDocUpdates.id })
-    .from(schema.storyDocUpdates)
-    .where(eq(schema.storyDocUpdates.story_id, storyId))
+  const [story] = await db
+    .select({ description: schema.stories.description })
+    .from(schema.stories)
+    .where(eq(schema.stories.id, storyId))
     .limit(1);
+  const seed = story?.description ?? '';
 
-  if (rows.length === 0) {
-    const [story] = await db
-      .select({ description: schema.stories.description })
-      .from(schema.stories)
-      .where(eq(schema.stories.id, storyId))
-      .limit(1);
-    const seed = story?.description ?? '';
+  const existing = await c.env.DB
+    .prepare('SELECT id FROM story_doc_updates WHERE story_id = ? LIMIT 1')
+    .bind(storyId)
+    .first<{ id: number }>();
+
+  if (!existing) {
     if (!seed) return new Response(null, { status: 204 });
-    const doc = new Y.Doc();
-    doc.getText('description').insert(0, seed);
+    const doc = await seedDocFromDescription(c.env.DB, storyId, seed);
     const state = Y.encodeStateAsUpdate(doc);
-    await db.insert(schema.storyDocUpdates).values({
-      story_id: storyId,
-      update: state as unknown as Buffer,
-      created_at: new Date().toISOString(),
-    });
-    return new Response(state, {
+    return new Response(toArrayBuffer(state), {
       status: 200,
       headers: { 'Content-Type': 'application/octet-stream' },
     });
   }
 
-  const doc = await buildDoc(db, storyId);
+  const doc = await repairEmptyDocFromDescription(c.env.DB, storyId, await buildDoc(c.env.DB, storyId), seed);
   const state = Y.encodeStateAsUpdate(doc);
-  return new Response(state, {
+  return new Response(toArrayBuffer(state), {
     status: 200,
     headers: { 'Content-Type': 'application/octet-stream' },
   });
@@ -100,14 +144,10 @@ storyDoc.post('/:id/doc/update', async (c) => {
   const update = new Uint8Array(ab);
 
   const now = new Date().toISOString();
-  await db.insert(schema.storyDocUpdates).values({
-    story_id: storyId,
-    update: update as unknown as Buffer,
-    created_at: now,
-  });
+  await insertUpdate(c.env.DB, storyId, update, now);
 
   // Refresh the markdown cache (description) and `updated_at`.
-  const doc = await buildDoc(db, storyId);
+  const doc = await buildDoc(c.env.DB, storyId);
   const text = doc.getText('description').toString();
   await db
     .update(schema.stories)
@@ -116,7 +156,7 @@ storyDoc.post('/:id/doc/update', async (c) => {
 
   // Broadcast the update so other clients apply it locally. Base64 the
   // bytes — Centrifugo carries JSON.
-  const b64 = btoa(String.fromCharCode(...update));
+  const b64 = toBase64(update);
   c.executionCtx.waitUntil(
     publish(c.env, teamChannel(user.teamId), {
       type: 'doc.update',

@@ -289,7 +289,7 @@ const Column: Component<ColumnProps> = (props) => {
       }
     >
       <div
-        class={`group flex-1 min-w-0 flex flex-col gap-2 rounded-xl p-1.5 transition-[background-color,box-shadow] duration-150 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+        class={`flex-1 min-w-0 flex flex-col gap-2 rounded-xl p-1.5 transition-[background-color,box-shadow] duration-150 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
           props.isDragOver ? 'ring-2 ring-inset' : ''
         }`}
         role="region"
@@ -339,7 +339,7 @@ const Column: Component<ColumnProps> = (props) => {
                 onChange={props.onDoneRangeChange!}
               />
             </Show>
-            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <div class="flex items-center gap-1">
               <button
                 type="button"
                 onClick={startQuickAdd}
