@@ -1,12 +1,15 @@
-import { Show, type Component, type JSX } from 'solid-js';
-import { GripVertical, RefreshCw } from 'lucide-solid';
+import { For, Show, type Component, type JSX } from 'solid-js';
+import { RefreshCw, AlertCircle } from 'lucide-solid';
 import type { Story, Project, User, Priority, StoryStatus } from '../../types';
 import { formatRelativeDueDate, type DueVariant } from '../../lib/relativeDate';
 
 export interface KanbanCardProps {
   story: Story;
   project?: Project | null;
+  /** Primary assignee (owner). Rendered first in the avatar stack. */
   assignee?: User | null;
+  /** Additional collaborators, rendered after the owner. */
+  otherAssignees?: User[];
   selected?: boolean;
   showAvatar?: boolean;
   onClick?: () => void;
@@ -16,12 +19,11 @@ export interface KanbanCardProps {
 }
 
 // ─── Priority config ────────────────────────────────
-// Discrete dot in top-left corner instead of heavy border-l strip.
-const priorityDotColor: Record<Priority, string> = {
+const priorityAccent: Record<Priority, string | null> = {
   critical: 'var(--color-priority-critical)',
   high: 'var(--color-priority-high)',
-  medium: 'var(--color-priority-medium)',
-  low: '',
+  medium: null,
+  low: null,
 };
 
 const priorityLabel: Record<Priority, string> = {
@@ -38,28 +40,28 @@ const statusLabel: Record<StoryStatus, string> = {
   done: 'Hecho',
 };
 
-// ─── Due text styling ───────────────────────────────
+// ─── Due styling ────────────────────────────────────
 const dueColorClass: Record<DueVariant, string> = {
-  overdue: 'text-red-600 dark:text-red-400',
-  today: 'text-amber-700 dark:text-amber-400',
-  tomorrow: 'text-amber-600 dark:text-amber-400',
-  soon: 'text-amber-600 dark:text-amber-400',
-  future: 'text-base-content/50',
+  overdue: 'text-red-500/75 dark:text-red-400/70 bg-red-500/[0.06]',
+  today: 'text-amber-600 dark:text-amber-400/85 bg-amber-500/[0.08]',
+  tomorrow: 'text-amber-600/80 dark:text-amber-400/70',
+  soon: 'text-base-content/55',
+  future: 'text-base-content/35',
   none: '',
 };
 
-// ─── Avatar ──────────────────────────────────────────
-const Avatar: Component<{ user: User }> = (props) => {
+// ─── Avatar (single) ─────────────────────────────────
+const Avatar: Component<{ user: User; ring?: boolean; title?: string }> = (props) => {
   const initial = () => (props.user.name || props.user.email || '?').trim().charAt(0).toUpperCase();
-
+  const ringClass = props.ring ? 'ring-2 ring-base-100' : '';
   return (
     <Show
       when={props.user.avatar_url}
       fallback={
         <div
-          class="w-6 h-6 rounded-full bg-base-content/10 text-base-content/70 flex items-center justify-center text-[10px] font-semibold select-none"
-          aria-label={`Asignado a ${props.user.name}`}
-          title={props.user.name}
+          class={`w-[22px] h-[22px] rounded-full bg-base-content/10 text-base-content/65 flex items-center justify-center text-[10px] font-semibold select-none ${ringClass}`}
+          aria-label={props.title ?? `Asignado a ${props.user.name}`}
+          title={props.title ?? props.user.name}
         >
           {initial()}
         </div>
@@ -68,10 +70,54 @@ const Avatar: Component<{ user: User }> = (props) => {
       <img
         src={props.user.avatar_url!}
         alt={props.user.name}
-        class="w-6 h-6 rounded-full object-cover"
-        title={props.user.name}
+        class={`w-[22px] h-[22px] rounded-full object-cover ${ringClass}`}
+        title={props.title ?? props.user.name}
       />
     </Show>
+  );
+};
+
+// ─── Avatar stack ────────────────────────────────────
+const AvatarStack: Component<{
+  owner: User | null | undefined;
+  others: User[];
+  max?: number;
+}> = (props) => {
+  const max = () => props.max ?? 3;
+  const ownerArr = () => (props.owner ? [props.owner] : []);
+  const combined = () => [...ownerArr(), ...props.others];
+  const visible = () => combined().slice(0, max());
+  const hidden = () => Math.max(0, combined().length - max());
+
+  return (
+    <div class="flex items-center">
+      <For each={visible()}>
+        {(user, i) => (
+          <div
+            class={i() === 0 ? '' : '-ml-1.5'}
+            title={
+              i() === 0 && props.owner?.id === user.id
+                ? `Encargado: ${user.name}`
+                : user.name
+            }
+          >
+            <Avatar user={user} ring title={
+              i() === 0 && props.owner?.id === user.id
+                ? `Encargado: ${user.name}`
+                : user.name
+            } />
+          </div>
+        )}
+      </For>
+      <Show when={hidden() > 0}>
+        <div
+          class="-ml-1.5 w-[22px] h-[22px] rounded-full bg-base-content/10 text-base-content/60 flex items-center justify-center text-[9px] font-bold ring-2 ring-base-100"
+          title={`${hidden()} más`}
+        >
+          +{hidden()}
+        </div>
+      </Show>
+    </div>
   );
 };
 
@@ -86,15 +132,11 @@ export const KanbanCard: Component<KanbanCardProps> = (props) => {
 
   const handleDragEnd = (e: DragEvent) => {
     props.onDragEnd?.(e);
-    // Reset flag a tick later so trailing click (if any) is swallowed.
-    setTimeout(() => {
-      dragJustHappened = false;
-    }, 0);
+    setTimeout(() => { dragJustHappened = false; }, 0);
   };
 
   const handleClick: JSX.EventHandler<HTMLElement, MouseEvent> = (e) => {
     if (dragJustHappened || e.defaultPrevented) return;
-    // Ignore clicks on interactive sub-elements (avatar, badge).
     const target = e.target as HTMLElement;
     if (target.closest('[data-stop-card-click]')) return;
     props.onClick?.();
@@ -110,17 +152,15 @@ export const KanbanCard: Component<KanbanCardProps> = (props) => {
 
   const due = () => formatRelativeDueDate(props.story.due_date);
   const showAvatar = () => props.showAvatar !== false;
+  const hasAnyAssignee = () => showAvatar() && (!!props.assignee || (props.otherAssignees?.length ?? 0) > 0);
+  const hasFooter = () => hasAnyAssignee() || !!props.story.frequency;
+  const accent = () => priorityAccent[props.story.priority];
 
-  const ariaLabel = () => {
-    const parts = [
-      props.story.title,
-      `prioridad ${priorityLabel[props.story.priority]}`,
-      `estado ${statusLabel[props.story.status]}`,
-    ];
-    return parts.join(', ');
-  };
-
-  const hasAssigneeShown = () => showAvatar() && !!props.assignee;
+  const ariaLabel = () => [
+    props.story.title,
+    `prioridad ${priorityLabel[props.story.priority]}`,
+    `estado ${statusLabel[props.story.status]}`,
+  ].join(', ');
 
   return (
     <article
@@ -134,103 +174,64 @@ export const KanbanCard: Component<KanbanCardProps> = (props) => {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       class={[
-        'group relative bg-base-100 border border-base-content/[0.08] rounded-xl px-3 py-2.5',
+        'group relative overflow-hidden bg-base-100 border border-base-content/[0.06] rounded-[14px] px-3.5 py-3',
         'cursor-grab active:cursor-grabbing transition-all',
-        'hover:shadow-md hover:-translate-y-0.5 hover:border-base-content/15',
+        'hover:border-base-content/15 hover:shadow-sm hover:-translate-y-px',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-status-todo)]/40 focus-visible:ring-offset-1',
-        props.selected
-          ? 'ring-2 ring-[var(--color-status-todo)]/30 ring-offset-1'
-          : '',
+        props.selected ? 'ring-2 ring-[var(--color-status-todo)]/40 border-transparent' : '',
         props.dragging ? 'opacity-50' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
+      ].filter(Boolean).join(' ')}
     >
-      {/* Priority dot — top-left, always visible when priority > low */}
-      <Show when={priorityDotColor[props.story.priority]}>
+      {/* Priority accent — left edge, only for critical/high */}
+      <Show when={accent()}>
         <span
-          class="absolute top-2 left-2 w-1.5 h-1.5 rounded-full"
-          style={{ 'background-color': priorityDotColor[props.story.priority] }}
+          class="absolute left-0 top-0 bottom-0 w-[3px]"
+          style={{ 'background-color': accent()! }}
           aria-hidden="true"
         />
       </Show>
-      {/* Top row: grab handle (hover) + avatar */}
-      <Show when={hasAssigneeShown()}>
-        <div class="flex items-center justify-between gap-2 mb-2">
-          <GripVertical
-            size={14}
-            class="text-base-content/30 opacity-0 group-hover:opacity-40 transition-opacity"
-            aria-hidden="true"
-          />
-          <Show when={props.assignee}>
-            {(user) => (
-              <div data-stop-card-click>
-                <Avatar user={user()} />
-              </div>
-            )}
-          </Show>
+
+      {/* ── Meta row (due only) ── */}
+      <Show when={due().variant !== 'none'}>
+        <div class="flex items-center justify-end mb-2">
+          <span
+            class={[
+              'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap tabular-nums',
+              dueColorClass[due().variant],
+            ].join(' ')}
+          >
+            <Show when={due().variant === 'overdue'}>
+              <AlertCircle size={10} strokeWidth={2.4} />
+            </Show>
+            {due().label}
+          </span>
         </div>
       </Show>
 
-      {/* Grab handle when no avatar row is shown */}
-      <Show when={!hasAssigneeShown()}>
-        <div class="absolute top-2 left-2 pointer-events-none">
-          <GripVertical
-            size={14}
-            class="text-base-content/30 opacity-0 group-hover:opacity-40 transition-opacity"
-            aria-hidden="true"
-          />
-        </div>
-      </Show>
-
-      {/* Title — respect user input, no case transform */}
-      <h3 class="text-[14px] font-medium leading-snug text-base-content/90 line-clamp-3 break-words">
+      {/* ── Title ── */}
+      <h3 class="text-[13px] font-semibold leading-[1.4] text-base-content/90 line-clamp-3 break-words">
         {props.story.title}
       </h3>
 
-      {/* Bottom row: project badge + due text + recurring icon */}
-      <Show
-        when={
-          props.project ||
-          due().variant !== 'none' ||
-          props.story.frequency
-        }
-      >
-        <div class="flex items-center justify-between gap-2 mt-3">
-          <div class="flex items-center gap-1.5 min-w-0">
-            <Show when={props.project}>
-              {(project) => (
-                <span
-                  data-stop-card-click
-                  class="text-[10px] font-semibold uppercase tracking-wide truncate"
-                  style={{ color: project().color }}
-                  title={project().name}
-                >
-                  {project().prefix}
-                </span>
-              )}
-            </Show>
-          </div>
-
-          <div class="flex items-center gap-1.5 shrink-0">
+      {/* ── Footer ── */}
+      <Show when={hasFooter()}>
+        <div class="mt-3 pt-2.5 border-t border-base-content/[0.05] flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-[10.5px] text-base-content/40 min-w-0">
             <Show when={props.story.frequency}>
-              <RefreshCw
-                size={11}
-                class="text-base-content/40"
-                aria-label="Tarea recurrente"
-              />
-            </Show>
-            <Show when={due().variant !== 'none'}>
-              <span
-                class={[
-                  'text-[10px] font-medium whitespace-nowrap',
-                  dueColorClass[due().variant],
-                ].join(' ')}
-              >
-                {due().label}
+              <span class="inline-flex items-center gap-1" title="Tarea recurrente">
+                <RefreshCw size={10} strokeWidth={2.2} />
+                <span>Recurrente</span>
               </span>
             </Show>
           </div>
+          <Show when={hasAnyAssignee()}>
+            <div data-stop-card-click>
+              <AvatarStack
+                owner={props.assignee ?? null}
+                others={props.otherAssignees ?? []}
+              />
+            </div>
+          </Show>
         </div>
       </Show>
     </article>

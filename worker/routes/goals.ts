@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
+import { publish, teamChannel } from '../lib/realtime';
 
 const goals = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -56,17 +57,24 @@ goals.post('/', async (c) => {
   });
 
   const [created] = await db.select().from(schema.weekGoals).where(eq(schema.weekGoals.id, id)).limit(1);
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'goal.created', id }, c.req.header('x-client-id')),
+  );
   return c.json(created, 201);
 });
 
 goals.patch('/:id', async (c) => {
   const db = c.get('db');
+  const user = c.get('user');
   const id = c.req.param('id');
   const body = await c.req.json<Partial<{ text: string; is_completed: boolean; is_closed: boolean; is_shared: boolean }>>();
 
   await db.update(schema.weekGoals).set(body).where(eq(schema.weekGoals.id, id));
 
   const [updated] = await db.select().from(schema.weekGoals).where(eq(schema.weekGoals.id, id)).limit(1);
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'goal.updated', id }, c.req.header('x-client-id')),
+  );
   return c.json(updated);
 });
 

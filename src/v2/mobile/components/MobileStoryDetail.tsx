@@ -21,8 +21,10 @@ import {
 import { frequencyLabel, toLocalDateStr } from '../../lib/recurrence';
 import AttachmentSection from '../../components/AttachmentSection';
 import { ContentEditor } from '../../components/ContentEditor';
+import CopyForAgentButton from '../../components/CopyForAgentButton';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../../lib/mermaid';
 import { isDark } from '../../lib/theme';
+import { onRealtime } from '../../lib/realtime';
 
 interface MobileStoryDetailProps {
   story: Story;
@@ -140,21 +142,38 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
     document.addEventListener('paste', handlePaste);
     onCleanup(() => document.removeEventListener('paste', handlePaste));
 
-    try {
-      const detail = await api.stories.get(props.story.id);
-      setTitle(detail.title);
-      setDueDate(detail.due_date || '');
-      setStatus(detail.status);
-      setEstimate(detail.estimate || 0);
-      setAssigneeId(detail.assignee_id || '');
-      setAssigneeIds(detail.assignees ?? []);
-      setProjectId((detail as Story).project_id || '');
-      setCriteriaList(detail.criteria ?? []);
-      setContent(detail.description || '');
-    } catch {
-      // Detail fetch is additive.
-    }
+    const refetchDetail = async () => {
+      try {
+        const detail = await api.stories.get(props.story.id);
+        setDueDate(detail.due_date || '');
+        setStatus(detail.status);
+        setEstimate(detail.estimate || 0);
+        setAssigneeId(detail.assignee_id || '');
+        setAssigneeIds(detail.assignees ?? []);
+        setProjectId((detail as Story).project_id || '');
+        setCriteriaList(detail.criteria ?? []);
+        // Fields with active editors: skip if focused, otherwise update.
+        const active = document.activeElement as HTMLElement | null;
+        if (active !== editorEl) setContent(detail.description || '');
+        if (!active || active.tagName !== 'TEXTAREA') {
+          setTitle(detail.title);
+        }
+      } catch {
+        // Detail fetch is additive.
+      }
+    };
+
+    await refetchDetail();
     setDetailLoaded(true);
+
+    // Live sync: refetch this story when the server pushes `story.updated`
+    // for our id (from another tab or another user).
+    const unsub = onRealtime((ev) => {
+      if (ev.type !== 'story.updated') return;
+      if ((ev as any).id !== props.story.id) return;
+      void refetchDetail();
+    });
+    onCleanup(unsub);
   });
 
   const activeProjects = () => data.projects().filter((project) => project.status === 'active');
@@ -321,22 +340,24 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                   </Show>
                 </div>
 
-                <Show when={saveStatus() !== 'idle'}>
-                  <div class="inline-flex items-center gap-1.5 rounded-full bg-base-content/[0.04] px-2.5 py-1 text-[10px] font-semibold text-base-content/40">
-                    <Show when={saveStatus() === 'saving'} fallback={<Check size={11} class="text-ios-green-500" />}>
-                      <Loader2 size={11} class="animate-spin" />
-                    </Show>
-                    {saveStatus() === 'saving' ? 'Guardando' : 'Guardado'}
+                <Show when={saveStatus() === 'saved'}>
+                  <div class="inline-flex items-center gap-1 px-1 text-[10px] text-base-content/35 transition-opacity">
+                    <Check size={11} class="text-ios-green-500/70" />
                   </div>
                 </Show>
               </div>
 
-              <button
-                onClick={props.onClose}
-                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-base-content/[0.04] text-base-content/40"
-              >
-                <X size={18} />
-              </button>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <CopyForAgentButton
+                  entity={{ type: 'story', id: props.story.id, title: title() }}
+                />
+                <button
+                  onClick={props.onClose}
+                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-base-content/[0.04] text-base-content/40"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
           </div>
 

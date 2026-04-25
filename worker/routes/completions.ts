@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
+import { publish, teamChannel } from '../lib/realtime';
 
 const completions = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -70,6 +71,14 @@ completions.post('/', async (c) => {
     .where(eq(schema.storyCompletions.id, id))
     .limit(1);
 
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), {
+      type: 'completion.created',
+      story_id: body.story_id,
+      completion_date: body.completion_date,
+    }, c.req.header('x-client-id')),
+  );
+
   return c.json(created, 201);
 });
 
@@ -92,6 +101,14 @@ completions.delete('/', async (c) => {
         eq(schema.storyCompletions.completion_date, body.completion_date),
       ),
     );
+
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), {
+      type: 'completion.deleted',
+      story_id: body.story_id,
+      completion_date: body.completion_date,
+    }, c.req.header('x-client-id')),
+  );
 
   return c.json({ ok: true });
 });

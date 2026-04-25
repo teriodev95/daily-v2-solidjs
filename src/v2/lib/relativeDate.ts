@@ -24,6 +24,10 @@ const MONTHS = [
  * Format a due date as a compact relative string + variant.
  * Comparison is date-only (ignores time-of-day).
  *
+ * Parses the leading YYYY-MM-DD as a LOCAL date — otherwise
+ * `new Date("2026-04-23")` resolves to UTC midnight and shifts
+ * one day backward in negative-offset timezones (e.g. America/*).
+ *
  * Variants:
  *   overdue   → past due
  *   today     → exactly today
@@ -38,9 +42,10 @@ export function formatRelativeDueDate(iso: string | null | undefined): DueInfo {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const due = new Date(iso);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return { label: '', variant: 'none' };
+  const due = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   if (isNaN(due.getTime())) return { label: '', variant: 'none' };
-  due.setHours(0, 0, 0, 0);
 
   const ms = due.getTime() - today.getTime();
   const days = Math.round(ms / (1000 * 60 * 60 * 24));

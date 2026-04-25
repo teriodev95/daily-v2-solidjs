@@ -1,4 +1,6 @@
-import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
+import { createEffect, createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
+import { connectRealtime, disconnectRealtime, setRealtimeActor } from './lib/realtime';
+import { setActiveTab as setSharedActiveTab } from './lib/activeTab';
 import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays, ListChecks, Archive, BookOpen } from 'lucide-solid';
 import dailyIcon from '../assets/daily-icon.png';
 import type { ReportCategory, Story } from './types';
@@ -17,6 +19,7 @@ import SearchModal from './components/SearchModal';
 import CalendarPage from './pages/CalendarPage';
 import StoryDetail from './components/StoryDetail';
 import InstallPrompt from './components/InstallPrompt';
+import AgentBootstrapModal from './components/AgentBootstrapModal';
 import UpdateToast from './components/UpdateToast';
 import MobileShell from './mobile/shell/MobileShell';
 import Dock from './components/Dock';
@@ -41,6 +44,7 @@ const AppShell: Component = () => {
   const [searchSelectedStory, setSearchSelectedStory] = createSignal<Story | null>(null);
   const [shareRequested, setShareRequested] = createSignal(0);
   const [hiddenRequested, setHiddenRequested] = createSignal(0);
+  const [showAgentBootstrap, setShowAgentBootstrap] = createSignal(false);
 
   const triggerShare = () => {
     if (activeTab() !== 'report') switchTab('report');
@@ -101,6 +105,23 @@ const AppShell: Component = () => {
 
   const user = () => auth.user();
 
+  // Realtime: connect when user is available, disconnect otherwise.
+  createEffect(() => {
+    const u = user();
+    if (u?.team_id) {
+      setRealtimeActor(u.id);
+      void connectRealtime(u.team_id);
+    } else {
+      setRealtimeActor(null);
+      disconnectRealtime();
+    }
+  });
+  onCleanup(() => disconnectRealtime());
+
+  // Mirror the local activeTab signal into the shared one so pages can tell
+  // whether they're the foreground tab and skip realtime refetches if not.
+  createEffect(() => setSharedActiveTab(activeTab()));
+
   // Global keyboard shortcuts
   onMount(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -133,11 +154,13 @@ const AppShell: Component = () => {
     const onOpenShare = () => triggerShare();
     const onOpenHidden = () => triggerHiddenStories();
     const onOpenTokens = () => switchTab('tokens');
+    const onOpenAgentBootstrap = () => setShowAgentBootstrap(true);
 
     window.addEventListener('open-search', onOpenSearch);
     window.addEventListener('open-share', onOpenShare);
     window.addEventListener('open-hidden', onOpenHidden);
     window.addEventListener('open-tokens', onOpenTokens);
+    window.addEventListener('open-agent-bootstrap', onOpenAgentBootstrap);
 
     onCleanup(() => {
       document.removeEventListener('keydown', handleKey);
@@ -145,6 +168,7 @@ const AppShell: Component = () => {
       window.removeEventListener('open-share', onOpenShare);
       window.removeEventListener('open-hidden', onOpenHidden);
       window.removeEventListener('open-tokens', onOpenTokens);
+      window.removeEventListener('open-agent-bootstrap', onOpenAgentBootstrap);
     });
   });
 
@@ -337,6 +361,14 @@ const AppShell: Component = () => {
             onClose={() => setSearchSelectedStory(null)}
           />
         )}
+      </Show>
+
+      {/* Agent bootstrap modal */}
+      <Show when={showAgentBootstrap()}>
+        <AgentBootstrapModal
+          onClose={() => setShowAgentBootstrap(false)}
+          onOpenTokens={() => switchTab('tokens')}
+        />
       </Show>
 
       {/* PWA install prompt */}

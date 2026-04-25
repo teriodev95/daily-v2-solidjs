@@ -1,6 +1,8 @@
 import {
-  createSignal, createResource, createMemo, For, Show, type Component
+  createSignal, createResource, createMemo, createEffect, onCleanup, onMount, For, Show, type Component
 } from 'solid-js';
+import { useRealtimeRefetch } from '../lib/realtime';
+import { activeTab } from '../lib/activeTab';
 import type { Story, StoryCompletion } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -97,14 +99,31 @@ const CalendarPage: Component<Props> = (props) => {
 
   const userId = () => auth.user()?.id ?? '';
 
-  const [stories, { mutate: mutateStories }] = createResource(
-    () => ({ uid: userId(), _r: props.refreshKey }),
-    async ({ uid }) => {
-      if (!uid) return [];
-      const list = await api.stories.list({ assignee_id: uid });
-      return list as Story[];
+  const [selectedUserIds, setSelectedUserIds] = createSignal<string[]>([]);
+  const [filterInitialized, setFilterInitialized] = createSignal(false);
+
+  createEffect(() => {
+    const uid = userId();
+    if (uid && !filterInitialized()) {
+      setSelectedUserIds([uid]);
+      setFilterInitialized(true);
+    }
+  });
+
+  const [stories, { mutate: mutateStories, refetch: refetchStories }] = createResource(
+    () => ({ _r: props.refreshKey }),
+    async () => {
+      const list = await api.stories.list({});
+      return list as (Story & { assignees?: string[] })[];
     }
   );
+
+  const userMatchesSelection = (s: Story & { assignees?: string[] }, selected: Set<string>) => {
+    if (selected.size === 0) return false;
+    if (s.assignee_id && selected.has(s.assignee_id)) return true;
+    if (s.assignees && s.assignees.some((id) => selected.has(id))) return true;
+    return false;
+  };
 
   const visibleDays = createMemo(() => {
     return view() === 'month' ? buildMonth(baseDate()) : buildWeek(baseDate());
@@ -119,7 +138,7 @@ const CalendarPage: Component<Props> = (props) => {
     };
   });
 
-  const [completions, { mutate: mutateCompletions }] = createResource(
+  const [completions, { mutate: mutateCompletions, refetch: refetchCompletions }] = createResource(
     () => ({ uid: userId(), from: rangeStr().from, to: rangeStr().to }),
     async ({ uid, from, to }) => {
       if (!uid) return [];
@@ -135,10 +154,24 @@ const CalendarPage: Component<Props> = (props) => {
     return set;
   });
 
+  // Realtime sync: refetch on story/completion changes from other clients.
+  onMount(() => {
+    const unsub = useRealtimeRefetch(
+      ['story.', 'completion.'],
+      () => {
+        void refetchStories();
+        void refetchCompletions();
+      },
+      { isActive: () => activeTab() === 'calendar' },
+    );
+    onCleanup(unsub);
+  });
+
   const isCompletedOn = (storyId: string, dateKey: string) => completionSet().has(`${storyId}:${dateKey}`);
 
   const itemsByDate = createMemo(() => {
     const all = stories() ?? [];
+    const selected = new Set(selectedUserIds());
     const map = new Map<string, { story: Story; isRecurring: boolean; isCompleted: boolean }[]>();
 
     for (const d of visibleDays()) {
@@ -146,6 +179,8 @@ const CalendarPage: Component<Props> = (props) => {
       const items = [];
 
       for (const s of all) {
+        if (!userMatchesSelection(s, selected)) continue;
+
         if (isRecurring(s)) {
           if (s.status !== 'done' && isRecurringOnDate(s, d)) {
             items.push({ story: s, isRecurring: true, isCompleted: isCompletedOn(s.id, dateKey) });
@@ -237,6 +272,93 @@ const CalendarPage: Component<Props> = (props) => {
     setShowDayModal(false); // Close day modal if opening quick add
   };
 
+  const toggleUserFilter = (id: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const clearUserFilter = () => setSelectedUserIds([]);
+
+  const activeTeam = () => data.users().filter((u) => u.is_active);
+
+  // ── Drag & drop ───────────────────────────────────────────
+  const [draggingId, setDraggingId] = createSignal<string | null>(null);
+  const [dragHoverKey, setDragHoverKey] = createSignal<string | null>(null);
+  const [justDroppedId, setJustDroppedId] = createSignal<string | null>(null);
+
+  const handleDragStart = (
+    e: DragEvent,
+    story: Story,
+    sourceKey: string,
+  ) => {
+    if (isRecurring(story) || !e.dataTransfer) return;
+    const field: 'scheduled_date' | 'due_date' = story.scheduled_date ? 'scheduled_date' : 'due_date';
+    const payload = JSON.stringify({ id: story.id, from: sourceKey, field });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-daily-story', payload);
+    e.dataTransfer.setData('text/plain', payload);
+    setDraggingId(story.id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingId(null);
+    setDragHoverKey(null);
+  };
+
+  const handleDragOverCell = (e: DragEvent, dateKey: string) => {
+    if (!draggingId()) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    if (dragHoverKey() !== dateKey) setDragHoverKey(dateKey);
+  };
+
+  const handleDragLeaveCell = (dateKey: string) => {
+    if (dragHoverKey() === dateKey) setDragHoverKey(null);
+  };
+
+  const handleDropCell = async (e: DragEvent, targetKey: string) => {
+    e.preventDefault();
+    setDragHoverKey(null);
+    setDraggingId(null);
+
+    const raw = e.dataTransfer?.getData('application/x-daily-story')
+      ?? e.dataTransfer?.getData('text/plain');
+    if (!raw) return;
+    let payload: { id: string; from: string; field: 'scheduled_date' | 'due_date' };
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    if (payload.from === targetKey) return;
+
+    const current = (stories() ?? []).find((s) => s.id === payload.id);
+    if (!current || isRecurring(current)) return;
+
+    const previous = { [payload.field]: (current as any)[payload.field] } as Record<string, unknown>;
+    const patch = { [payload.field]: targetKey } as Record<string, unknown>;
+
+    mutateStories((prev) =>
+      (prev ?? []).map((s) => (s.id === payload.id ? { ...s, ...patch } : s)) as any,
+    );
+
+    setJustDroppedId(payload.id);
+    window.setTimeout(() => {
+      setJustDroppedId((id) => (id === payload.id ? null : id));
+    }, 620);
+
+    try {
+      await api.stories.update(payload.id, patch);
+    } catch {
+      // rollback
+      mutateStories((prev) =>
+        (prev ?? []).map((s) => (s.id === payload.id ? { ...s, ...previous } : s)) as any,
+      );
+    }
+  };
+
   return (
     <>
       <TopNavigation
@@ -289,6 +411,64 @@ const CalendarPage: Component<Props> = (props) => {
       />
       <div class="flex flex-col pt-0 min-h-screen">
 
+      {/* ── User Filter ── */}
+      <div class="flex items-center gap-2 mb-3 -mx-1">
+        <div class="flex items-center gap-2 overflow-x-auto py-1.5 px-1 scrollbar-none flex-1 min-w-0">
+          <For each={activeTeam()}>
+            {(member) => {
+              const active = () => selectedUserIds().includes(member.id);
+              const isMe = () => member.id === userId();
+              return (
+                <button
+                  type="button"
+                  onClick={() => toggleUserFilter(member.id)}
+                  aria-pressed={active()}
+                  class={`group flex items-center gap-2 px-3.5 py-2 rounded-[14px] text-xs font-semibold whitespace-nowrap transition-all duration-300 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-base-content/20 ${
+                    active()
+                      ? 'bg-base-100 text-base-content ring-2 ring-ios-blue-500 shadow-md shadow-ios-blue-500/15 scale-[1.02]'
+                      : 'bg-base-200/50 text-base-content/60 hover:bg-base-200 hover:text-base-content/90 border border-base-content/[0.04]'
+                  }`}
+                >
+                  <Show
+                    when={member.avatar_url}
+                    fallback={
+                      <div class="w-5 h-5 rounded-full bg-base-content/10 flex items-center justify-center text-[9px] font-bold text-base-content/40 shrink-0">
+                        {member.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
+                      </div>
+                    }
+                  >
+                    <img
+                      src={member.avatar_url!}
+                      alt=""
+                      class={`w-5 h-5 rounded-full object-cover transition-all ${
+                        active() ? 'shadow-sm' : 'group-hover:ring-2 group-hover:ring-base-content/10'
+                      }`}
+                    />
+                  </Show>
+                  <span>{member.name.split(' ')[0]}</span>
+                  <Show when={isMe()}>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-ios-blue-500/15 text-ios-blue-500">
+                      tú
+                    </span>
+                  </Show>
+                </button>
+              );
+            }}
+          </For>
+        </div>
+        <Show when={selectedUserIds().length > 0}>
+          <button
+            type="button"
+            onClick={clearUserFilter}
+            aria-label="Limpiar filtros de usuario"
+            class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[12px] font-medium text-base-content/50 hover:text-base-content hover:bg-base-content/5 transition-all shrink-0"
+          >
+            <X size={12} />
+            Limpiar
+          </button>
+        </Show>
+      </div>
+
       {/* ── Grid ── */}
       <div class="flex-1 bg-base-200/30 rounded-2xl border border-base-content/[0.08] overflow-hidden flex flex-col shadow-sm">
         
@@ -313,11 +493,19 @@ const CalendarPage: Component<Props> = (props) => {
               const isToday = isSameDay(d, today);
               const isSelected = () => isSameDay(d, selectedDay());
 
+              const isDropHover = () => dragHoverKey() === dateKey;
               return (
                 <div
                   onClick={() => handleCellClick(d)}
-                  class={`relative flex flex-col border-r border-b border-base-content/[0.04] transition-colors p-1 sm:p-2 cursor-pointer group ${
-                     isSelected() ? 'bg-ios-blue-500/[0.02] ring-1 ring-inset ring-ios-blue-500/20' : 'hover:bg-base-content/[0.02]'
+                  onDragOver={(e) => handleDragOverCell(e, dateKey)}
+                  onDragLeave={() => handleDragLeaveCell(dateKey)}
+                  onDrop={(e) => handleDropCell(e, dateKey)}
+                  class={`relative flex flex-col border-r border-b border-base-content/[0.04] transition-all p-1 sm:p-2 cursor-pointer group ${
+                     isDropHover()
+                       ? 'bg-ios-blue-500/10 ring-2 ring-inset ring-ios-blue-500/50 scale-[0.99]'
+                       : isSelected()
+                         ? 'bg-ios-blue-500/[0.02] ring-1 ring-inset ring-ios-blue-500/20'
+                         : 'hover:bg-base-content/[0.02]'
                   } ${!isCurrentMonth() && view() === 'month' ? 'opacity-40 bg-base-200/50' : 'bg-base-100/30'}`}
                 >
                   <div class="flex items-start justify-between mb-1">
@@ -347,13 +535,25 @@ const CalendarPage: Component<Props> = (props) => {
                       {(item) => {
                         const styleDesc = priorityColor[item.story.priority] || priorityColor.low;
                         const proj = item.story.project_id ? data.getProjectById(item.story.project_id) : null;
-                        
+                        const isDragging = () => draggingId() === item.story.id;
+                        const isJustDropped = () => justDroppedId() === item.story.id;
+                        const canDrag = !item.isRecurring;
+
                         return (
                           <div
+                            draggable={canDrag}
+                            onDragStart={(e) => handleDragStart(e, item.story, dateKey)}
+                            onDragEnd={handleDragEnd}
                             onClick={(e) => { e.stopPropagation(); setSelectedStoryForDetail(item.story); }}
                             class={`w-full text-left px-1.5 py-1 rounded-md border text-[10px] font-medium leading-tight truncate transition-all group/item flex items-center gap-1 ${
                                item.isCompleted ? 'opacity-50 line-through bg-base-content/5 border-transparent text-base-content/40' : styleDesc
-                            } cursor-pointer`}
+                            } ${
+                               canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+                            } ${
+                               isDragging() ? 'opacity-40 scale-95' : ''
+                            } ${
+                               isJustDropped() ? 'animate-story-drop' : ''
+                            }`}
                           >
                             <Show when={item.isRecurring} fallback={
                               <button

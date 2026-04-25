@@ -1,4 +1,6 @@
-import { createSignal, createResource, For, Show, type Component } from 'solid-js';
+import { createSignal, createResource, onCleanup, onMount, For, Show, type Component } from 'solid-js';
+import { useRealtimeRefetch } from '../lib/realtime';
+import { activeTab as globalActiveTab } from '../lib/activeTab';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import { api } from '../lib/api';
@@ -58,6 +60,18 @@ const AdminPage: Component = () => {
 
   const activeRecurring = () => (recurringList() ?? []).filter(s => s.is_active);
   const inactiveRecurring = () => (recurringList() ?? []).filter(s => !s.is_active);
+
+  onMount(() => {
+    const unsub = useRealtimeRefetch(
+      ['assignment.', 'story.'],
+      () => {
+        void refetchAssignments();
+        void refetchRecurring();
+      },
+      { isActive: () => globalActiveTab() === 'admin' },
+    );
+    onCleanup(unsub);
+  });
 
   const openAssignments = () => (assignmentsList() ?? []).filter(a => a.status === 'open');
   const closedAssignments = () => (assignmentsList() ?? []).filter(a => a.status === 'closed');
@@ -536,40 +550,40 @@ const AdminPage: Component = () => {
                   const project = () => getProject(story.project_id);
                   return (
                     <div
-                      class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-base-200/30 hover:bg-base-200/50 transition-colors group cursor-pointer"
+                      class="flex items-center gap-3 px-3 py-2 rounded-xl bg-base-200/30 hover:bg-base-200/60 transition-colors group cursor-pointer"
                       onClick={() => openEditRecurring(story)}
                     >
                       <Show
                         when={assignee()?.avatar_url}
                         fallback={
-                          <div class="w-9 h-9 rounded-full bg-purple-500/10 flex items-center justify-center text-xs font-bold text-purple-500/40 shrink-0">
+                          <div class="w-8 h-8 rounded-full bg-base-content/[0.06] flex items-center justify-center text-[11px] font-bold text-base-content/40 shrink-0">
                             {assignee()?.name?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() ?? '?'}
                           </div>
                         }
                       >
-                        <img src={assignee()!.avatar_url!} alt="" class="w-9 h-9 rounded-full object-cover shrink-0" />
+                        <img src={assignee()!.avatar_url!} alt="" class="w-8 h-8 rounded-full object-cover shrink-0" />
                       </Show>
                       <div class="flex-1 min-w-0">
-                        <p class="text-sm font-medium truncate">{story.title}</p>
-                        <div class="flex items-center gap-2 mt-0.5">
-                          <span class="text-[11px] text-base-content/30 truncate">
-                            → {assignee()?.name?.split(' ')[0] ?? '...'}
-                          </span>
-                          <span class="text-[9px] font-bold text-purple-500/60 bg-purple-500/10 px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-0.5">
-                            <RefreshCw size={8} />
+                        <p class="text-[13px] font-medium text-base-content/90 truncate">{story.title}</p>
+                        <div class="flex items-center gap-3 mt-0.5 text-[11px] text-base-content/40">
+                          <span class="truncate">{assignee()?.name?.split(' ')[0] ?? '...'}</span>
+                          <span class="inline-flex items-center gap-1 shrink-0">
+                            <RefreshCw size={10} strokeWidth={2.5} class="opacity-70" />
                             {frequencyLabel(story)}
                           </span>
                           <Show when={project()}>
-                            <span
-                              class="text-[9px] px-1.5 py-px rounded font-medium text-white/80 shrink-0"
-                              style={{ background: project()!.color }}
-                            >
-                              {project()!.prefix}
+                            <span class="inline-flex items-center gap-1.5 shrink-0">
+                              <span
+                                class="w-1.5 h-1.5 rounded-full"
+                                style={{ background: project()!.color }}
+                                aria-hidden="true"
+                              />
+                              <span class="font-semibold text-base-content/50">{project()!.prefix}</span>
                             </span>
                           </Show>
                         </div>
                       </div>
-                      <Pencil size={13} class="text-base-content/15 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      <Pencil size={13} class="text-base-content/20 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                     </div>
                   );
                 }}
@@ -594,22 +608,22 @@ const AdminPage: Component = () => {
                       const assignee = () => getAssignee(story.assignee_id ?? '');
                       return (
                         <div
-                          class="flex items-center gap-3 px-3 py-2 rounded-xl bg-base-200/20 hover:bg-base-200/30 transition-colors opacity-50 cursor-pointer"
+                          class="flex items-center gap-3 px-3 py-2 rounded-xl bg-base-200/20 hover:bg-base-200/40 transition-colors opacity-60 cursor-pointer"
                           onClick={() => openEditRecurring(story)}
                         >
                           <Show
                             when={assignee()?.avatar_url}
                             fallback={
-                              <div class="w-9 h-9 rounded-full bg-base-content/5 flex items-center justify-center text-xs font-bold text-base-content/20 shrink-0">
+                              <div class="w-8 h-8 rounded-full bg-base-content/5 flex items-center justify-center text-[11px] font-bold text-base-content/20 shrink-0">
                                 {assignee()?.name?.[0] ?? '?'}
                               </div>
                             }
                           >
-                            <img src={assignee()!.avatar_url!} alt="" class="w-9 h-9 rounded-full object-cover shrink-0 grayscale" />
+                            <img src={assignee()!.avatar_url!} alt="" class="w-8 h-8 rounded-full object-cover shrink-0 grayscale" />
                           </Show>
                           <div class="flex-1 min-w-0">
-                            <p class="text-sm font-medium truncate">{story.title}</p>
-                            <span class="text-[11px] text-base-content/20">→ {assignee()?.name?.split(' ')[0] ?? '...'}</span>
+                            <p class="text-[13px] font-medium truncate">{story.title}</p>
+                            <span class="text-[11px] text-base-content/30">{assignee()?.name?.split(' ')[0] ?? '...'}</span>
                           </div>
                           <span class="text-[9px] px-1.5 py-0.5 rounded-md font-medium bg-base-content/[0.06] text-base-content/30 shrink-0">Inactiva</span>
                         </div>

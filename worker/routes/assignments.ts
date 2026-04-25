@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
+import { publish, teamChannel } from '../lib/realtime';
 
 const assignments = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -50,11 +51,15 @@ assignments.post('/', async (c) => {
   });
 
   const [created] = await db.select().from(schema.assignments).where(eq(schema.assignments.id, id)).limit(1);
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'assignment.created', id }, c.req.header('x-client-id')),
+  );
   return c.json(created, 201);
 });
 
 assignments.patch('/:id', async (c) => {
   const db = c.get('db');
+  const user = c.get('user');
   const id = c.req.param('id');
   const body = await c.req.json<Partial<{ status: 'open' | 'closed'; title: string; description: string; due_date: string; closed_at: string }>>();
 
@@ -65,6 +70,9 @@ assignments.patch('/:id', async (c) => {
   await db.update(schema.assignments).set(body).where(eq(schema.assignments.id, id));
 
   const [updated] = await db.select().from(schema.assignments).where(eq(schema.assignments.id, id)).limit(1);
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'assignment.updated', id }, c.req.header('x-client-id')),
+  );
   return c.json(updated);
 });
 

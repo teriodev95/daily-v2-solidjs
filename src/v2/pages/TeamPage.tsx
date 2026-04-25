@@ -1,4 +1,6 @@
-import { createSignal, createResource, For, Show, type Component } from 'solid-js';
+import { createSignal, createResource, onCleanup, onMount, For, Show, type Component } from 'solid-js';
+import { useRealtimeRefetch } from '../lib/realtime';
+import { activeTab } from '../lib/activeTab';
 import type { Story } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -16,8 +18,20 @@ const TeamPage: Component = () => {
   const [selectedStory, setSelectedStory] = createSignal<Story | null>(null);
   const [searchQuery, setSearchQuery] = createSignal('');
 
-  const [goalsList] = createResource(() => api.goals.list({ shared: 'true' }));
-  const [storiesList] = createResource(() => api.stories.list({}));
+  const [goalsList, { refetch: refetchGoals }] = createResource(() => api.goals.list({ shared: 'true' }));
+  const [storiesList, { refetch: refetchStories }] = createResource(() => api.stories.list({}));
+
+  onMount(() => {
+    const unsub = useRealtimeRefetch(
+      ['goal.', 'story.'],
+      () => {
+        void refetchGoals();
+        void refetchStories();
+      },
+      { isActive: () => activeTab() === 'team' },
+    );
+    onCleanup(unsub);
+  });
 
   const allSharedGoals = () => goalsList() ?? [];
   const allSharedStories = () => (storiesList() ?? []).filter(s =>
@@ -55,11 +69,11 @@ const TeamPage: Component = () => {
         />
       }
     />
-    <Show when={!goalsList.loading} fallback={<TeamSkeleton />}>
+    <Show when={!goalsList.loading || !!goalsList.latest} fallback={<TeamSkeleton />}>
       <div class="space-y-4">
 
         {/* Members — horizontal strip */}
-        <div class="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
+        <div class="flex items-center gap-2.5 overflow-x-auto py-1.5 px-1 -mx-1 scrollbar-none">
           <For each={activeMembers()}>
             {(member) => {
               const isMe = () => member.id === currentUser()?.id;
@@ -67,20 +81,19 @@ const TeamPage: Component = () => {
               return (
                 <button
                   onClick={() => handleMemberClick(member.id)}
-                  class={`group flex items-center gap-2 px-3.5 py-2 rounded-[14px] text-xs font-semibold whitespace-nowrap transition-all duration-300 shrink-0 ${active()
-                      ? 'bg-base-content text-base-100 shadow-md shadow-base-content/10 scale-[1.02]'
+                  class={`group flex items-center gap-2 px-3.5 py-2 rounded-[14px] text-xs font-semibold whitespace-nowrap transition-all duration-300 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-base-content/20 ${active()
+                      ? 'bg-base-100 text-base-content ring-2 ring-ios-blue-500 shadow-md shadow-ios-blue-500/15 scale-[1.02]'
                       : 'bg-base-200/50 text-base-content/60 hover:bg-base-200 hover:text-base-content/90 border border-base-content/[0.04]'
                     }`}
                 >
                   <img
                     src={member.avatar_url!}
                     alt={member.name}
-                    class={`w-5 h-5 rounded-full object-cover transition-all ${active() ? 'ring-2 ring-base-100/30 shadow-sm' : 'group-hover:ring-2 group-hover:ring-base-content/10'}`}
+                    class={`w-5 h-5 rounded-full object-cover transition-all ${active() ? 'shadow-sm' : 'group-hover:ring-2 group-hover:ring-base-content/10'}`}
                   />
                   <span>{member.name.split(' ')[0]}</span>
                   <Show when={isMe()}>
-                    <span class={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${active() ? 'bg-base-100/20 text-base-100' : 'bg-ios-blue-500/15 text-ios-blue-500'
-                      }`}>tú</span>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-ios-blue-500/15 text-ios-blue-500">tú</span>
                   </Show>
                 </button>
               );

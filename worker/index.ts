@@ -75,7 +75,7 @@ app.onError((err, c) => {
 app.use('/api/*', cors({
   origin: (origin) => origin ?? '*',
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Client-Id'],
   credentials: true,
 }));
 

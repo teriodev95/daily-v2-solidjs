@@ -10,6 +10,9 @@ export interface Env {
   DEEPSEEK_API_KEY: string;
   AI: Ai;
   TOKEN_ENCRYPTION_KEY: string;
+  // Centrifugo realtime publisher. Secrets; see wiki "Centrifugo production realtime".
+  CENTRIFUGO_API_URL?: string;
+  CENTRIFUGO_API_KEY?: string;
   // Cloudflare rate-limit binding (unsafe.bindings in wrangler.toml). Optional
   // because the binding may be unavailable in local dev without the
   // --experimental-rate-limit flag; consumers must fail open on absence.

@@ -8,6 +8,7 @@ import {
   hashToken,
   shareTokenPrefix,
 } from '../lib/tokenCrypto';
+import { publish, teamChannel } from '../lib/realtime';
 
 const stories = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -359,6 +360,10 @@ stories.post('/', async (c) => {
   const [created] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
   const assigneeLinks = await db.select().from(schema.storyAssignees).where(eq(schema.storyAssignees.story_id, id));
 
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'story.created', id }, c.req.header('x-client-id')),
+  );
+
   return c.json(parseRecurrenceDays({ ...created, assignees: assigneeLinks.map(a => a.user_id) }), 201);
 });
 
@@ -388,6 +393,7 @@ stories.get('/:id', async (c) => {
 
 stories.patch('/:id', async (c) => {
   const db = c.get('db');
+  const user = c.get('user');
   const id = c.req.param('id');
   const body = await c.req.json<Record<string, unknown>>();
 
@@ -435,11 +441,16 @@ stories.patch('/:id', async (c) => {
   const [updated] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
   const assigneeLinks = await db.select().from(schema.storyAssignees).where(eq(schema.storyAssignees.story_id, id));
 
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id }, c.req.header('x-client-id')),
+  );
+
   return c.json(parseRecurrenceDays({ ...updated, assignees: assigneeLinks.map(a => a.user_id) }));
 });
 
 stories.delete('/:id', requireAdmin, async (c) => {
   const db = c.get('db');
+  const user = c.get('user');
   const id = c.req.param('id');
 
   // Clean up R2 attachments
@@ -456,12 +467,17 @@ stories.delete('/:id', requireAdmin, async (c) => {
   await db.delete(schema.attachments).where(eq(schema.attachments.story_id, id));
   await db.delete(schema.stories).where(eq(schema.stories.id, id));
 
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'story.deleted', id }, c.req.header('x-client-id')),
+  );
+
   return c.json({ ok: true });
 });
 
 // Bulk create acceptance criteria
 stories.post('/:id/criteria', async (c) => {
   const db = c.get('db');
+  const user = c.get('user');
   const storyId = c.req.param('id');
   const { criteria } = await c.req.json<{ criteria: { text: string; is_met?: boolean }[] }>();
 
@@ -479,12 +495,18 @@ stories.post('/:id/criteria', async (c) => {
     await db.insert(schema.acceptanceCriteria).values(row);
   }
 
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id: storyId }, c.req.header('x-client-id')),
+  );
+
   return c.json({ ok: true, count: rows.length }, 201);
 });
 
 // Toggle acceptance criterion is_met
 stories.patch('/:id/criteria/:criteriaId', async (c) => {
   const db = c.get('db');
+  const user = c.get('user');
+  const storyId = c.req.param('id');
   const criteriaId = c.req.param('criteriaId');
   const body = await c.req.json<{ is_met: boolean }>();
 
@@ -500,26 +522,42 @@ stories.patch('/:id/criteria/:criteriaId', async (c) => {
     .limit(1);
 
   if (!updated) return c.json({ error: 'Not found' }, 404);
+
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id: storyId }, c.req.header('x-client-id')),
+  );
+
   return c.json(updated);
 });
 
 stories.post('/:id/assignees', async (c) => {
   const db = c.get('db');
+  const user = c.get('user');
   const storyId = c.req.param('id');
   const { user_id } = await c.req.json<{ user_id: string }>();
 
   await db.insert(schema.storyAssignees).values({ story_id: storyId, user_id });
+
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id: storyId }, c.req.header('x-client-id')),
+  );
+
   return c.json({ ok: true }, 201);
 });
 
 stories.delete('/:id/assignees/:uid', async (c) => {
   const db = c.get('db');
+  const user = c.get('user');
   const storyId = c.req.param('id');
   const uid = c.req.param('uid');
 
   await db
     .delete(schema.storyAssignees)
     .where(and(eq(schema.storyAssignees.story_id, storyId), eq(schema.storyAssignees.user_id, uid)));
+
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'story.updated', id: storyId }, c.req.header('x-client-id')),
+  );
 
   return c.json({ ok: true });
 });

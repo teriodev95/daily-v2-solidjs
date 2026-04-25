@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createEffect, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 
@@ -59,6 +59,17 @@ export function ContentEditor(props: ContentEditorProps) {
     setHasContent(!!lastContent.trim());
 
     props.onEditorMount?.(editorRef);
+
+    // Sync prop → DOM when `content` changes from outside (realtime refetch,
+    // parent re-fetch). Rebuilds innerHTML only when the editor does NOT have
+    // focus — preserves cursor/selection for the user who is typing.
+    createEffect(on(() => props.content ?? '', (incoming) => {
+      if (incoming === lastContent) return;
+      if (document.activeElement === editorRef) return; // user is editing — skip
+      lastContent = incoming;
+      editorRef.innerHTML = toHtml(incoming);
+      setHasContent(!!incoming.trim());
+    }, { defer: true }));
 
     props.onReady?.({
       insertAtEnd: (markdown: string) => {

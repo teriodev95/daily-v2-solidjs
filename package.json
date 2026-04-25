@@ -1,6 +1,6 @@
 {
   "name": "daily",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "",
   "type": "module",
   "scripts": {
@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@solid-primitives/spring": "^0.1.2",
+    "centrifuge": "^5.5.3",
     "drizzle-orm": "^0.45.1",
     "force-graph": "^1.51.2",
     "hono": "^4.12.0",

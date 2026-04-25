@@ -301,6 +301,26 @@ body {
   }
 }
 
+/* Calendar story drop — brief pop + blue ring glow */
+@keyframes story-drop {
+  0% {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.55);
+  }
+  45% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.25);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 122, 255, 0);
+  }
+}
+
+@utility animate-story-drop {
+  animation: story-drop 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Stagger children on tab enter */
 .stagger-in > * > * {
   animation: page-item-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;

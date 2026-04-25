@@ -10,6 +10,8 @@ import HeaderSearchBar from '../components/HeaderSearchBar';
 import KanbanCard from '../components/kanban/Card';
 import Column from '../components/kanban/Column';
 import FilterBar from '../components/kanban/FilterBar';
+import { useRealtimeRefetch } from '../lib/realtime';
+import { activeTab } from '../lib/activeTab';
 
 interface ProjectsPageProps {
   onCreateStory?: (projectId?: string) => void;
@@ -117,21 +119,58 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // Merge helper — preserves story references when id + content match, so
+  // Solid's `For` reconciles instead of remounting (no stagger-in replay,
+  // no flicker). Only changed stories get new refs.
+  // Fields that change on every mutation but don't affect rendered content.
+  // Ignored when deciding if a story needs a new ref — avoids remounting cards
+  // (which would lose :hover, focus, and animation state).
+  const IGNORED_MERGE_KEYS = new Set(['updated_at', 'created_at', 'completed_at']);
+
+  const mergeStories = (prev: Story[] | undefined, next: Story[]): Story[] => {
+    if (!prev?.length) return next;
+    const byId = new Map(prev.map((s) => [s.id, s]));
+    return next.map((n) => {
+      const old = byId.get(n.id);
+      if (!old) return n;
+      const keys = new Set([...Object.keys(old), ...Object.keys(n)]);
+      for (const k of keys) {
+        if (IGNORED_MERGE_KEYS.has(k)) continue;
+        const a = (old as any)[k];
+        const b = (n as any)[k];
+        if (a === b) continue;
+        if (Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i])) continue;
+        return n;
+      }
+      return old;
+    });
+  };
+
+  const mergeBuckets = (prev: KanbanResponse | null, next: KanbanResponse): KanbanResponse => ({
+    backlog: { ...next.backlog, items: mergeStories(prev?.backlog.items, next.backlog.items) },
+    todo: { ...next.todo, items: mergeStories(prev?.todo.items, next.todo.items) },
+    in_progress: { ...next.in_progress, items: mergeStories(prev?.in_progress.items, next.in_progress.items) },
+    done: { ...next.done, items: mergeStories(prev?.done.items, next.done.items) },
+  });
+
   // ─── Load kanban data ───────────────────────────
-  const loadKanban = async () => {
-    setLoading(true);
+  // `silent` = no loading spinner; used by realtime/focus refetches so the
+  // UI updates transparently without a skeleton flash.
+  const loadKanban = async (opts: { silent?: boolean } = {}) => {
+    const silent = opts.silent ?? !!buckets();
+    if (!silent) setLoading(true);
     try {
       const response = await api.stories.kanban({
         scope: scope(),
         projects: selectedProjectIds(),
         done_range: doneRange(),
       });
-      setBuckets(response);
+      setBuckets((prev) => mergeBuckets(prev, response));
     } catch (err) {
       console.error('Failed to load kanban', err);
-      showToast('No se pudo cargar el tablero');
+      if (!silent) showToast('No se pudo cargar el tablero');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -414,16 +453,23 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
   };
 
   // ─── Lifecycle ──────────────────────────────────
+  let unsubRealtime: (() => void) | undefined;
   onMount(() => {
     loadFilters();
     filtersLoaded = true;
     void loadKanban();
     document.addEventListener('keydown', handleKeydown);
+    unsubRealtime = useRealtimeRefetch(
+      ['story.'],
+      () => void loadKanban({ silent: true }),
+      { isActive: () => activeTab() === 'projects' },
+    );
   });
 
   onCleanup(() => {
     document.removeEventListener('keydown', handleKeydown);
     if (saveTimer) clearTimeout(saveTimer);
+    unsubRealtime?.();
   });
 
   // Reload on filter change or refreshKey
@@ -476,13 +522,19 @@ const ProjectsPage: Component<ProjectsPageProps> = (props) => {
           const isFocused = focusedColumn() === status && focusedCardIndex() === idx;
           const project = story.project_id ? data.getProjectById(story.project_id) ?? null : null;
           const assignee = story.assignee_id ? data.getUserById(story.assignee_id) ?? null : null;
+          const ownerId = assignee?.id ?? story.assignee_id;
+          const otherAssignees = ((story as any).assignees as string[] | undefined ?? [])
+            .filter((id) => id !== ownerId)
+            .map((id) => data.getUserById(id))
+            .filter((u): u is NonNullable<typeof u> => !!u);
           return (
             <KanbanCard
               story={story}
               project={project}
               assignee={assignee}
+              otherAssignees={otherAssignees}
               selected={isFocused}
-              showAvatar={scope() === 'all'}
+              showAvatar={true}
               onClick={() => {
                 setFocusedColumn(status);
                 setFocusedCardIndex(idx);

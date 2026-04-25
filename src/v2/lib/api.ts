@@ -11,12 +11,21 @@ export class ApiError extends Error {
 
 export const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
+// Per-tab client id read from sessionStorage (written by `src/v2/lib/realtime.ts`).
+// Forwarded on every request so the worker can tag publish events with the
+// originating tab; the same tab then suppresses its own echoes.
+const readClientId = (): string | null => {
+  try { return sessionStorage.getItem('dc-realtime-client-id'); } catch { return null; }
+};
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const cid = readClientId();
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(cid ? { 'X-Client-Id': cid } : {}),
       ...options?.headers,
     },
   });

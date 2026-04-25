@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createResource, createSignal, For, Show, type Component } from 'solid-js';
-import { CalendarDays, CheckCircle2, Circle, Loader2, RefreshCw } from 'lucide-solid';
+import { CalendarDays, CheckCircle2, Circle, Loader2, Plus, RefreshCw, X } from 'lucide-solid';
 import type { Story, StoryCompletion } from '../../types';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -35,9 +35,20 @@ const MobileCalendarPage: Component<MobileCalendarPageProps> = (props) => {
   const days = buildWindow();
   const userId = () => auth.user()?.id ?? '';
 
+  const [selectedUserIds, setSelectedUserIds] = createSignal<string[]>([]);
+  const [filterInitialized, setFilterInitialized] = createSignal(false);
+
+  createEffect(() => {
+    const uid = userId();
+    if (uid && !filterInitialized()) {
+      setSelectedUserIds([uid]);
+      setFilterInitialized(true);
+    }
+  });
+
   const [stories] = createResource(
-    () => ({ uid: userId(), _r: props.refreshKey }),
-    ({ uid }) => uid ? api.stories.list({ assignee_id: uid }) : Promise.resolve([]),
+    () => ({ _r: props.refreshKey }),
+    () => api.stories.list({}),
   );
   const [localStories, setLocalStories] = createSignal<Story[]>([]);
 
@@ -61,13 +72,23 @@ const MobileCalendarPage: Component<MobileCalendarPageProps> = (props) => {
 
   const itemsByDay = createMemo(() => {
     const allStories = localStories();
+    const selected = new Set(selectedUserIds());
     const map = new Map<string, Story[]>();
+
+    const userMatches = (story: Story & { assignees?: string[] }) => {
+      if (selected.size === 0) return false;
+      if (story.assignee_id && selected.has(story.assignee_id)) return true;
+      if (story.assignees && story.assignees.some((id) => selected.has(id))) return true;
+      return false;
+    };
 
     for (const day of days) {
       const key = toLocalDateStr(day);
       const items: Story[] = [];
 
       for (const story of allStories) {
+        if (!userMatches(story as Story & { assignees?: string[] })) continue;
+
         if (isRecurring(story)) {
           if (story.status !== 'done' && isRecurringOnDate(story, day)) items.push(story);
           continue;
@@ -103,6 +124,14 @@ const MobileCalendarPage: Component<MobileCalendarPageProps> = (props) => {
   const totalVisibleItems = createMemo(() =>
     Array.from(itemsByDay().values()).reduce((sum, items) => sum + items.length, 0),
   );
+
+  const toggleUserFilter = (id: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+  const clearUserFilter = () => setSelectedUserIds([]);
+  const activeTeam = () => data.users().filter((u) => u.is_active);
 
   const toggleRecurringCompletion = (story: Story, dateKey: string) => {
     const key = `${story.id}:${dateKey}`;
@@ -245,6 +274,56 @@ const MobileCalendarPage: Component<MobileCalendarPageProps> = (props) => {
           </div>
 
           <div class="mt-3">
+            <div class="mb-1.5 flex items-center justify-between gap-3">
+              <p class="text-[11px] font-semibold text-base-content/45">Filtra por usuario</p>
+              <Show when={selectedUserIds().length > 0}>
+                <button
+                  type="button"
+                  onClick={clearUserFilter}
+                  class="inline-flex items-center gap-1 text-[10px] font-medium text-base-content/40 hover:text-base-content/80 transition-colors"
+                >
+                  <X size={10} />
+                  Limpiar
+                </button>
+              </Show>
+            </div>
+            <div class="flex gap-2 overflow-x-auto scrollbar-none py-1 px-0.5 -mx-0.5 mb-3">
+              <For each={activeTeam()}>
+                {(member) => {
+                  const active = () => selectedUserIds().includes(member.id);
+                  const isMe = () => member.id === userId();
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => toggleUserFilter(member.id)}
+                      aria-pressed={active()}
+                      class={`group flex items-center gap-1.5 px-2.5 py-1.5 rounded-[12px] text-[11px] font-semibold whitespace-nowrap transition-all shrink-0 ${
+                        active()
+                          ? 'bg-base-100 text-base-content ring-2 ring-ios-blue-500 shadow-md shadow-ios-blue-500/15'
+                          : 'bg-base-200/50 text-base-content/55 border border-base-content/[0.04]'
+                      }`}
+                    >
+                      <Show
+                        when={member.avatar_url}
+                        fallback={
+                          <div class="w-4 h-4 rounded-full bg-base-content/10 flex items-center justify-center text-[8px] font-bold text-base-content/40 shrink-0">
+                            {member.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
+                          </div>
+                        }
+                      >
+                        <img src={member.avatar_url!} alt="" class="w-4 h-4 rounded-full object-cover" />
+                      </Show>
+                      <span>{member.name.split(' ')[0]}</span>
+                      <Show when={isMe()}>
+                        <span class="text-[8px] px-1 py-px rounded font-bold uppercase tracking-wider bg-ios-blue-500/15 text-ios-blue-500">
+                          tú
+                        </span>
+                      </Show>
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
             <div class="mb-1.5 flex items-center justify-between gap-3">
               <p class="text-[11px] font-semibold text-base-content/45">Elige el día que quieres revisar</p>
               <span class="text-[10px] text-base-content/22">scroll horizontal</span>

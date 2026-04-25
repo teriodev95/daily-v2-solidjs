@@ -316,11 +316,11 @@ const Column: Component<ColumnProps> = (props) => {
               style={{ background: statusColor() }}
               aria-hidden="true"
             />
-            <span class="text-[13px] font-semibold text-base-content/70 truncate">
+            <span class="text-[13px] font-semibold text-base-content/75 truncate">
               {props.label}
             </span>
             <span
-              class="text-[12px] text-base-content/40 tabular-nums"
+              class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-base-content/[0.06] text-[10.5px] font-semibold text-base-content/50 tabular-nums"
               title={`${props.count} tareas en ${props.label}`}
             >
               {props.count}
@@ -387,7 +387,7 @@ const Column: Component<ColumnProps> = (props) => {
             </Show>
           }
         >
-          <div class="flex flex-col gap-2">
+          <div class="flex flex-col gap-2.5">
             <For each={props.stories}>
               {(story) => props.renderCard(story)}
             </For>

@@ -111,10 +111,10 @@ const FilterBar: Component<FilterBarProps> = (props) => {
 
   const chipClass = (active: boolean) =>
     [
-      'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[13px] font-medium transition-all whitespace-nowrap',
+      'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] transition-all whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-base-content/20',
       active
-        ? 'bg-base-content/10 border-base-content/20 text-base-content shadow-sm'
-        : 'bg-base-100 border-base-content/[0.08] text-base-content/70 hover:bg-base-content/5',
+        ? 'bg-base-100 text-base-content font-semibold ring-2 shadow-md shadow-base-content/5'
+        : 'bg-base-100 border border-base-content/[0.08] text-base-content/70 font-medium hover:bg-base-content/5',
     ].join(' ');
 
   const scopeBtnClass = (active: boolean) =>
@@ -157,7 +157,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
       <div class="flex-1 min-w-0 relative">
         <div
           ref={chipsRowRef}
-          class="flex flex-wrap gap-2 max-h-[2.25rem] overflow-hidden"
+          class="flex flex-wrap gap-2 py-1 px-1 -mx-1 max-h-[2.75rem] overflow-hidden"
           aria-label="Filtrar por proyecto"
         >
           <For each={props.allProjects}>
@@ -168,6 +168,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
                   type="button"
                   data-chip-id={project.id}
                   class={chipClass(active())}
+                  style={active() ? { '--tw-ring-color': project.color } : undefined}
                   onClick={() => props.onToggleProject(project.id)}
                   aria-pressed={active()}
                   title={`${project.prefix} · ${project.name}`}
@@ -177,7 +178,9 @@ const FilterBar: Component<FilterBarProps> = (props) => {
                     style={{ background: project.color }}
                     aria-hidden="true"
                   />
-                  <span class="text-base-content/50 font-semibold">
+                  <span
+                    class={`font-semibold ${active() ? 'text-base-content/70' : 'text-base-content/50'}`}
+                  >
                     {project.prefix}
                   </span>
                   <span>{project.name}</span>
@@ -211,25 +214,31 @@ const FilterBar: Component<FilterBarProps> = (props) => {
               aria-label="Más proyectos"
             >
               <For each={hiddenProjects()}>
-                {(project) => (
-                  <button
-                    type="button"
-                    class={chipClass(isSelected(project.id))}
-                    onClick={() => props.onToggleProject(project.id)}
-                    role="menuitemcheckbox"
-                    aria-checked={isSelected(project.id)}
-                  >
-                    <span
-                      class="w-2 h-2 rounded-full shrink-0"
-                      style={{ background: project.color }}
-                      aria-hidden="true"
-                    />
-                    <span class="text-base-content/50 font-semibold">
-                      {project.prefix}
-                    </span>
-                    <span class="truncate">{project.name}</span>
-                  </button>
-                )}
+                {(project) => {
+                  const active = () => isSelected(project.id);
+                  return (
+                    <button
+                      type="button"
+                      class={chipClass(active())}
+                      style={active() ? { '--tw-ring-color': project.color } : undefined}
+                      onClick={() => props.onToggleProject(project.id)}
+                      role="menuitemcheckbox"
+                      aria-checked={active()}
+                    >
+                      <span
+                        class="w-2 h-2 rounded-full shrink-0"
+                        style={{ background: project.color }}
+                        aria-hidden="true"
+                      />
+                      <span
+                        class={`font-semibold ${active() ? 'text-base-content/70' : 'text-base-content/50'}`}
+                      >
+                        {project.prefix}
+                      </span>
+                      <span class="truncate">{project.name}</span>
+                    </button>
+                  );
+                }}
               </For>
             </div>
           </Show>

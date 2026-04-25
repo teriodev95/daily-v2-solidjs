@@ -1,4 +1,5 @@
 import { createSignal, createEffect, on, onMount, onCleanup, For, Show, type Component } from 'solid-js';
+import { onRealtime } from '../lib/realtime';
 import type { Story, AcceptanceCriteria, User } from '../types';
 import { useData } from '../lib/data';
 import { api } from '../lib/api';
@@ -198,20 +199,35 @@ const StoryDetail: Component<Props> = (props) => {
     document.addEventListener('keydown', handleKeyDown);
     onCleanup(() => { document.removeEventListener('paste', handlePaste); document.removeEventListener('keydown', handleKeyDown); });
 
-    try {
-      const detail = await api.stories.get(props.story.id);
-      setCriteriaList(detail.criteria ?? []);
-      setAssigneeIds(detail.assignees ?? []);
-      setTitle(detail.title);
-      setContent(detail.description || '');
-      setDueDate(detail.due_date || '');
-      setEstimate(detail.estimate || 0);
-      setAssigneeId(detail.assignee_id || '');
-      setProjectId((detail as any).project_id || '');
-      if (detail.priority) setPriority(detail.priority);
-      if (detail.status) setStatus(detail.status);
-    } catch { /* story detail is supplementary */ }
+    const refetchDetail = async (opts: { initial?: boolean } = {}) => {
+      try {
+        const detail = await api.stories.get(props.story.id);
+        setCriteriaList(detail.criteria ?? []);
+        setAssigneeIds(detail.assignees ?? []);
+        setDueDate(detail.due_date || '');
+        setEstimate(detail.estimate || 0);
+        setAssigneeId(detail.assignee_id || '');
+        setProjectId((detail as any).project_id || '');
+        if (detail.priority) setPriority(detail.priority);
+        if (detail.status) setStatus(detail.status);
+
+        // Skip fields the user is actively editing so we don't stomp on typing.
+        const active = document.activeElement as HTMLElement | null;
+        if (opts.initial || active !== editorEl) setContent(detail.description || '');
+        const titleFocused = !!active && active.tagName === 'TEXTAREA';
+        if (opts.initial || !titleFocused) setTitle(detail.title);
+      } catch { /* story detail is supplementary */ }
+    };
+
+    await refetchDetail({ initial: true });
     setDetailLoaded(true);
+
+    const unsubRT = onRealtime((ev) => {
+      if (ev.type !== 'story.updated') return;
+      if ((ev as any).id !== props.story.id) return;
+      void refetchDetail();
+    });
+    onCleanup(unsubRT);
   });
 
   const project = () => projectId() ? data.getProjectById(projectId()) : null;
@@ -315,12 +331,12 @@ const StoryDetail: Component<Props> = (props) => {
 
   return (
     <div
-      class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center animate-in fade-in duration-200"
+      class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center"
       style={{ "z-index": props.zIndex ?? 100 }}
       onClick={() => props.onClose()}
     >
       <div
-        class="story-detail-modal bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl shadow-black w-full sm:max-w-3xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[92vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 relative"
+        class="story-detail-modal bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl shadow-black w-full sm:max-w-3xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[92vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] relative"
         style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -574,13 +590,10 @@ const StoryDetail: Component<Props> = (props) => {
 
             {/* Spacer + save + share + close */}
             <div class="flex items-center gap-1.5 ml-auto">
-              <Show when={saveStatus() !== 'idle'}>
-                <span class="flex items-center gap-1">
-                  <Show when={saveStatus() === 'saving'}>
-                    <Loader2 size={12} class="text-base-content/40 animate-spin" />
-                  </Show>
+              <Show when={saveStatus() === 'saved' || saveStatus() === 'error'}>
+                <span class="flex items-center gap-1 transition-opacity">
                   <Show when={saveStatus() === 'saved'}>
-                    <Check size={12} class="text-ios-green-500" />
+                    <Check size={12} class="text-ios-green-500/70" />
                   </Show>
                   <Show when={saveStatus() === 'error'}>
                     <span class="flex items-center gap-1 text-red-500" title="Error al guardar">
