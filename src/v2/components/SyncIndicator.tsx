@@ -1,5 +1,4 @@
 import { createSignal, onMount, onCleanup, Show, type Component } from 'solid-js';
-import { Check, CloudOff } from 'lucide-solid';
 import { onRealtime, onRealtimeStatus } from '../lib/realtime';
 
 // Discreet floating sync indicator — Notion-style.
@@ -27,6 +26,18 @@ const DATA_EVENT_PREFIXES = [
 
 const shouldShowSyncForEvent = (type: string): boolean =>
   DATA_EVENT_PREFIXES.some((prefix) => type.startsWith(prefix));
+
+const stateLabel = (state: SyncState): string => {
+  if (state === 'syncing') return 'Sincronizando';
+  if (state === 'synced') return 'Actualizado';
+  return 'Sin conexión';
+};
+
+const dotClass = (state: SyncState): string => {
+  if (state === 'syncing') return 'bg-ios-blue-500 shadow-ios-blue-500/30 animate-sync-dot';
+  if (state === 'synced') return 'bg-ios-green-500 shadow-ios-green-500/30';
+  return 'bg-amber-500 shadow-amber-500/30';
+};
 
 const SyncIndicator: Component = () => {
   const [state, setState] = createSignal<SyncState>('idle');
@@ -74,22 +85,13 @@ const SyncIndicator: Component = () => {
   return (
     <Show when={state() !== 'idle'}>
       <div
-        class="fixed z-[120] pointer-events-none top-[calc(0.75rem+env(safe-area-inset-top))] right-3 sm:right-5 animate-toast-in"
+        class="fixed z-[120] pointer-events-none top-[calc(0.85rem+env(safe-area-inset-top))] right-3 sm:right-5 animate-toast-in"
         aria-live="polite"
+        aria-label={stateLabel(state())}
       >
-        <div class="pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-base-200/85 backdrop-blur-2xl border border-base-content/[0.08] shadow-sm shadow-black/10">
-          <Show when={state() === 'syncing'}>
-            <span class="w-1.5 h-1.5 rounded-full bg-ios-blue-500 animate-sync-dot" />
-            <span class="text-[10.5px] font-semibold text-base-content/65 tracking-tight">Sincronizando</span>
-          </Show>
-          <Show when={state() === 'synced'}>
-            <Check size={11} strokeWidth={3} class="text-ios-green-500" />
-            <span class="text-[10.5px] font-semibold text-base-content/65 tracking-tight">Actualizado</span>
-          </Show>
-          <Show when={state() === 'offline'}>
-            <CloudOff size={11} strokeWidth={2.5} class="text-amber-500" />
-            <span class="text-[10.5px] font-semibold text-amber-600 dark:text-amber-400 tracking-tight">Sin conexión</span>
-          </Show>
+        <div class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100/55 backdrop-blur-xl">
+          <span class={`h-2 w-2 rounded-full shadow-[0_0_10px_currentColor] ${dotClass(state())}`} />
+          <span class="sr-only">{stateLabel(state())}</span>
         </div>
       </div>
     </Show>
