@@ -11,6 +11,7 @@ import authRoutes from './routes/auth';
 import teamRoutes from './routes/team';
 import projectRoutes from './routes/projects';
 import storiesRoutes from './routes/stories';
+import storyDocRoutes from './routes/storyDoc';
 import reportsRoutes from './routes/reports';
 import goalsRoutes from './routes/goals';
 import assignmentsRoutes from './routes/assignments';
@@ -221,6 +222,7 @@ app.get('/api/meta', async (c) => {
 app.route('/api/team', teamRoutes);
 app.route('/api/projects', projectRoutes);
 app.route('/api/stories', storiesRoutes);
+app.route('/api/stories', storyDocRoutes);
 app.route('/api/reports', reportsRoutes);
 app.route('/api/goals', goalsRoutes);
 app.route('/api/assignments', assignmentsRoutes);
