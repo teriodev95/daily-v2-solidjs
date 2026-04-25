@@ -19,6 +19,7 @@ import completionsRoutes from './routes/completions';
 import learningsRoutes from './routes/learnings';
 import wikiRoutes from './routes/wiki';
 import tokensRoutes from './routes/tokens';
+import presenceRoutes from './routes/presence';
 import { wikiAgentRoutes } from './features/wikiShare';
 import seedRoutes from './db/seed';
 import { processLibrarianQueue } from './lib/librarian';
@@ -168,6 +169,16 @@ app.use('/api/tokens/*', async (c, next) => {
 });
 app.use('/api/tokens/*', authMiddleware);
 
+// Presence is session-only (PATs shouldn't squat presence channels).
+app.use('/api/presence/*', async (c, next) => {
+  const authHeader = c.req.header('Authorization') ?? '';
+  if (authHeader.startsWith('Bearer dk_')) {
+    return c.json({ error: 'token_forbidden_for_presence' }, 403);
+  }
+  return next();
+});
+app.use('/api/presence/*', authMiddleware);
+
 // Meta endpoint — discovery for agents
 app.get('/api/meta', async (c) => {
   return c.json({
@@ -218,6 +229,7 @@ app.route('/api/completions', completionsRoutes);
 app.route('/api/learnings', learningsRoutes);
 app.route('/api/wiki', wikiRoutes);
 app.route('/api/tokens', tokensRoutes);
+app.route('/api/presence', presenceRoutes);
 
 // ---------- Agent API ----------
 // Accepts share tokens (?s=st_*), PATs (Authorization: Bearer dk_*) or session

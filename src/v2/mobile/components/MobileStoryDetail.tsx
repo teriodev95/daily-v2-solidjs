@@ -27,6 +27,8 @@ import { renderAll as renderMermaid, revertAll as revertMermaid } from '../../li
 import { isDark } from '../../lib/theme';
 import { onRealtime, onRealtimeStatus } from '../../lib/realtime';
 import { createPulse } from '../../lib/usePulse';
+import { usePresence, type PresenceMode } from '../../lib/presence';
+import PresenceAvatars from '../../components/PresenceAvatars';
 
 interface MobileStoryDetailProps {
   story: Story;
@@ -87,6 +89,13 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
 
   // Per-field pulse for remote updates (matches desktop behavior).
   const { pulse, isPulsing } = createPulse(800);
+
+  // Presence: editing mode while title or content is focused.
+  const [titleHasFocus, setTitleHasFocus] = createSignal(false);
+  const [editorActive, setEditorActive] = createSignal(false);
+  const presenceMode = (): PresenceMode =>
+    titleHasFocus() || editorActive() ? 'editing' : 'viewing';
+  usePresence(`story:${props.story.id}`, () => true, presenceMode);
 
   let dateInputRef!: HTMLInputElement;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -448,6 +457,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
               </div>
 
               <div class="flex items-center gap-1.5 shrink-0">
+                <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={2} />
                 <CopyForAgentButton
                   entity={{ type: 'story', id: props.story.id, title: title() }}
                 />
@@ -472,6 +482,8 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                 class="w-full resize-none bg-transparent text-[29px] font-semibold leading-[1.05] tracking-tight text-base-content/92 outline-none placeholder:text-base-content/20"
                 placeholder="Nueva tarea"
                 ref={(element) => { titleRef = element; requestAnimationFrame(() => autoResize(element)); }}
+                onFocus={() => setTitleHasFocus(true)}
+                onBlur={() => setTitleHasFocus(false)}
                 onInput={(event) => {
                   setTitle(event.currentTarget.value);
                   autoResize(event.currentTarget);
@@ -753,8 +765,8 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                   editorEl = el;
                   void renderMermaid(el, isDark(), mermaidOpts);
                 }}
-                onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
-                onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
+                onEditorFocus={() => { editorFocused = true; setEditorActive(true); if (editorEl) revertMermaid(editorEl); }}
+                onEditorBlur={() => { editorFocused = false; setEditorActive(false); if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
               />
             </div>
 

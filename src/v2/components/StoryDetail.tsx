@@ -17,6 +17,8 @@ import CopyForAgentButton from './CopyForAgentButton';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
 import { isDark } from '../lib/theme';
 import { createPulse } from '../lib/usePulse';
+import { usePresence, type PresenceMode } from '../lib/presence';
+import PresenceAvatars from '../components/PresenceAvatars';
 
 const priorityConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   critical: { label: 'Crítica', color: 'text-red-500', bg: 'bg-red-500/10', icon: Flame },
@@ -129,6 +131,15 @@ const StoryDetail: Component<Props> = (props) => {
   }, { defer: true }));
   // Per-field pulse for remote updates (Notion-style "someone else touched this").
   const { pulse, isPulsing } = createPulse(800);
+
+  // Presence: announce viewing/editing on the same channel everyone else
+  // is subscribed to. The mode flips to 'editing' while title or content
+  // is focused; resting is 'viewing'.
+  const [titleHasFocus, setTitleHasFocus] = createSignal(false);
+  const [editorActive, setEditorActive] = createSignal(false);
+  const presenceMode = (): PresenceMode =>
+    titleHasFocus() || editorActive() ? 'editing' : 'viewing';
+  usePresence(`story:${props.story.id}`, () => true, presenceMode);
 
   // Save state
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>('idle');
@@ -712,6 +723,7 @@ const StoryDetail: Component<Props> = (props) => {
 
             {/* Spacer + save + share + close */}
             <div class="flex items-center gap-1.5 ml-auto">
+              <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={3} />
               <Show when={saveStatus() === 'saved' || saveStatus() === 'error'}>
                 <span class="flex items-center gap-1 transition-opacity">
                   <Show when={saveStatus() === 'saved'}>
@@ -780,6 +792,8 @@ const StoryDetail: Component<Props> = (props) => {
               class="w-full text-xl sm:text-[26px] font-extrabold leading-tight text-base-content bg-transparent resize-none outline-none overflow-hidden px-1 py-1 placeholder:text-base-content/20"
               placeholder="Título de la historia"
               ref={(el) => { titleRef = el; requestAnimationFrame(() => autoResize(el)); }}
+              onFocus={() => setTitleHasFocus(true)}
+              onBlur={() => setTitleHasFocus(false)}
               onInput={(e) => {
                 const val = e.currentTarget.value;
                 setTitle(val);
@@ -811,8 +825,8 @@ const StoryDetail: Component<Props> = (props) => {
                 editorEl = el;
                 void renderMermaid(el, isDark(), mermaidOpts);
               }}
-              onEditorFocus={() => { editorFocused = true; if (editorEl) revertMermaid(editorEl); }}
-              onEditorBlur={() => { editorFocused = false; if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
+              onEditorFocus={() => { editorFocused = true; setEditorActive(true); if (editorEl) revertMermaid(editorEl); }}
+              onEditorBlur={() => { editorFocused = false; setEditorActive(false); if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
             />
           </div>
 

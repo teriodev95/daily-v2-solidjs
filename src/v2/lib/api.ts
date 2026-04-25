@@ -343,4 +343,17 @@ export const api = {
     revoke: (id: string) =>
       request<{ ok: boolean }>(`/api/tokens/${id}`, { method: 'DELETE' }),
   },
+
+  presence: {
+    beat: (scope: string, mode: 'viewing' | 'editing') =>
+      request<{ ok: boolean }>('/api/presence/beat', {
+        method: 'POST',
+        body: JSON.stringify({ scope, mode }),
+      }),
+    leave: (scope: string) =>
+      request<{ ok: boolean }>('/api/presence/leave', {
+        method: 'POST',
+        body: JSON.stringify({ scope }),
+      }),
+  },
 };

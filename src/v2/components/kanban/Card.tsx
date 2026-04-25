@@ -2,6 +2,7 @@ import { For, Show, type Component, type JSX } from 'solid-js';
 import { RefreshCw, AlertCircle } from 'lucide-solid';
 import type { Story, Project, User, Priority, StoryStatus } from '../../types';
 import { formatRelativeDueDate, type DueVariant } from '../../lib/relativeDate';
+import PresenceAvatars from '../PresenceAvatars';
 
 export interface KanbanCardProps {
   story: Story;
@@ -194,9 +195,10 @@ export const KanbanCard: Component<KanbanCardProps> = (props) => {
         />
       </Show>
 
-      {/* ── Meta row (due only) ── */}
-      <Show when={due().variant !== 'none'}>
-        <div class="flex items-center justify-end mb-2">
+      {/* ── Meta row (due + presence) ── */}
+      <div class="flex items-center justify-end gap-2 mb-2 min-h-[18px]">
+        <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={2} />
+        <Show when={due().variant !== 'none'}>
           <span
             class={[
               'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap tabular-nums',
@@ -208,8 +210,8 @@ export const KanbanCard: Component<KanbanCardProps> = (props) => {
             </Show>
             {due().label}
           </span>
-        </div>
-      </Show>
+        </Show>
+      </div>
 
       {/* ── Title ── */}
       <h3 class="text-[13px] font-semibold leading-[1.4] text-base-content/90 line-clamp-3 break-words">
