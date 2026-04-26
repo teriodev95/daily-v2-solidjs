@@ -157,34 +157,39 @@ const MemberReportPreview: Component<Props> = (props) => {
   const impedimentItems = () => parseItems(report()?.impediments);
   const loading = () => stories.loading || reportData.loading || goals.loading || assignments.loading;
   const reportUnavailable = () => !!((reportData() as ReportResourceValue | undefined)?.__error);
+  const hasSecondaryInfo = () =>
+    myGoals().length > 0 ||
+    myAssignments().length > 0 ||
+    learningItems().length > 0 ||
+    impedimentItems().length > 0 ||
+    reportUnavailable();
 
   return (
     <Show when={!loading()} fallback={<MemberSkeleton />}>
-      <section class="overflow-hidden rounded-[22px] border border-base-content/[0.06] bg-base-100/62 shadow-[0_1px_0_rgba(0,0,0,0.025)]">
-        <header class="border-b border-base-content/[0.055] bg-base-content/[0.018] px-4 py-4 sm:px-5">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex min-w-0 items-center gap-3.5">
-              <MemberAvatar member={member()} size="lg" />
-              <div class="min-w-0">
-                <div class="flex min-w-0 items-center gap-2">
-                  <h2 class="truncate text-lg font-semibold tracking-tight text-base-content/88">
-                    {member()?.name ?? 'Miembro'}
-                  </h2>
-                  <Show when={member()?.role === 'admin'}>
-                    <span class="rounded-full bg-base-content/[0.055] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-base-content/42">Admin</span>
-                  </Show>
-                </div>
-                <p class="mt-0.5 text-[12px] font-medium text-base-content/42">
-                  Reporte operativo de hoy
-                </p>
+      <section class="overflow-hidden rounded-[22px] border border-base-content/[0.055] bg-base-100/54 shadow-[0_1px_0_rgba(0,0,0,0.018)]">
+        <header class="border-b border-base-content/[0.045] bg-base-content/[0.01] px-3 py-3 sm:px-4">
+          <div class="flex min-w-0 items-center gap-3">
+            <MemberAvatar member={member()} size="md" />
+            <div class="min-w-0 flex-1">
+              <div class="flex min-w-0 items-center gap-2">
+                <h2 class="truncate text-[17px] font-semibold leading-tight tracking-tight text-base-content/88">
+                  {member()?.name ?? 'Miembro'}
+                </h2>
+                <Show when={member()?.role === 'admin'}>
+                  <span class="rounded-full bg-base-content/[0.055] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-base-content/42">Admin</span>
+                </Show>
               </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[430px]">
-              <MiniMetric label="Activo" value={activeWork().length} icon={<ArrowRight size={13} />} tone="blue" />
-              <MiniMetric label="En curso" value={inProgressCount()} icon={<PlayCircle size={13} />} tone="amber" />
-              <MiniMetric label="Hecho" value={completedRecent().length} icon={<CheckCircle2 size={13} />} tone="green" />
-              <MiniMetric label="Backlog" value={backlog().length} icon={<Inbox size={13} />} tone="neutral" />
+              <p class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-medium text-base-content/38">
+                <span>Reporte operativo de hoy</span>
+                <span class="text-base-content/16">/</span>
+                <span class="whitespace-nowrap tabular-nums">{activeWork().length} activas</span>
+                <span class="text-base-content/16">/</span>
+                <span class="whitespace-nowrap tabular-nums">{inProgressCount()} en curso</span>
+                <span class="text-base-content/16">/</span>
+                <span class="whitespace-nowrap tabular-nums">{completedRecent().length} hechas</span>
+                <span class="text-base-content/16">/</span>
+                <span class="whitespace-nowrap tabular-nums">{backlog().length} backlog</span>
+              </p>
             </div>
           </div>
         </header>
@@ -229,60 +234,64 @@ const MemberReportPreview: Component<Props> = (props) => {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-3 border-t border-base-content/[0.055] p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-4">
-          <InfoPanel title="Objetivos" count={myGoals().length} icon={<Target size={13} />} tone="neutral">
-            <For each={myGoals().slice(0, 4)}>
-              {(goal) => (
-                <div class="flex items-start gap-2 rounded-xl bg-base-content/[0.025] px-3 py-2">
-                  <Show when={goal.is_completed} fallback={<Circle size={12} class="mt-0.5 shrink-0 text-base-content/24" />}>
-                    <CheckCircle2 size={12} class="mt-0.5 shrink-0 text-ios-green-500" />
-                  </Show>
-                  <span class={`min-w-0 text-[12px] font-medium leading-relaxed ${goal.is_completed ? 'line-through text-base-content/34' : 'text-base-content/62'}`}>
-                    {goal.text}
-                  </span>
-                </div>
-              )}
-            </For>
-            <Show when={myGoals().length === 0}>
-              <EmptyLine text="Sin objetivos visibles" />
+        <Show when={hasSecondaryInfo()}>
+          <div class="flex flex-wrap gap-3 border-t border-base-content/[0.045] p-3 sm:p-4">
+            <Show when={myGoals().length > 0}>
+              <InfoPanel title="Objetivos" count={myGoals().length} icon={<Target size={13} />} tone="neutral">
+                <For each={myGoals().slice(0, 4)}>
+                  {(goal) => (
+                    <div class="flex items-start gap-2 rounded-xl bg-base-content/[0.02] px-3 py-2">
+                      <Show when={goal.is_completed} fallback={<Circle size={12} class="mt-0.5 shrink-0 text-base-content/24" />}>
+                        <CheckCircle2 size={12} class="mt-0.5 shrink-0 text-ios-green-500" />
+                      </Show>
+                      <span class={`min-w-0 text-[12px] font-medium leading-relaxed ${goal.is_completed ? 'line-through text-base-content/34' : 'text-base-content/62'}`}>
+                        {goal.text}
+                      </span>
+                    </div>
+                  )}
+                </For>
+              </InfoPanel>
             </Show>
-          </InfoPanel>
 
-          <InfoPanel title="Encomiendas" count={myAssignments().length} icon={<Flag size={13} />} tone="purple">
-            <For each={myAssignments().slice(0, 4)}>
-              {(assignment) => (
-                <div class="flex items-center gap-2 rounded-xl bg-base-content/[0.025] px-3 py-2">
-                  <Circle size={12} class="shrink-0 text-purple-500/45" />
-                  <span class="min-w-0 flex-1 truncate text-[12px] font-medium text-base-content/62">{assignment.title}</span>
-                  <Show when={assignment.due_date}>
-                    <span class="shrink-0 text-[10px] font-semibold text-base-content/32">
-                      {formatShortDate(assignment.due_date!)}
-                    </span>
-                  </Show>
-                </div>
-              )}
-            </For>
-            <Show when={myAssignments().length === 0}>
-              <EmptyLine text="Sin encomiendas abiertas" />
+            <Show when={myAssignments().length > 0}>
+              <InfoPanel title="Encomiendas" count={myAssignments().length} icon={<Flag size={13} />} tone="purple">
+                <For each={myAssignments().slice(0, 4)}>
+                  {(assignment) => (
+                    <div class="flex items-center gap-2 rounded-xl bg-base-content/[0.02] px-3 py-2">
+                      <Circle size={12} class="shrink-0 text-purple-500/45" />
+                      <span class="min-w-0 flex-1 truncate text-[12px] font-medium text-base-content/62">{assignment.title}</span>
+                      <Show when={assignment.due_date}>
+                        <span class="shrink-0 text-[10px] font-semibold text-base-content/32">
+                          {formatShortDate(assignment.due_date!)}
+                        </span>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+              </InfoPanel>
             </Show>
-          </InfoPanel>
 
-          <InfoPanel title="Aprendizaje" icon={<BookOpen size={13} />} tone="amber">
-            <Show when={learningItems().length > 0} fallback={<EmptyLine text={reportUnavailable() ? 'Reporte no disponible' : 'Sin aprendizaje reportado'} />}>
-              <For each={learningItems().slice(0, 3)}>
-                {(item) => <p class="rounded-xl bg-base-content/[0.025] px-3 py-2 text-[12px] font-medium leading-relaxed text-base-content/58">{item}</p>}
-              </For>
+            <Show when={learningItems().length > 0 || reportUnavailable()}>
+              <InfoPanel title="Aprendizaje" icon={<BookOpen size={13} />} tone="amber">
+                <Show when={learningItems().length > 0} fallback={<p class="text-[12px] font-medium text-base-content/28">Reporte no disponible</p>}>
+                  <For each={learningItems().slice(0, 3)}>
+                    {(item) => <p class="rounded-xl bg-base-content/[0.02] px-3 py-2 text-[12px] font-medium leading-relaxed text-base-content/58">{item}</p>}
+                  </For>
+                </Show>
+              </InfoPanel>
             </Show>
-          </InfoPanel>
 
-          <InfoPanel title="Impedimentos" count={impedimentItems().length} icon={<AlertTriangle size={13} />} tone={impedimentItems().length > 0 ? 'red' : 'neutral'}>
-            <Show when={impedimentItems().length > 0} fallback={<EmptyLine text={reportUnavailable() ? 'Reporte no disponible' : 'Sin impedimentos'} />}>
-              <For each={impedimentItems().slice(0, 3)}>
-                {(item) => <p class="rounded-xl bg-red-500/[0.055] px-3 py-2 text-[12px] font-medium leading-relaxed text-red-500/78">{item}</p>}
-              </For>
+            <Show when={impedimentItems().length > 0 || reportUnavailable()}>
+              <InfoPanel title="Impedimentos" count={impedimentItems().length} icon={<AlertTriangle size={13} />} tone={impedimentItems().length > 0 ? 'red' : 'neutral'}>
+                <Show when={impedimentItems().length > 0} fallback={<p class="text-[12px] font-medium text-base-content/28">Reporte no disponible</p>}>
+                  <For each={impedimentItems().slice(0, 3)}>
+                    {(item) => <p class="rounded-xl bg-red-500/[0.05] px-3 py-2 text-[12px] font-medium leading-relaxed text-red-500/78">{item}</p>}
+                  </For>
+                </Show>
+              </InfoPanel>
             </Show>
-          </InfoPanel>
-        </div>
+          </div>
+        </Show>
       </section>
     </Show>
   );
@@ -337,7 +346,7 @@ const StoryRow: Component<{
     <button
       type="button"
       onClick={props.onClick}
-      class="group flex w-full items-center gap-2.5 rounded-xl border border-base-content/[0.055] bg-base-100/58 px-3 py-2.5 text-left transition-[background-color,border-color] hover:border-base-content/[0.11] hover:bg-base-content/[0.018] focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+      class="group flex w-full items-center gap-2.5 rounded-xl border border-base-content/[0.045] bg-base-100/42 px-3 py-2.5 text-left transition-[background-color,border-color] hover:border-base-content/[0.10] hover:bg-base-content/[0.016] focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
     >
       <span class="shrink-0">{statusIcon()}</span>
       <div class="min-w-0 flex-1">
@@ -388,7 +397,7 @@ const Panel: Component<{
   subtitle?: string;
   children: JSX.Element;
 }> = (props) => (
-  <section class="rounded-2xl border border-base-content/[0.055] bg-base-100/44 p-3">
+  <section class="rounded-2xl border border-base-content/[0.045] bg-base-100/34 p-3">
     <div class="mb-2.5 flex items-center gap-2">
       <ToneIcon tone={props.tone}>{props.icon}</ToneIcon>
       <div class="min-w-0">
@@ -412,7 +421,7 @@ const InfoPanel: Component<{
   tone: 'neutral' | 'blue' | 'green' | 'amber' | 'purple' | 'red';
   children: JSX.Element;
 }> = (props) => (
-  <section class="min-h-32 rounded-2xl border border-base-content/[0.055] bg-base-100/42 p-3">
+  <section class="min-h-32 min-w-0 flex-1 basis-[260px] rounded-2xl border border-base-content/[0.045] bg-base-100/32 p-3">
     <div class="mb-2.5 flex items-center gap-2">
       <ToneIcon tone={props.tone}>{props.icon}</ToneIcon>
       <h3 class="min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.12em] text-base-content/38">{props.title}</h3>
@@ -440,19 +449,10 @@ const ToneIcon: Component<{ tone: 'neutral' | 'blue' | 'green' | 'amber' | 'purp
   );
 };
 
-const MiniMetric: Component<{ label: string; value: number; icon: JSX.Element; tone: 'neutral' | 'blue' | 'green' | 'amber' }> = (props) => (
-  <div class="flex h-12 items-center gap-2 rounded-2xl border border-base-content/[0.05] bg-base-100/55 px-2.5">
-    <ToneIcon tone={props.tone}>{props.icon}</ToneIcon>
-    <div class="min-w-0">
-      <p class="text-[9px] font-bold uppercase tracking-[0.12em] text-base-content/30">{props.label}</p>
-      <p class="text-sm font-semibold leading-tight text-base-content/72 tabular-nums">{props.value}</p>
-    </div>
-  </div>
-);
-
-const MemberAvatar: Component<{ member?: User; size?: 'sm' | 'lg' }> = (props) => {
+const MemberAvatar: Component<{ member?: User; size?: 'sm' | 'md' | 'lg' }> = (props) => {
   const large = () => props.size === 'lg';
-  const cls = () => large() ? 'h-12 w-12 text-lg' : 'h-7 w-7 text-xs';
+  const medium = () => props.size === 'md';
+  const cls = () => large() ? 'h-12 w-12 text-lg' : medium() ? 'h-10 w-10 text-base' : 'h-7 w-7 text-xs';
   const initial = () => (props.member?.name || props.member?.email || '?').charAt(0).toUpperCase();
   return (
     <Show
@@ -471,12 +471,6 @@ const MemberAvatar: Component<{ member?: User; size?: 'sm' | 'lg' }> = (props) =
     </Show>
   );
 };
-
-const EmptyLine: Component<{ text: string }> = (props) => (
-  <p class="rounded-xl border border-dashed border-base-content/[0.06] bg-base-content/[0.012] px-3 py-2 text-[12px] font-medium text-base-content/26">
-    {props.text}
-  </p>
-);
 
 const MemberSkeleton: Component = () => (
   <div class="animate-pulse rounded-[22px] border border-base-content/[0.06] bg-base-100/55 p-4">
