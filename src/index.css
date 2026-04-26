@@ -321,66 +321,6 @@ body {
   animation: story-drop 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Kanban V2 entrance motion — intentionally small and CSS-only.
-   Motion.dev's vanilla stagger API is useful for complex orchestration, but
-   the board only needs first-paint/new-card presence. Keep it dependency-free. */
-@keyframes kanban-board-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes kanban-column-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.992);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes kanban-card-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* Use backwards, not both: finished transforms must be released so fixed
-   drag ghosts/context menus keep viewport coordinates. */
-.kanban-board-enter {
-  animation: kanban-board-in 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-}
-
-.kanban-column-enter {
-  animation: kanban-column-in 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: var(--kanban-column-delay, 0ms);
-}
-
-.kanban-card-enter {
-  animation: kanban-card-in 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: var(--kanban-card-delay, 0ms);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .kanban-board-enter,
-  .kanban-column-enter,
-  .kanban-card-enter {
-    animation: none !important;
-  }
-}
-
 /* Stagger children on tab enter */
 .stagger-in > * > * {
   animation: page-item-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;
