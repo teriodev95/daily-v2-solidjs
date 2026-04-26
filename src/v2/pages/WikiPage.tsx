@@ -196,10 +196,10 @@ const WikiPage: Component<Props> = (props) => {
         }
       />
 
-      <div class="flex flex-col sm:flex-row min-h-[calc(100vh-8rem)] gap-6 sm:gap-10 pt-4 pb-12 w-full max-w-6xl mx-auto">
+      <div class="flex flex-col gap-6 pt-4 pb-12 w-full max-w-6xl mx-auto md:grid md:h-[calc(100vh-10rem)] md:min-h-[520px] md:grid-cols-[16rem_minmax(0,1fr)] md:gap-10 md:overflow-hidden md:pb-0">
         
         {/* ── COLLUMNA IZQUIERDA (Sidebar / Cajones Bento Nav) ── */}
-        <aside class="w-full sm:w-64 flex flex-col gap-8 shrink-0">
+        <aside class="w-full flex flex-col gap-8 shrink-0 md:h-full md:min-h-0 md:overflow-hidden">
           
           {/* Bento: Espacios */}
           <div class="flex flex-col">
@@ -281,7 +281,7 @@ const WikiPage: Component<Props> = (props) => {
         </aside>
 
         {/* ── COLLUMNA DERECHA (Main Content / El Conocimiento) ── */}
-        <div class="flex-1 min-w-0 flex flex-col pt-2">
+        <div class="flex-1 min-w-0 flex flex-col pt-2 md:h-full md:min-h-0 md:overflow-x-hidden md:overflow-y-auto md:pb-[calc(7rem+env(safe-area-inset-bottom))] md:pr-1 md:[scrollbar-width:none] md:[&::-webkit-scrollbar]:hidden">
 
           <Show when={showGraph() && selectedProjectId()}>
             <div class="mb-4 flex-1 h-[calc(100vh-220px)] min-h-[400px] bg-base-100 rounded-3xl border border-base-content/[0.08] shadow-inner overflow-hidden">
