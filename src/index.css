@@ -357,17 +357,19 @@ body {
   }
 }
 
+/* Use backwards, not both: finished transforms must be released so fixed
+   drag ghosts/context menus keep viewport coordinates. */
 .kanban-board-enter {
-  animation: kanban-board-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: kanban-board-in 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .kanban-column-enter {
-  animation: kanban-column-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: kanban-column-in 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   animation-delay: var(--kanban-column-delay, 0ms);
 }
 
 .kanban-card-enter {
-  animation: kanban-card-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: kanban-card-in 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   animation-delay: var(--kanban-card-delay, 0ms);
 }
 
