@@ -204,13 +204,11 @@ const CopyForAgentButton: Component<Props> = (props) => {
         aria-haspopup="menu"
         aria-expanded={open()}
         title="Compartir con agente"
-        class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[12px] font-semibold text-base-content/70 bg-base-content/[0.04] hover:bg-base-content/[0.08] hover:text-base-content transition-all disabled:opacity-50 disabled:cursor-wait"
+        class="inline-flex h-10 w-10 items-center justify-center rounded-xl text-base-content/62 bg-base-content/[0.04] hover:bg-base-content/[0.08] hover:text-base-content transition-[background-color,color,opacity] disabled:opacity-50 disabled:cursor-wait"
       >
-        <Show when={loading()} fallback={<Share2 size={13} strokeWidth={2.2} />}>
-          <Loader2 size={13} class="animate-spin" />
+        <Show when={loading()} fallback={<Share2 size={17} strokeWidth={2.2} />}>
+          <Loader2 size={17} class="animate-spin" />
         </Show>
-        <span class="hidden sm:inline">Compartir con agente</span>
-        <span class="sm:hidden">Compartir</span>
       </button>
 
       {/* Dropdown */}

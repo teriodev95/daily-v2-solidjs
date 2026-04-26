@@ -2,10 +2,11 @@ import { createEffect, createSignal, on, onMount, onCleanup, For, Show, type Com
 import type { WikiArticle, WikiSuggestedLink, LibrarianStatus } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
-import { X, Check, Loader2, Trash2, BookOpen, Clock, ArrowLeft, AlertCircle } from 'lucide-solid';
+import { X, Check, Loader2, Trash2, BookOpen, Clock, AlertCircle } from 'lucide-solid';
 import { ContentEditor, type ContentEditorHandle } from './ContentEditor';
 import { processWikiLinks } from '../lib/wikiLinks';
 import CopyForAgentButton from './CopyForAgentButton';
+import DetailViewModeControl, { readDetailViewMode, type DetailViewMode } from './DetailViewModeControl';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
 import { isDark } from '../lib/theme';
 
@@ -40,6 +41,7 @@ const WikiArticleDetail: Component<Props> = (props) => {
   const [summary, setSummary] = createSignal(props.article.summary ?? '');
   const [librarianStatus, setLibrarianStatus] = createSignal<LibrarianStatus>(props.article.librarian_status ?? 'pending');
   const [librarianMode, setLibrarianMode] = createSignal<string>('auto');
+  const [viewMode, setViewMode] = createSignal<DetailViewMode>(readDetailViewMode());
   let editorHandle: ContentEditorHandle | undefined;
   let editorEl: HTMLElement | undefined;
   let editorFocused = false;
@@ -154,42 +156,71 @@ const WikiArticleDetail: Component<Props> = (props) => {
     } catch { return dateStr; }
   };
 
+  const detailOverlayClass = () => {
+    const base = 'fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-end justify-center animate-in fade-in duration-200';
+    if (viewMode() === 'sidebar') return `${base} sm:items-stretch sm:justify-end sm:bg-black/45`;
+    return `${base} sm:items-center`;
+  };
+
+  const detailShellClass = () => {
+    const base = 'bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl w-full rounded-t-[32px] sm:rounded-[24px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[95vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 relative flex flex-col';
+
+    if (viewMode() === 'fullscreen') {
+      return `${base} sm:h-[calc(100vh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-none sm:max-h-none`;
+    }
+
+    if (viewMode() === 'sidebar') {
+      return `${base} sm:h-full sm:max-h-none sm:w-[42vw] sm:min-w-[560px] sm:max-w-[760px] sm:rounded-none sm:rounded-l-[28px] sm:border-y-0 sm:border-r-0 sm:border-l`;
+    }
+
+    return `${base} sm:max-w-5xl sm:max-h-[92vh]`;
+  };
+
+  const headerClass = () =>
+    'sticky top-0 bg-base-100/95 backdrop-blur z-10 px-4 sm:px-6 py-3 border-b border-base-content/[0.04] grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3';
+
+  const contentContainerClass = () => {
+    const base = 'mx-auto w-full min-w-0 px-5 sm:px-8 py-8';
+    if (viewMode() === 'fullscreen') return `${base} max-w-[1120px] 2xl:max-w-[1180px]`;
+    return `${base} max-w-3xl`;
+  };
+
+  const footerContainerClass = () => {
+    const base = 'mx-auto w-full min-w-0 px-5 sm:px-8';
+    if (viewMode() === 'fullscreen') return `${base} max-w-[1120px] 2xl:max-w-[1180px]`;
+    return `${base} max-w-3xl`;
+  };
+
   return (
     <div
-      class="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center animate-in fade-in duration-200"
+      class={detailOverlayClass()}
       onClick={(e) => { if (e.target === e.currentTarget) props.onClose(); }}
     >
-      <div class="bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl w-full sm:max-w-5xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[95vh] sm:max-h-[92vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 relative flex flex-col" style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}>
+      <div class={detailShellClass()} style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}>
 
       {/* Header — sticky bar */}
-      <div class="sticky top-0 bg-base-100/95 backdrop-blur z-10 px-6 sm:px-10 py-3 border-b border-base-content/[0.04] flex items-center gap-3">
-        <button
-          onClick={() => props.onClose()}
-          class="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/40 hover:text-base-content/70 transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Volver
-        </button>
-
-        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-500">
-          <BookOpen size={11} />
-          <span class="text-[10px] font-bold">Wiki</span>
+      <div class={headerClass()}>
+        <div class="flex min-w-0 items-center gap-2">
+          <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-500">
+            <BookOpen size={11} />
+            <span class="text-[10px] font-bold">Wiki</span>
+          </div>
+          <Show when={librarianStatus() !== 'done'}>
+            <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${
+              librarianStatus() === 'pending' ? 'bg-base-content/20 animate-pulse' :
+              librarianStatus() === 'processing' ? 'bg-blue-400 animate-pulse' :
+              'bg-red-400'
+            }`} title={librarianStatus() === 'error' ? 'Error en análisis' : 'Analizando...'} />
+          </Show>
         </div>
-        <Show when={librarianStatus() !== 'done'}>
-          <span class={`w-1.5 h-1.5 rounded-full ${
-            librarianStatus() === 'pending' ? 'bg-base-content/20 animate-pulse' :
-            librarianStatus() === 'processing' ? 'bg-blue-400 animate-pulse' :
-            'bg-red-400'
-          }`} title={librarianStatus() === 'error' ? 'Error en análisis' : 'Analizando...'} />
-        </Show>
 
         {/* Tags inline */}
-        <div class="flex items-center gap-1 flex-wrap flex-1 min-w-0">
+        <div class="flex min-w-0 items-center gap-1 overflow-hidden">
           <For each={tags()}>
             {(tag) => (
-              <span class="flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-base-content/[0.04] text-base-content/40">
-                {tag}
-                <button onClick={() => removeTag(tag)} class="hover:text-red-400 transition-colors">
+              <span class="flex max-w-[8.5rem] shrink items-center gap-0.5 rounded bg-base-content/[0.04] px-1.5 py-0.5 text-[10px] font-semibold text-base-content/40">
+                <span class="truncate">{tag}</span>
+                <button onClick={() => removeTag(tag)} class="shrink-0 hover:text-red-400 transition-colors">
                   <X size={8} />
                 </button>
               </span>
@@ -202,12 +233,12 @@ const WikiArticleDetail: Component<Props> = (props) => {
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
             onBlur={() => { if (newTag().trim()) addTag(); }}
             placeholder="+ tag"
-            class="text-[10px] bg-transparent outline-none w-12 text-base-content/30 placeholder:text-base-content/15"
+            class="w-12 shrink-0 bg-transparent text-[10px] text-base-content/30 outline-none placeholder:text-base-content/15"
           />
         </div>
 
         {/* Right actions */}
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex shrink-0 items-center justify-end gap-1.5">
           <Show when={saveStatus() !== 'idle'}>
             <Show when={saveStatus() === 'saving'}><Loader2 size={12} class="text-base-content/40 animate-spin" /></Show>
             <Show when={saveStatus() === 'saved'}><Check size={12} class="text-ios-green-500" /></Show>
@@ -222,13 +253,14 @@ const WikiArticleDetail: Component<Props> = (props) => {
           <Show when={(props.article.history ?? []).length > 0}>
             <button
               onClick={() => setShowHistory(v => !v)}
-              class={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-all ${
+              class={`inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-[12px] font-semibold transition-colors ${
                 showHistory()
-                  ? 'bg-base-content/[0.06] text-base-content/50'
-                  : 'text-base-content/25 hover:text-base-content/40'
+                  ? 'bg-base-content/[0.06] text-base-content/62'
+                  : 'text-base-content/38 hover:bg-base-content/[0.055] hover:text-base-content/70'
               }`}
+              title="Historial"
             >
-              <Clock size={11} />
+              <Clock size={14} />
               {(props.article.history ?? []).length}
             </button>
           </Show>
@@ -241,12 +273,22 @@ const WikiArticleDetail: Component<Props> = (props) => {
             }}
             contextLabel={contextLabel()}
           />
+          <DetailViewModeControl mode={viewMode()} onChange={setViewMode} />
+          <button
+            type="button"
+            onClick={() => props.onClose()}
+            class="inline-flex h-10 w-10 items-center justify-center rounded-xl text-base-content/45 hover:bg-base-content/[0.08] hover:text-base-content transition-colors"
+            aria-label="Cerrar detalle"
+            title="Cerrar"
+          >
+            <X size={18} class="transition-colors" />
+          </button>
         </div>
       </div>
 
       {/* Body — centered, max-width for readability (scrolls with outer modal) */}
-      <div class="flex-1">
-        <div class="max-w-3xl mx-auto px-6 sm:px-10 py-8">
+      <div class="min-w-0 flex-1">
+        <div class={contentContainerClass()}>
 
           {/* Title */}
           <div class="overflow-hidden mb-6">
@@ -347,6 +389,7 @@ const WikiArticleDetail: Component<Props> = (props) => {
           {/* Content — full width editor */}
           <ContentEditor
             content={props.article.content || ''}
+            class="min-w-0"
             placeholder="Escribe aquí... soporta **markdown** y [[wiki links]]"
             onChange={(md) => scheduleSave({ content: md })}
             processHtml={processWikiLinks}
@@ -363,8 +406,8 @@ const WikiArticleDetail: Component<Props> = (props) => {
       </div>
 
       {/* Footer — delete action */}
-      <div class="shrink-0 px-6 sm:px-10 py-3 border-t border-base-content/[0.04]">
-        <div class="max-w-3xl mx-auto">
+      <div class="shrink-0 py-3 border-t border-base-content/[0.04]">
+        <div class={footerContainerClass()}>
           <Show
             when={confirming()}
             fallback={

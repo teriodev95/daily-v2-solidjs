@@ -14,6 +14,7 @@ import AttachmentSection from './AttachmentSection';
 import { ContentEditor } from './ContentEditor';
 import DatePickerPopover from './DatePickerPopover';
 import CopyForAgentButton from './CopyForAgentButton';
+import DetailViewModeControl, { readDetailViewMode, type DetailViewMode } from './DetailViewModeControl';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
 import { isDark } from '../lib/theme';
 import { playInteractionSuccess } from '../lib/interactionMotion';
@@ -121,6 +122,7 @@ const StoryDetail: Component<Props> = (props) => {
   const [status, setStatus] = createSignal(props.story.status);
   const [showPriorityPicker, setShowPriorityPicker] = createSignal(false);
   const [showStatusPicker, setShowStatusPicker] = createSignal(false);
+  const [viewMode, setViewMode] = createSignal<DetailViewMode>(props.embedded ? 'normal' : readDetailViewMode());
   let dateTriggerRef!: HTMLButtonElement;
   let titleRef: HTMLTextAreaElement | undefined;
   let editorEl: HTMLElement | undefined;
@@ -212,6 +214,7 @@ const StoryDetail: Component<Props> = (props) => {
   const [archiving, setArchiving] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal('');
   const [detailLoaded, setDetailLoaded] = createSignal(false);
+  const activeViewMode = () => props.embedded ? 'normal' : viewMode();
 
   onMount(async () => {
     // Lock body scroll while the standalone modal is open.
@@ -232,9 +235,15 @@ const StoryDetail: Component<Props> = (props) => {
       }
     };
     document.addEventListener('paste', handlePaste);
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose(); };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      props.onClose();
+    };
     document.addEventListener('keydown', handleKeyDown);
-    onCleanup(() => { document.removeEventListener('paste', handlePaste); document.removeEventListener('keydown', handleKeyDown); });
+    onCleanup(() => {
+      document.removeEventListener('paste', handlePaste);
+      document.removeEventListener('keydown', handleKeyDown);
+    });
 
     const refetchDetail = async (opts: { initial?: boolean } = {}) => {
       try {
@@ -408,18 +417,39 @@ const StoryDetail: Component<Props> = (props) => {
     el.style.height = el.scrollHeight + 'px';
   };
 
+  const detailOverlayClass = () => {
+    if (props.embedded) return 'h-full min-h-0';
+    const base = 'fixed inset-0 bg-black/60 backdrop-blur-md flex items-end justify-center';
+    if (activeViewMode() === 'sidebar') return `${base} sm:items-stretch sm:justify-end sm:bg-black/45`;
+    return `${base} sm:items-center`;
+  };
+
+  const detailShellClass = () => {
+    if (props.embedded) {
+      return 'story-detail-modal h-full min-h-0 w-full overflow-y-auto overflow-x-hidden rounded-2xl border border-transparent bg-base-100/72 ring-1 ring-inset ring-base-content/[0.055] [clip-path:inset(0_round_1rem)] relative';
+    }
+
+    const base = 'story-detail-modal bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl shadow-black w-full rounded-t-[32px] sm:rounded-[24px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[92vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] relative';
+
+    if (activeViewMode() === 'fullscreen') {
+      return `${base} sm:h-[calc(100vh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-none sm:max-h-none`;
+    }
+
+    if (activeViewMode() === 'sidebar') {
+      return `${base} sm:h-full sm:max-h-none sm:w-[42vw] sm:min-w-[560px] sm:max-w-[760px] sm:rounded-none sm:rounded-l-[28px] sm:border-y-0 sm:border-r-0 sm:border-l`;
+    }
+
+    return `${base} sm:max-w-3xl sm:max-h-[85vh]`;
+  };
+
   return (
     <div
-      class={props.embedded
-        ? 'h-full min-h-0'
-        : 'fixed inset-0 bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center'}
+      class={detailOverlayClass()}
       style={props.embedded ? undefined : { "z-index": props.zIndex ?? 100 }}
       onClick={() => { if (!props.embedded) props.onClose(); }}
     >
       <div
-        class={props.embedded
-          ? 'story-detail-modal h-full min-h-0 w-full overflow-y-auto overflow-x-hidden rounded-2xl border border-transparent bg-base-100/72 ring-1 ring-inset ring-base-content/[0.055] [clip-path:inset(0_round_1rem)] relative'
-          : 'story-detail-modal bg-base-100/95 shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:shadow-2xl shadow-black w-full sm:max-w-3xl sm:rounded-[24px] rounded-t-[32px] sm:rounded-t-[24px] mt-auto sm:mt-0 max-h-[92vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden border sm:border-base-content/[0.08] relative'}
+        class={detailShellClass()}
         style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -715,8 +745,17 @@ const StoryDetail: Component<Props> = (props) => {
                   title: title(),
                 }}
               />
-              <button onClick={() => props.onClose()} class="p-1.5 rounded-full hover:bg-base-content/10 transition-colors group">
-                <X size={18} class="text-base-content/40 group-hover:text-base-content/80 transition-colors" />
+              <Show when={!props.embedded}>
+                <DetailViewModeControl mode={activeViewMode()} onChange={setViewMode} />
+              </Show>
+              <button
+                type="button"
+                onClick={() => props.onClose()}
+                class="inline-flex h-10 w-10 items-center justify-center rounded-xl text-base-content/45 hover:bg-base-content/[0.08] hover:text-base-content transition-colors"
+                aria-label="Cerrar detalle"
+                title="Cerrar"
+              >
+                <X size={18} class="transition-colors" />
               </button>
             </div>
           </div>

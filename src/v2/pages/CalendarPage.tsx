@@ -77,6 +77,14 @@ const buildWeek = (date: Date): Date[] => {
   });
 };
 
+const getISOWeekNumber = (date: Date) => {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
+
 const priorityColor: Record<string, string> = {
   critical: 'bg-red-500/10 text-red-500 border-red-500/20',
   high: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
@@ -90,6 +98,7 @@ const CalendarPage: Component<Props> = (props) => {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const currentWeekStart = buildWeek(today)[0];
 
   const [view, setView] = createSignal<'month' | 'week'>('month');
   const [baseDate, setBaseDate] = createSignal(today);
@@ -127,6 +136,15 @@ const CalendarPage: Component<Props> = (props) => {
 
   const visibleDays = createMemo(() => {
     return view() === 'month' ? buildMonth(baseDate()) : buildWeek(baseDate());
+  });
+
+  const visibleWeeks = createMemo(() => {
+    const days = visibleDays();
+    const weeks: Date[][] = [];
+    for (let i = 0; i < days.length; i += 7) {
+      weeks.push(days.slice(i, i + 7));
+    }
+    return weeks;
   });
 
   const rangeStr = createMemo(() => {
@@ -473,7 +491,10 @@ const CalendarPage: Component<Props> = (props) => {
       <div class="flex-1 bg-base-200/30 rounded-2xl border border-base-content/[0.08] overflow-hidden flex flex-col shadow-sm">
         
         {/* Days Header */}
-        <div class="grid grid-cols-7 border-b border-base-content/[0.08] bg-base-100/50 backdrop-blur-md">
+        <div class="grid grid-cols-[38px_repeat(7,minmax(0,1fr))] sm:grid-cols-[46px_repeat(7,minmax(0,1fr))] border-b border-base-content/[0.08] bg-base-100/50 backdrop-blur-md">
+          <div class="py-2 text-center text-[9px] font-bold uppercase tracking-[0.12em] text-base-content/24 bg-base-content/[0.012] border-r border-base-content/[0.045]">
+            Sem
+          </div>
           <For each={DAY_NAMES_SHORT}>
             {(name) => (
               <div class="py-2 text-center text-[11px] font-bold uppercase tracking-widest text-base-content/40">
@@ -484,30 +505,44 @@ const CalendarPage: Component<Props> = (props) => {
         </div>
 
         {/* Calendar Body */}
-        <div class={`grid grid-cols-7 flex-1 ${view() === 'month' ? 'auto-rows-fr' : 'min-h-[160px]'}`}>
-          <For each={visibleDays()}>
-            {(d, i) => {
-              const dateKey = toLocalDateStr(d);
-              const isCurrentMonth = () => d.getMonth() === baseDate().getMonth();
-              const items = () => itemsByDate().get(dateKey) ?? [];
-              const isToday = isSameDay(d, today);
-              const isSelected = () => isSameDay(d, selectedDay());
-
-              const isDropHover = () => dragHoverKey() === dateKey;
+        <div class={`grid flex-1 ${view() === 'month' ? 'auto-rows-fr' : 'min-h-[160px]'}`}>
+          <For each={visibleWeeks()}>
+            {(week) => {
+              const isCurrentWeek = () => isSameDay(week[0], currentWeekStart);
               return (
-                <div
-                  onClick={() => handleCellClick(d)}
-                  onDragOver={(e) => handleDragOverCell(e, dateKey)}
-                  onDragLeave={() => handleDragLeaveCell(dateKey)}
-                  onDrop={(e) => handleDropCell(e, dateKey)}
-                  class={`relative flex flex-col border-r border-b border-base-content/[0.04] transition-all p-1 sm:p-2 cursor-pointer group ${
-                     isDropHover()
-                       ? 'bg-ios-blue-500/10 ring-2 ring-inset ring-ios-blue-500/50 scale-[0.99]'
-                       : isSelected()
-                         ? 'bg-ios-blue-500/[0.02] ring-1 ring-inset ring-ios-blue-500/20'
-                         : 'hover:bg-base-content/[0.02]'
-                  } ${!isCurrentMonth() && view() === 'month' ? 'opacity-40 bg-base-200/50' : 'bg-base-100/30'}`}
-                >
+                <div class="grid min-h-0 grid-cols-[38px_repeat(7,minmax(0,1fr))] sm:grid-cols-[46px_repeat(7,minmax(0,1fr))]">
+                  <div class="flex items-start justify-center border-r border-b border-base-content/[0.04] bg-base-content/[0.012] px-1 py-2">
+                    <span class={`mt-0.5 inline-flex h-6 min-w-7 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums transition-colors ${
+                      isCurrentWeek()
+                        ? 'bg-ios-blue-500/12 text-ios-blue-500 ring-1 ring-ios-blue-500/18'
+                        : 'text-base-content/24'
+                    }`}>
+                      {getISOWeekNumber(week[0])}
+                    </span>
+                  </div>
+                <For each={week}>
+                  {(d) => {
+                    const dateKey = toLocalDateStr(d);
+                    const isCurrentMonth = () => d.getMonth() === baseDate().getMonth();
+                    const items = () => itemsByDate().get(dateKey) ?? [];
+                    const isToday = isSameDay(d, today);
+                    const isSelected = () => isSameDay(d, selectedDay());
+
+                    const isDropHover = () => dragHoverKey() === dateKey;
+                    return (
+                      <div
+                        onClick={() => handleCellClick(d)}
+                        onDragOver={(e) => handleDragOverCell(e, dateKey)}
+                        onDragLeave={() => handleDragLeaveCell(dateKey)}
+                        onDrop={(e) => handleDropCell(e, dateKey)}
+                        class={`relative flex flex-col border-r border-b border-base-content/[0.04] transition-all p-1 sm:p-2 cursor-pointer group ${
+                          isDropHover()
+                            ? 'bg-ios-blue-500/10 ring-2 ring-inset ring-ios-blue-500/50 scale-[0.99]'
+                            : isSelected()
+                              ? 'bg-ios-blue-500/[0.02] ring-1 ring-inset ring-ios-blue-500/20'
+                              : 'hover:bg-base-content/[0.02]'
+                        } ${!isCurrentMonth() && view() === 'month' ? 'opacity-40 bg-base-200/50' : 'bg-base-100/30'}`}
+                      >
                   <div class="flex items-start justify-between mb-1">
                     <div class={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[11px] sm:text-[13px] font-bold transition-all ${
                       isToday
@@ -597,7 +632,11 @@ const CalendarPage: Component<Props> = (props) => {
                      </Show>
                   </div>
 
-                </div>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
               );
             }}
           </For>
