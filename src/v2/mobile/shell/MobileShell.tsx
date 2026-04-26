@@ -1,5 +1,5 @@
-import { createSignal, Show, type Component } from 'solid-js';
-import { CalendarDays, LogOut, Moon, Plus, Send, Sun } from 'lucide-solid';
+import { createEffect, createSignal, Show, type Component } from 'solid-js';
+import { CalendarDays, LogOut, Moon, Plus, Send, Sun, Users } from 'lucide-solid';
 import dailyIcon from '../../../assets/daily-icon.png';
 import { useAuth } from '../../lib/auth';
 import MobileTodayPage from '../pages/MobileTodayPage';
@@ -8,8 +8,10 @@ import MobileQuickAddSheet from '../components/MobileQuickAddSheet';
 import InstallPrompt from '../../components/InstallPrompt';
 import SyncIndicator from '../../components/SyncIndicator';
 import { isDark, toggleTheme } from '../../lib/theme';
+import { setActiveTab as setSharedActiveTab } from '../../lib/activeTab';
+import TeamPage from '../../pages/TeamPage';
 
-type MobileTab = 'today' | 'calendar';
+type MobileTab = 'today' | 'team' | 'calendar';
 
 const MobileShell: Component = () => {
   const auth = useAuth();
@@ -18,6 +20,10 @@ const MobileShell: Component = () => {
   const [quickAddDate, setQuickAddDate] = createSignal<string | null>(null);
   const [refreshKey, setRefreshKey] = createSignal(0);
 
+  createEffect(() => {
+    setSharedActiveTab(activeTab() === 'today' ? 'report' : activeTab());
+  });
+
   const handleCreated = () => {
     setRefreshKey(value => value + 1);
     setActiveTab('today');
@@ -25,6 +31,7 @@ const MobileShell: Component = () => {
 
   return (
     <div class="sm:hidden min-h-screen bg-base-100 text-base-content">
+      <Show when={activeTab() !== 'team'}>
       <header class="sticky top-0 z-[120] px-3 pt-3">
         <div class="mx-auto flex items-center justify-between gap-3">
           <div class="h-12 px-3.5 flex items-center gap-2 bg-base-200/70 backdrop-blur-2xl rounded-[1.35rem] border border-base-content/[0.08] shadow-sm">
@@ -61,10 +68,14 @@ const MobileShell: Component = () => {
           </div>
         </div>
       </header>
+      </Show>
 
       <main class="px-3 pt-4 pb-[calc(7rem+env(safe-area-inset-bottom))]">
         <div style={{ display: activeTab() === 'today' ? undefined : 'none' }}>
           <MobileTodayPage refreshKey={refreshKey()} />
+        </div>
+        <div style={{ display: activeTab() === 'team' ? undefined : 'none' }}>
+          <TeamPage />
         </div>
         <div style={{ display: activeTab() === 'calendar' ? undefined : 'none' }}>
           <MobileCalendarPage 
@@ -79,7 +90,7 @@ const MobileShell: Component = () => {
 
       <div class="fixed inset-x-0 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] z-[130] px-4 pointer-events-none">
         <nav class="mx-auto max-w-[420px] pointer-events-auto rounded-[30px] border border-base-content/[0.08] bg-base-200/88 backdrop-blur-3xl shadow-[0_10px_36px_rgba(0,0,0,0.18)] p-2">
-          <div class="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
+          <div class="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-2">
             <button
               onClick={() => { setActiveTab('today'); setShowQuickAdd(false); }}
               class={`h-14 rounded-[22px] flex items-center justify-center gap-2 text-sm font-semibold transition-all ${
@@ -90,6 +101,17 @@ const MobileShell: Component = () => {
             >
               <Send size={17} />
               Hoy
+            </button>
+            <button
+              onClick={() => { setActiveTab('team'); setShowQuickAdd(false); }}
+              class={`h-14 rounded-[22px] flex items-center justify-center gap-2 text-sm font-semibold transition-all ${
+                activeTab() === 'team'
+                  ? 'bg-base-content text-base-100 shadow-md shadow-base-content/15'
+                  : 'text-base-content/45 hover:bg-base-content/[0.04]'
+              }`}
+            >
+              <Users size={17} />
+              Equipo
             </button>
             <button
               onClick={() => { setActiveTab('calendar'); setShowQuickAdd(false); }}
