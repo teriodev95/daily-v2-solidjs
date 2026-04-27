@@ -17,25 +17,12 @@ import { publish, teamChannel } from '../lib/realtime';
 // without needing Yjs.
 const storyDoc = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-const toUint8 = (v: unknown): Uint8Array => {
-  if (v instanceof Uint8Array) return v;
-  if (v instanceof ArrayBuffer) return new Uint8Array(v);
-  if (ArrayBuffer.isView(v)) {
-    const view = v as ArrayBufferView;
-    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+const fromHex = (hex: string): Uint8Array => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
-  // D1 can return ArrayBuffer-like values from another runtime realm, where
-  // `instanceof ArrayBuffer` is false even though the value is usable.
-  if (v && typeof v === 'object' && 'byteLength' in (v as object) && typeof (v as { slice?: unknown }).slice === 'function') {
-    return new Uint8Array(v as ArrayBuffer);
-  }
-  // D1's `blob mode: 'buffer'` returns Uint8Array via Cloudflare's binding,
-  // but defensively handle Buffer-shaped objects.
-  if (v && typeof v === 'object' && 'byteLength' in (v as object)) {
-    const anyV = v as { byteLength: number; buffer?: ArrayBufferLike; byteOffset?: number };
-    if (anyV.buffer) return new Uint8Array(anyV.buffer, anyV.byteOffset ?? 0, anyV.byteLength);
-  }
-  throw new Error('expected binary blob');
+  return bytes;
 };
 
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
@@ -62,12 +49,12 @@ const insertUpdate = async (d1: D1Database, storyId: string, update: Uint8Array,
 
 const buildDoc = async (d1: D1Database, storyId: string): Promise<Y.Doc> => {
   const { results } = await d1
-    .prepare('SELECT "update" FROM story_doc_updates WHERE story_id = ? ORDER BY id ASC')
+    .prepare('SELECT hex("update") AS update_hex FROM story_doc_updates WHERE story_id = ? ORDER BY id ASC')
     .bind(storyId)
-    .all<{ update: unknown }>();
+    .all<{ update_hex: string }>();
   const doc = new Y.Doc();
   for (const r of results ?? []) {
-    try { Y.applyUpdate(doc, toUint8(r.update)); } catch { /* skip malformed */ }
+    try { Y.applyUpdate(doc, fromHex(r.update_hex)); } catch { /* skip malformed */ }
   }
   return doc;
 };
