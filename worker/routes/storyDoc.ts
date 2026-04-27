@@ -20,6 +20,15 @@ const storyDoc = new Hono<{ Bindings: Env; Variables: Variables }>();
 const toUint8 = (v: unknown): Uint8Array => {
   if (v instanceof Uint8Array) return v;
   if (v instanceof ArrayBuffer) return new Uint8Array(v);
+  if (ArrayBuffer.isView(v)) {
+    const view = v as ArrayBufferView;
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  }
+  // D1 can return ArrayBuffer-like values from another runtime realm, where
+  // `instanceof ArrayBuffer` is false even though the value is usable.
+  if (v && typeof v === 'object' && 'byteLength' in (v as object) && typeof (v as { slice?: unknown }).slice === 'function') {
+    return new Uint8Array(v as ArrayBuffer);
+  }
   // D1's `blob mode: 'buffer'` returns Uint8Array via Cloudflare's binding,
   // but defensively handle Buffer-shaped objects.
   if (v && typeof v === 'object' && 'byteLength' in (v as object)) {
