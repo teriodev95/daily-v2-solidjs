@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { eq, and, or, like, sql, isNull } from 'drizzle-orm';
+import * as Y from 'yjs';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
 import { requireAdmin } from '../middleware/auth';
@@ -21,6 +22,64 @@ type StoryStatus = 'backlog' | 'todo' | 'in_progress' | 'done';
 
 const VALID_STATUSES: StoryStatus[] = ['backlog', 'todo', 'in_progress', 'done'];
 const ORDER_STEP = 1024;
+
+const fromHex = (hex: string): Uint8Array => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+};
+
+const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
+  bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
+const toBase64 = (bytes: Uint8Array): string => {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    for (let j = 0; j < chunk.length; j += 1) {
+      binary += String.fromCharCode(chunk[j]);
+    }
+  }
+  return btoa(binary);
+};
+
+const buildStoryDoc = async (
+  d1: D1Database,
+  storyId: string,
+  fallbackDescription: string,
+): Promise<Y.Doc> => {
+  const { results } = await d1
+    .prepare('SELECT hex("update") AS update_hex FROM story_doc_updates WHERE story_id = ? ORDER BY id ASC')
+    .bind(storyId)
+    .all<{ update_hex: string }>();
+  const doc = new Y.Doc();
+  for (const r of results ?? []) {
+    try { Y.applyUpdate(doc, fromHex(r.update_hex)); } catch { /* skip malformed */ }
+  }
+  const text = doc.getText('description');
+  if (text.length === 0 && fallbackDescription) {
+    text.insert(0, fallbackDescription);
+  }
+  return doc;
+};
+
+const createDescriptionReplacementUpdate = (doc: Y.Doc, nextDescription: string): Uint8Array | null => {
+  const text = doc.getText('description');
+  if (text.toString() === nextDescription) return null;
+  let captured: Uint8Array | null = null;
+  const onUpdate = (update: Uint8Array) => { captured = update; };
+  doc.on('update', onUpdate);
+  doc.transact(() => {
+    const len = text.length;
+    if (len > 0) text.delete(0, len);
+    if (nextDescription) text.insert(0, nextDescription);
+  }, 'server-patch');
+  doc.off('update', onUpdate);
+  return captured;
+};
 
 const attachAssignees = async <T extends { id: string }>(db: Variables['db'], rows: T[]) => {
   if (rows.length === 0) return [];
@@ -558,6 +617,21 @@ stories.patch('/:id', async (c) => {
   if (fields.recurrence_days !== undefined) {
     fields.recurrence_days = fields.recurrence_days ? JSON.stringify(fields.recurrence_days) : null;
   }
+
+  let docUpdateB64: string | null = null;
+  if (typeof fields.description === 'string') {
+    const doc = await buildStoryDoc(c.env.DB, id, existingBeforeUpdate.description ?? '');
+    const update = createDescriptionReplacementUpdate(doc, fields.description);
+    if (update) {
+      const now = new Date().toISOString();
+      await c.env.DB
+        .prepare('INSERT INTO story_doc_updates (story_id, "update", created_at) VALUES (?, ?, ?)')
+        .bind(id, toArrayBuffer(update), now)
+        .run();
+      docUpdateB64 = toBase64(update);
+    }
+  }
+
   if (fields.status !== undefined && fields.status !== existingBeforeUpdate.status) {
     if (fields.status === 'done' && !fields.completed_at) {
       fields.completed_at = new Date().toISOString();
@@ -594,13 +668,22 @@ stories.patch('/:id', async (c) => {
   ];
 
   c.executionCtx.waitUntil(
-    publish(c.env, teamChannel(user.teamId), {
-      type: 'story.updated',
-      id,
-      story: updated,
-      previous_status: existingBeforeUpdate.status,
-      changed_fields: changedFields,
-    }, c.req.header('x-client-id')),
+    Promise.all([
+      publish(c.env, teamChannel(user.teamId), {
+        type: 'story.updated',
+        id,
+        story: updated,
+        previous_status: existingBeforeUpdate.status,
+        changed_fields: changedFields,
+      }, c.req.header('x-client-id')),
+      ...(docUpdateB64
+        ? [publish(c.env, teamChannel(user.teamId), {
+            type: 'doc.update',
+            story_id: id,
+            update_b64: docUpdateB64,
+          }, c.req.header('x-client-id'))]
+        : []),
+    ]),
   );
 
   return c.json(updated);
