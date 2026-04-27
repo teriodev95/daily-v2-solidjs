@@ -15,6 +15,21 @@ export interface RenderOptions {
   shouldAbort?: () => boolean;
 }
 
+const isMermaidErrorSvg = (svg: string) =>
+  svg.includes('Syntax error in text') ||
+  svg.includes('mermaid version') ||
+  svg.includes('id="error-icon"') ||
+  svg.includes("id='error-icon'");
+
+const makeErrorElement = (src: string, message: string) => {
+  const errorEl = document.createElement('div');
+  errorEl.className = 'mermaid-error text-red-500/70 text-sm py-2';
+  errorEl.textContent = `Error al renderizar diagrama: ${message}`;
+  errorEl.setAttribute('data-src', src);
+  errorEl.setAttribute('contenteditable', 'false');
+  return errorEl;
+};
+
 export async function renderAll(
   root: HTMLElement,
   isDark: boolean,
@@ -46,15 +61,15 @@ export async function renderAll(
       const id = nextId();
       const { svg } = await mermaid.render(id, src);
       if (opts.shouldAbort?.() || !el.isConnected) continue;
+      if (isMermaidErrorSvg(svg)) {
+        el.replaceWith(makeErrorElement(src, 'sintaxis Mermaid inválida'));
+        continue;
+      }
       el.innerHTML = svg;
     } catch (err) {
       if (opts.shouldAbort?.() || !el.isConnected) continue;
       const message = err instanceof Error ? err.message : String(err);
-      const errorEl = document.createElement('div');
-      errorEl.className = 'mermaid-error text-red-500/70 text-sm py-2';
-      errorEl.textContent = `Error al renderizar diagrama: ${message}`;
-      errorEl.setAttribute('data-src', src);
-      el.replaceWith(errorEl);
+      el.replaceWith(makeErrorElement(src, message));
     }
   }
 
@@ -66,6 +81,10 @@ export async function renderAll(
       const id = nextId();
       const { svg } = await mermaid.render(id, src);
       if (opts.shouldAbort?.() || !pre.isConnected) continue;
+      if (isMermaidErrorSvg(svg)) {
+        pre.replaceWith(makeErrorElement(src, 'sintaxis Mermaid inválida'));
+        continue;
+      }
       const wrapper = document.createElement('div');
       wrapper.className = 'mermaid-rendered';
       wrapper.setAttribute('data-src', src);
@@ -76,12 +95,7 @@ export async function renderAll(
     } catch (err) {
       if (opts.shouldAbort?.() || !pre.isConnected) continue;
       const message = err instanceof Error ? err.message : String(err);
-      const errorEl = document.createElement('div');
-      errorEl.className = 'mermaid-error text-red-500/70 text-sm py-2';
-      errorEl.textContent = `Error al renderizar diagrama: ${message}`;
-      errorEl.setAttribute('data-src', src);
-      errorEl.setAttribute('contenteditable', 'false');
-      pre.replaceWith(errorEl);
+      pre.replaceWith(makeErrorElement(src, message));
     }
   }
 }

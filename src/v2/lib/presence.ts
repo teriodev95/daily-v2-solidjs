@@ -14,9 +14,12 @@ export interface PresenceEntry {
   expiresAt: number;
 }
 
-const BEAT_INTERVAL_MS = 10_000;
-const TTL_MS = 25_000;
-const GC_INTERVAL_MS = 5_000;
+// Keep presence responsive without turning every active tab into a high-volume
+// polling source. At SaaS scale, 30s cuts presence traffic by ~3x vs 10s while
+// the 90s TTL still tolerates missed beats, sleep/wake, and transient network lag.
+const BEAT_INTERVAL_MS = 30_000;
+const TTL_MS = 90_000;
+const GC_INTERVAL_MS = 15_000;
 
 // Per-scope accessors. Components subscribe via `presentIn(scope)`.
 const stores = new Map<string, {

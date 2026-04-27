@@ -76,7 +76,7 @@ const TopNavigation: Component<Props> = (props) => {
       <header class="hidden md:flex sticky top-0 z-50 pt-2 pb-0 bg-base-100/80 backdrop-blur-md mb-4 -mt-4">
         <div class="flex items-center justify-between pointer-events-none w-full w-full">
           {/* Left Pill (Logo & Title) */}
-          <div class="pointer-events-auto h-12 px-3.5 flex items-center gap-3 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-sm">
+          <div class="pointer-events-auto h-12 px-3.5 flex items-center gap-3 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
             <img src={dailyIcon} alt="Daily" class="w-7 h-7 rounded-lg ring-1 ring-black/10" />
             <Show when={props.breadcrumbs && props.breadcrumbs.length > 0}>
               <div class="flex items-center">
@@ -111,7 +111,7 @@ const TopNavigation: Component<Props> = (props) => {
           </div>
 
           {/* Right Pill (Actions) */}
-          <div class="pointer-events-auto flex h-12 items-center gap-1.5 rounded-[1.25rem] border border-base-content/[0.08] bg-base-200/60 p-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] backdrop-blur-2xl shrink-0">
+          <div class="pointer-events-auto flex h-12 items-center gap-1.5 rounded-[1.25rem] border border-base-content/[0.08] bg-base-200/60 p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-2xl shrink-0">
             {props.actions}
             <Show when={props.actions}>
               <div class="w-px h-4 bg-base-content/[0.08] mx-0.5" />
@@ -199,7 +199,7 @@ const TopNavigation: Component<Props> = (props) => {
       <header class="md:hidden sticky top-0 z-50 px-0 pt-2 mb-4 -mt-4">
         <div class="flex items-center justify-between pointer-events-none w-full">
           {/* Left Pill */}
-          <div class="pointer-events-auto h-11 px-3.5 flex items-center gap-2 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-sm max-w-[50%]">
+          <div class="pointer-events-auto h-11 px-3.5 flex items-center gap-2 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-[0_8px_24px_rgba(15,23,42,0.08)] max-w-[50%]">
             <img src={dailyIcon} alt="Daily" class="w-6 h-6 rounded-md ring-1 ring-black/10 shrink-0" />
             <Show when={props.breadcrumbs && props.breadcrumbs.length > 0}>
               <span class="font-bold text-[13px] tracking-tight text-base-content/90 truncate">
@@ -209,7 +209,7 @@ const TopNavigation: Component<Props> = (props) => {
           </div>
 
           {/* Right Pill */}
-          <div class="pointer-events-auto h-11 px-1.5 flex items-center gap-0.5 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-sm shrink-0">
+          <div class="pointer-events-auto h-11 px-1.5 flex items-center gap-0.5 bg-base-200/60 backdrop-blur-2xl rounded-[1.25rem] border border-base-content/[0.08] shadow-[0_8px_24px_rgba(15,23,42,0.08)] shrink-0">
             <Show when={props.onSearchClick}>
               <button onClick={props.onSearchClick} class="p-2 rounded-xl text-base-content/35 hover:text-base-content/60 transition-all">
                 <Search size={16} />

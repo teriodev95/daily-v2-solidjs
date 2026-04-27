@@ -385,41 +385,58 @@ const CalendarPage: Component<Props> = (props) => {
           { label: formatHeader() },
         ]}
         center={
-          <div class="flex items-center gap-1 bg-base-100 p-1 rounded-xl shadow-sm border border-base-content/[0.06]">
+          <div class="grid h-10 w-[156px] grid-cols-[36px_1fr_36px] items-center rounded-[18px] border border-base-content/[0.055] bg-base-content/[0.025] p-1 shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
             <button
+              type="button"
               onClick={goPrev}
-              class="p-1.5 rounded-lg text-base-content/40 hover:text-base-content/80 hover:bg-base-content/5 transition-all"
+              aria-label="Mes anterior"
+              class="flex h-8 w-8 items-center justify-center rounded-[14px] text-base-content/38 transition-colors hover:bg-base-content/[0.055] hover:text-base-content/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/25"
             >
               <ChevronLeft size={16} strokeWidth={2.5} />
             </button>
             <button
+              type="button"
               onClick={goToday}
-              class="px-3 py-1 text-[12px] font-semibold text-base-content/60 hover:text-base-content/90 transition-all rounded-lg hover:bg-base-content/5"
+              class="flex h-8 items-center justify-center rounded-[14px] px-3 text-[12px] font-semibold text-base-content/62 transition-colors hover:bg-base-content/[0.055] hover:text-base-content/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/25"
             >
               Hoy
             </button>
             <button
+              type="button"
               onClick={goNext}
-              class="p-1.5 rounded-lg text-base-content/40 hover:text-base-content/80 hover:bg-base-content/5 transition-all"
+              aria-label="Mes siguiente"
+              class="flex h-8 w-8 items-center justify-center rounded-[14px] text-base-content/38 transition-colors hover:bg-base-content/[0.055] hover:text-base-content/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/25"
             >
               <ChevronRight size={16} strokeWidth={2.5} />
             </button>
           </div>
         }
         actions={
-          <div class="flex items-center gap-1 bg-base-100 p-1 rounded-xl shadow-sm border border-base-content/[0.06] shrink-0">
+          <div class="relative grid h-9 w-[168px] grid-cols-2 items-center rounded-[18px] border border-base-content/[0.055] bg-base-content/[0.025] p-1 shrink-0">
+            <div
+              aria-hidden="true"
+              class="absolute left-1 top-1 h-7 rounded-[14px] border border-base-content/[0.045] bg-base-100/95 shadow-[0_1px_6px_rgba(15,23,42,0.08)] transition-transform duration-200 ease-out"
+              style={{
+                width: 'calc((100% - 8px) / 2)',
+                transform: view() === 'month' ? 'translateX(100%)' : 'translateX(0)',
+              }}
+            />
             <button
+              type="button"
               onClick={() => setView('week')}
-              class={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                view() === 'week' ? 'bg-base-content/5 shadow-sm text-base-content' : 'text-base-content/40 hover:text-base-content/70'
+              aria-pressed={view() === 'week'}
+              class={`relative z-10 h-7 rounded-[14px] text-center text-[11px] font-semibold transition-colors ${
+                view() === 'week' ? 'text-base-content' : 'text-base-content/42 hover:text-base-content/68'
               }`}
             >
               Semana
             </button>
             <button
+              type="button"
               onClick={() => setView('month')}
-              class={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
-                view() === 'month' ? 'bg-base-content/5 shadow-sm text-base-content' : 'text-base-content/40 hover:text-base-content/70'
+              aria-pressed={view() === 'month'}
+              class={`relative z-10 h-7 rounded-[14px] text-center text-[11px] font-semibold transition-colors ${
+                view() === 'month' ? 'text-base-content' : 'text-base-content/42 hover:text-base-content/68'
               }`}
             >
               Mes

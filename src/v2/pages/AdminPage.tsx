@@ -14,6 +14,7 @@ import MemberModal from '../components/MemberModal';
 import ProjectModal from '../components/ProjectModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal';
 import RecurringStoryModal from '../components/RecurringStoryModal';
+import TopNavigation from '../components/TopNavigation';
 import { frequencyLabel, isRecurring } from '../lib/recurrence';
 import type { User, Project, Assignment, Story } from '../types';
 
@@ -122,6 +123,49 @@ const AdminPage: Component = () => {
     setShowRecurringModal(true);
   };
 
+  const adminTabs = () => [
+    { key: 'team' as const, label: 'Equipo', icon: Users, count: data.users().length },
+    { key: 'projects' as const, label: 'Proyectos', icon: FolderKanban, count: data.projects().length },
+    { key: 'assignments' as const, label: 'Encomiendas', icon: Send, count: openAssignments().length },
+    { key: 'recurring' as const, label: 'Recurrentes', icon: RefreshCw, count: activeRecurring().length },
+  ];
+
+  const sectionMeta = () => {
+    switch (activeTab()) {
+      case 'projects':
+        return {
+          title: 'Proyectos',
+          description: `${activeProjects().length} activos · ${archivedProjects().length} archivados`,
+          actionLabel: 'Nuevo proyecto',
+          action: openCreateProject,
+        };
+      case 'assignments':
+        return {
+          title: 'Encomiendas',
+          description: `${openAssignments().length} abiertas · ${closedAssignments().length} cerradas`,
+          actionLabel: 'Nueva encomienda',
+          action: openCreateAssignment,
+        };
+      case 'recurring':
+        return {
+          title: 'Recurrentes',
+          description: `${activeRecurring().length} activas · ${inactiveRecurring().length} inactivas`,
+          actionLabel: 'Nueva recurrente',
+          action: openCreateRecurring,
+        };
+      default:
+        return {
+          title: 'Equipo',
+          description: `${activeMembers().length} activos · ${inactiveMembers().length} inactivos`,
+          actionLabel: 'Agregar miembro',
+          action: openCreateMember,
+        };
+    }
+  };
+
+  const rowClass = 'group flex min-h-[64px] items-center gap-3 px-4 py-3 transition-colors hover:bg-base-content/[0.025] cursor-pointer';
+  const mutedRowClass = 'group flex min-h-[58px] items-center gap-3 px-4 py-3 transition-colors hover:bg-base-content/[0.025] cursor-pointer opacity-55';
+
   const openEditRecurring = (story: Story) => {
     setEditingRecurring(story);
     setShowRecurringModal(true);
@@ -153,84 +197,67 @@ const AdminPage: Component = () => {
 
   return (
     <>
-      <div class="space-y-4">
-        {/* Header */}
-        <div class="flex items-center justify-between">
-          <h1 class="text-lg font-bold">Administración</h1>
-        </div>
+      <div class="space-y-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <TopNavigation
+          breadcrumbs={[{ label: 'Administración', icon: <Shield size={14} /> }]}
+        />
 
         {/* Tab Selector */}
-        <div class="flex gap-1 p-1 rounded-xl bg-base-content/[0.04]">
+        <div class="flex flex-wrap items-center gap-2 px-0.5">
+          <For each={adminTabs()}>
+            {(item) => {
+              const Icon = item.icon;
+              const active = () => activeTab() === item.key;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(item.key)}
+                  aria-pressed={active()}
+                  class={`group flex h-10 items-center gap-2 rounded-[14px] border px-3 text-xs font-semibold whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30 ${
+                    active()
+                      ? 'bg-base-100 text-base-content border-ios-blue-500/70 ring-1 ring-ios-blue-500/70 shadow-[0_0_0_4px_rgba(0,122,255,0.08)]'
+                      : 'bg-base-100/55 text-base-content/58 border-base-content/[0.075] hover:bg-base-content/[0.025] hover:text-base-content/82 hover:border-base-content/[0.13]'
+                  }`}
+                >
+                  <Icon size={14} strokeWidth={2.35} />
+                  <span>{item.label}</span>
+                  <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-base-content/[0.055] px-1.5 text-[10px] font-bold text-base-content/48 tabular-nums">
+                    {item.count}
+                  </span>
+                </button>
+              );
+            }}
+          </For>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-base-content/[0.06] bg-base-100/60 px-4 py-3">
+          <div class="min-w-0">
+            <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-base-content/32">Gestión</p>
+            <div class="mt-0.5 flex items-baseline gap-2">
+              <h1 class="text-[16px] font-bold leading-tight text-base-content">{sectionMeta().title}</h1>
+              <span class="text-[12px] font-medium text-base-content/38">{sectionMeta().description}</span>
+            </div>
+          </div>
           <button
-            onClick={() => setActiveTab('team')}
-            class={`flex items-center gap-1.5 flex-1 justify-center px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-              activeTab() === 'team'
-                ? 'bg-base-100 text-base-content shadow-sm'
-                : 'text-base-content/40 hover:text-base-content/60'
-            }`}
+            type="button"
+            onClick={sectionMeta().action}
+            class="inline-flex h-10 items-center justify-center gap-2 rounded-[14px] bg-base-content px-3.5 text-xs font-semibold text-base-100 transition-colors hover:bg-base-content/82 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
           >
-            <Users size={14} />
-            Equipo
-            <span class="text-[10px] opacity-50">{data.users().length}</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('projects')}
-            class={`flex items-center gap-1.5 flex-1 justify-center px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-              activeTab() === 'projects'
-                ? 'bg-base-100 text-base-content shadow-sm'
-                : 'text-base-content/40 hover:text-base-content/60'
-            }`}
-          >
-            <FolderKanban size={14} />
-            Proyectos
-            <span class="text-[10px] opacity-50">{data.projects().length}</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('assignments')}
-            class={`flex items-center gap-1.5 flex-1 justify-center px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-              activeTab() === 'assignments'
-                ? 'bg-base-100 text-base-content shadow-sm'
-                : 'text-base-content/40 hover:text-base-content/60'
-            }`}
-          >
-            <Send size={14} />
-            <span class="hidden sm:inline">Encomiendas</span>
-            <span class="sm:hidden">Encom.</span>
-            <span class="text-[10px] opacity-50">{openAssignments().length}</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('recurring')}
-            class={`flex items-center gap-1.5 flex-1 justify-center px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-              activeTab() === 'recurring'
-                ? 'bg-base-100 text-base-content shadow-sm'
-                : 'text-base-content/40 hover:text-base-content/60'
-            }`}
-          >
-            <RefreshCw size={14} />
-            <span class="hidden sm:inline">Recurrentes</span>
-            <span class="sm:hidden">Recur.</span>
-            <span class="text-[10px] opacity-50">{activeRecurring().length}</span>
+            <Plus size={15} strokeWidth={2.4} />
+            {sectionMeta().actionLabel}
           </button>
         </div>
 
         {/* ─── Team Section ─── */}
         <Show when={activeTab() === 'team'}>
           <div class="space-y-3 stagger-in">
-            <button
-              onClick={openCreateMember}
-              class="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-base-content/[0.08] text-ios-blue-500 text-xs font-medium hover:bg-ios-blue-500/5 hover:border-ios-blue-500/20 transition-all"
-            >
-              <Plus size={14} />
-              Agregar miembro
-            </button>
-
-            <div class="space-y-1">
+            <div class="overflow-hidden rounded-[18px] border border-base-content/[0.06] bg-base-100/55 divide-y divide-base-content/[0.055]">
               <For each={activeMembers()}>
                 {(member) => {
                   const isMe = () => member.id === auth.user()?.id;
                   return (
                     <div
-                      class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-base-200/30 hover:bg-base-200/50 transition-colors group cursor-pointer"
+                      class={rowClass}
                       onClick={() => openEditMember(member)}
                     >
                       <Show
@@ -282,10 +309,10 @@ const AdminPage: Component = () => {
             </div>
 
             <Show when={inactiveMembers().length > 0}>
-              <div class="space-y-1">
+              <div class="space-y-2">
                 <button
                   onClick={() => setShowInactive(!showInactive())}
-                  class="flex items-center gap-1.5 text-[10px] font-semibold uppercase text-base-content/25 tracking-wider hover:text-base-content/40 transition-colors"
+                  class="flex h-8 items-center gap-1.5 rounded-[10px] px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-base-content/32 transition-colors hover:bg-base-content/[0.035] hover:text-base-content/48"
                 >
                   <Show when={showInactive()} fallback={<ChevronRight size={12} />}>
                     <ChevronDown size={12} />
@@ -296,7 +323,7 @@ const AdminPage: Component = () => {
                   <For each={inactiveMembers()}>
                     {(member) => (
                       <div
-                        class="flex items-center gap-3 px-3 py-2 rounded-xl bg-base-200/20 hover:bg-base-200/30 transition-colors opacity-50 cursor-pointer"
+                        class={mutedRowClass}
                         onClick={() => openEditMember(member)}
                       >
                         <Show
@@ -339,21 +366,13 @@ const AdminPage: Component = () => {
         {/* ─── Projects Section ─── */}
         <Show when={activeTab() === 'projects'}>
           <div class="space-y-3 stagger-in">
-            <button
-              onClick={openCreateProject}
-              class="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-base-content/[0.08] text-ios-blue-500 text-xs font-medium hover:bg-ios-blue-500/5 hover:border-ios-blue-500/20 transition-all"
-            >
-              <Plus size={14} />
-              Nuevo proyecto
-            </button>
-
-            <div class="space-y-1">
+            <div class="overflow-hidden rounded-[18px] border border-base-content/[0.06] bg-base-100/55 divide-y divide-base-content/[0.055]">
               <For each={activeProjects()}>
                 {(project) => {
                   const creator = () => data.getUserById(project.created_by);
                   return (
                     <div
-                      class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-base-200/30 hover:bg-base-200/50 transition-colors group cursor-pointer"
+                      class={rowClass}
                       onClick={() => openEditProject(project)}
                     >
                       <div
@@ -379,10 +398,10 @@ const AdminPage: Component = () => {
             </div>
 
             <Show when={archivedProjects().length > 0}>
-              <div class="space-y-1">
+              <div class="space-y-2">
                 <button
                   onClick={() => setShowArchived(!showArchived())}
-                  class="flex items-center gap-1.5 text-[10px] font-semibold uppercase text-base-content/25 tracking-wider hover:text-base-content/40 transition-colors"
+                  class="flex h-8 items-center gap-1.5 rounded-[10px] px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-base-content/32 transition-colors hover:bg-base-content/[0.035] hover:text-base-content/48"
                 >
                   <Show when={showArchived()} fallback={<ChevronRight size={12} />}>
                     <ChevronDown size={12} />
@@ -393,7 +412,7 @@ const AdminPage: Component = () => {
                   <For each={archivedProjects()}>
                     {(project) => (
                       <div
-                        class="flex items-center gap-3 px-3 py-2 rounded-xl bg-base-200/20 hover:bg-base-200/30 transition-colors opacity-50 cursor-pointer"
+                        class={mutedRowClass}
                         onClick={() => openEditProject(project)}
                       >
                         <div
@@ -422,18 +441,10 @@ const AdminPage: Component = () => {
         {/* ─── Assignments Section ─── */}
         <Show when={activeTab() === 'assignments'}>
           <div class="space-y-3 stagger-in">
-            <button
-              onClick={openCreateAssignment}
-              class="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-base-content/[0.08] text-purple-500 text-xs font-medium hover:bg-purple-500/5 hover:border-purple-500/20 transition-all"
-            >
-              <Plus size={14} />
-              Nueva encomienda
-            </button>
-
             {/* Open assignments */}
-            <div class="space-y-1">
+            <div class="overflow-hidden rounded-[18px] border border-base-content/[0.06] bg-base-100/55 divide-y divide-base-content/[0.055]">
               <Show when={openAssignments().length === 0 && assignmentsReady()}>
-                <div class="text-center py-8 text-base-content/20 text-xs">
+                <div class="px-4 py-8 text-center text-xs font-medium text-base-content/25">
                   Sin encomiendas abiertas
                 </div>
               </Show>
@@ -444,7 +455,7 @@ const AdminPage: Component = () => {
                   const due = () => formatDueDate(assignment.due_date);
                   return (
                     <div
-                      class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-base-200/30 hover:bg-base-200/50 transition-colors group cursor-pointer"
+                      class={rowClass}
                       onClick={() => openEditAssignment(assignment)}
                     >
                       <Show
@@ -488,10 +499,10 @@ const AdminPage: Component = () => {
 
             {/* Closed assignments */}
             <Show when={closedAssignments().length > 0}>
-              <div class="space-y-1">
+              <div class="space-y-2">
                 <button
                   onClick={() => setShowClosed(!showClosed())}
-                  class="flex items-center gap-1.5 text-[10px] font-semibold uppercase text-base-content/25 tracking-wider hover:text-base-content/40 transition-colors"
+                  class="flex h-8 items-center gap-1.5 rounded-[10px] px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-base-content/32 transition-colors hover:bg-base-content/[0.035] hover:text-base-content/48"
                 >
                   <Show when={showClosed()} fallback={<ChevronRight size={12} />}>
                     <ChevronDown size={12} />
@@ -504,7 +515,7 @@ const AdminPage: Component = () => {
                       const assignee = () => getAssignee(assignment.assigned_to);
                       return (
                         <div
-                          class="flex items-center gap-3 px-3 py-2 rounded-xl bg-base-200/20 hover:bg-base-200/30 transition-colors opacity-50 cursor-pointer"
+                          class={mutedRowClass}
                           onClick={() => openEditAssignment(assignment)}
                         >
                           <Show
@@ -535,18 +546,10 @@ const AdminPage: Component = () => {
         {/* ─── Recurring Section ─── */}
         <Show when={activeTab() === 'recurring'}>
           <div class="space-y-3 stagger-in">
-            <button
-              onClick={openCreateRecurring}
-              class="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-base-content/[0.08] text-purple-500 text-xs font-medium hover:bg-purple-500/5 hover:border-purple-500/20 transition-all"
-            >
-              <Plus size={14} />
-              Nueva tarea recurrente
-            </button>
-
             {/* Active recurring */}
-            <div class="space-y-1">
+            <div class="overflow-hidden rounded-[18px] border border-base-content/[0.06] bg-base-100/55 divide-y divide-base-content/[0.055]">
               <Show when={activeRecurring().length === 0 && recurringReady()}>
-                <div class="text-center py-8 text-base-content/20 text-xs">
+                <div class="px-4 py-8 text-center text-xs font-medium text-base-content/25">
                   Sin tareas recurrentes
                 </div>
               </Show>
@@ -556,7 +559,7 @@ const AdminPage: Component = () => {
                   const project = () => getProject(story.project_id);
                   return (
                     <div
-                      class="flex items-center gap-3 px-3 py-2 rounded-xl bg-base-200/30 hover:bg-base-200/60 transition-colors group cursor-pointer"
+                      class={rowClass}
                       onClick={() => openEditRecurring(story)}
                     >
                       <Show
@@ -598,10 +601,10 @@ const AdminPage: Component = () => {
 
             {/* Inactive recurring */}
             <Show when={inactiveRecurring().length > 0}>
-              <div class="space-y-1">
+              <div class="space-y-2">
                 <button
                   onClick={() => setShowInactiveRecurring(!showInactiveRecurring())}
-                  class="flex items-center gap-1.5 text-[10px] font-semibold uppercase text-base-content/25 tracking-wider hover:text-base-content/40 transition-colors"
+                  class="flex h-8 items-center gap-1.5 rounded-[10px] px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-base-content/32 transition-colors hover:bg-base-content/[0.035] hover:text-base-content/48"
                 >
                   <Show when={showInactiveRecurring()} fallback={<ChevronRight size={12} />}>
                     <ChevronDown size={12} />
@@ -614,7 +617,7 @@ const AdminPage: Component = () => {
                       const assignee = () => getAssignee(story.assignee_id ?? '');
                       return (
                         <div
-                          class="flex items-center gap-3 px-3 py-2 rounded-xl bg-base-200/20 hover:bg-base-200/40 transition-colors opacity-60 cursor-pointer"
+                          class={mutedRowClass}
                           onClick={() => openEditRecurring(story)}
                         >
                           <Show
