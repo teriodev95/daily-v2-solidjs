@@ -19,7 +19,8 @@ interface Props {
 type ToastKind = 'success' | 'error';
 interface ToastState {
   kind: ToastKind;
-  message: string;
+  title: string;
+  detail?: string;
 }
 
 const formatExpiration = (isoDate: string): string => {
@@ -82,15 +83,19 @@ const buildSuccessToast = (
   entity: ShareableEntity,
   response: ShareTokenResponse,
   contextLabel?: string,
-): string => {
+): Pick<ToastState, 'title' | 'detail'> => {
   const dateLabel = formatExpiration(response.expires_at);
-  const base =
+  const detail =
     entity.type === 'wiki'
-      ? `Enlace copiado. Da acceso al espacio "${contextLabel || entity.title}". Expira el ${dateLabel}.`
-      : `Enlace copiado. Expira el ${dateLabel}.`;
-  return response.previous_revoked
-    ? `${base} El enlace anterior fue invalidado.`
-    : base;
+      ? `Acceso al espacio "${contextLabel || entity.title}". Expira el ${dateLabel}.`
+      : `Expira el ${dateLabel}.`;
+
+  return {
+    title: 'Enlace copiado',
+    detail: response.previous_revoked
+      ? `${detail} El enlace anterior fue invalidado.`
+      : detail,
+  };
 };
 
 const CopyForAgentButton: Component<Props> = (props) => {
@@ -103,8 +108,8 @@ const CopyForAgentButton: Component<Props> = (props) => {
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   let listenersAttached = false;
 
-  const showToast = (kind: ToastKind, message: string) => {
-    setToast({ kind, message });
+  const showToast = (kind: ToastKind, title: string, detail?: string) => {
+    setToast({ kind, title, detail });
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => setToast(null), 3000);
   };
@@ -184,10 +189,11 @@ const CopyForAgentButton: Component<Props> = (props) => {
           ? response.share_url
           : buildPromptText(props.entity, response.share_url, props.contextLabel);
       await copyToClipboard(text);
-      showToast('success', buildSuccessToast(props.entity, response, props.contextLabel));
+      const successToast = buildSuccessToast(props.entity, response, props.contextLabel);
+      showToast('success', successToast.title, successToast.detail);
     } catch (err) {
       console.error('[CopyForAgentButton] copy failed', err);
-      showToast('error', 'No se pudo copiar el enlace. Intenta de nuevo.');
+      showToast('error', 'No se pudo copiar', 'Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -247,15 +253,33 @@ const CopyForAgentButton: Component<Props> = (props) => {
           <div
             role="status"
             aria-live="polite"
-            class="absolute top-[calc(100%+10px)] right-0 z-40 flex items-center gap-2 rounded-xl px-3.5 py-2 shadow-lg shadow-black/20 text-[12px] font-medium whitespace-nowrap max-w-[320px] animate-in fade-in slide-in-from-top-1 duration-200 bg-base-content text-base-100"
+            class="absolute top-[calc(100%+10px)] right-0 z-40 flex w-72 max-w-[calc(100vw-2rem)] items-start gap-3 rounded-2xl border border-base-content/[0.08] bg-base-100/95 px-3 py-3 text-left shadow-2xl shadow-black/20 ring-1 ring-white/[0.04] backdrop-blur-xl animate-in fade-in slide-in-from-top-1 duration-200"
           >
+            <span
+              class={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                t().kind === 'success'
+                  ? 'bg-ios-green-500/12 text-ios-green-500'
+                  : 'bg-red-500/12 text-red-500'
+              }`}
+              aria-hidden="true"
+            >
             <Show
               when={t().kind === 'success'}
-              fallback={<AlertCircle size={14} class="shrink-0 text-red-400" />}
+              fallback={<AlertCircle size={13} />}
             >
-              <Check size={14} class="shrink-0 text-ios-green-500" strokeWidth={2.5} />
+              <Check size={13} strokeWidth={2.5} />
             </Show>
-            <span class="whitespace-normal leading-snug">{t().message}</span>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[12px] font-semibold leading-4 text-base-content/88">
+                {t().title}
+              </span>
+              <Show when={t().detail}>
+                <span class="mt-0.5 block text-[11px] font-medium leading-4 text-base-content/54">
+                  {t().detail}
+                </span>
+              </Show>
+            </span>
           </div>
         )}
       </Show>
