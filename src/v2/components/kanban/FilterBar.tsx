@@ -10,6 +10,8 @@ import {
 import { User as UserIcon, Users as UsersIcon, ChevronDown, X } from 'lucide-solid';
 import type { Project } from '../../types';
 
+const UNPROJECTED_FILTER_ID = '__unprojected__';
+
 interface FilterBarProps {
   scope: 'mine' | 'all';
   onScopeChange: (scope: 'mine' | 'all') => void;
@@ -109,6 +111,14 @@ const FilterBar: Component<FilterBarProps> = (props) => {
   const hiddenProjects = () =>
     props.allProjects.filter((p) => hiddenIds().includes(p.id));
 
+  const projectLabel = (project: Project) =>
+    project.id === UNPROJECTED_FILTER_ID ? 'Sin proyecto' : project.prefix;
+
+  const projectTitle = (project: Project) =>
+    project.id === UNPROJECTED_FILTER_ID
+      ? 'Sin proyecto · HUs sin proyecto asignado'
+      : `${project.prefix} · ${project.name}`;
+
   const chipClass = (active: boolean) =>
     [
       'inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] leading-none transition-all whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-base-content/20',
@@ -158,6 +168,7 @@ const FilterBar: Component<FilterBarProps> = (props) => {
         <div
           ref={chipsRowRef}
           class="flex h-10 max-h-10 flex-wrap items-center gap-1.5 overflow-hidden px-1 py-1 -mx-1"
+          role="radiogroup"
           aria-label="Filtrar por proyecto"
         >
           <For each={props.allProjects}>
@@ -170,8 +181,9 @@ const FilterBar: Component<FilterBarProps> = (props) => {
                   class={chipClass(active())}
                   style={active() ? { '--tw-ring-color': project.color } : undefined}
                   onClick={() => props.onToggleProject(project.id)}
-                  aria-pressed={active()}
-                  title={`${project.prefix} · ${project.name}`}
+                  role="radio"
+                  aria-checked={active()}
+                  title={projectTitle(project)}
                 >
                   <span
                     class="h-1.5 w-1.5 rounded-full shrink-0"
@@ -179,9 +191,9 @@ const FilterBar: Component<FilterBarProps> = (props) => {
                     aria-hidden="true"
                   />
                   <span
-                    class={active() ? 'text-base-content/82' : 'text-base-content/58'}
+                    class={`truncate ${project.id === UNPROJECTED_FILTER_ID ? 'max-w-[96px]' : ''} ${active() ? 'text-base-content/82' : 'text-base-content/58'}`}
                   >
-                    {project.prefix}
+                    {projectLabel(project)}
                   </span>
                 </button>
               );
@@ -221,10 +233,13 @@ const FilterBar: Component<FilterBarProps> = (props) => {
                       type="button"
                       class={chipClass(active())}
                       style={active() ? { '--tw-ring-color': project.color } : undefined}
-                      onClick={() => props.onToggleProject(project.id)}
-                      role="menuitemcheckbox"
+                      onClick={() => {
+                        props.onToggleProject(project.id);
+                        setMoreOpen(false);
+                      }}
+                      role="menuitemradio"
                       aria-checked={active()}
-                      title={`${project.prefix} · ${project.name}`}
+                      title={projectTitle(project)}
                     >
                       <span
                         class="h-1.5 w-1.5 rounded-full shrink-0"
@@ -232,9 +247,9 @@ const FilterBar: Component<FilterBarProps> = (props) => {
                         aria-hidden="true"
                       />
                       <span
-                        class={active() ? 'text-base-content/82' : 'text-base-content/58'}
+                        class={`truncate ${project.id === UNPROJECTED_FILTER_ID ? 'max-w-[96px]' : ''} ${active() ? 'text-base-content/82' : 'text-base-content/58'}`}
                       >
-                        {project.prefix}
+                        {projectLabel(project)}
                       </span>
                     </button>
                   );

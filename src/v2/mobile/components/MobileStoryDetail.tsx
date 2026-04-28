@@ -21,7 +21,8 @@ import {
 import { frequencyLabel, toLocalDateStr } from '../../lib/recurrence';
 import { formatTimeAgo } from '../../lib/relativeDate';
 import AttachmentSection from '../../components/AttachmentSection';
-import { ContentEditor } from '../../components/ContentEditor';
+import { ContentEditor, type ContentPreviewRequest } from '../../components/ContentEditor';
+import MediaGalleryLightbox from '../../components/MediaGalleryLightbox';
 import CopyForAgentButton from '../../components/CopyForAgentButton';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../../lib/mermaid';
 import { isDark } from '../../lib/theme';
@@ -76,6 +77,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   const [detailLoaded, setDetailLoaded] = createSignal(false);
   const [confirming, setConfirming] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
+  const [contentPreview, setContentPreview] = createSignal<ContentPreviewRequest | null>(null);
   let editorEl: HTMLElement | undefined;
   let titleRef: HTMLTextAreaElement | undefined;
   let editorFocused = false;
@@ -86,6 +88,10 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
     if (editorEl && !editorFocused) void renderMermaid(editorEl, dark, mermaidOpts);
   }, { defer: true }));
   const [archiving, setArchiving] = createSignal(false);
+  const imagePreview = () => {
+    const preview = contentPreview();
+    return preview?.type === 'image' ? preview : null;
+  };
   const [deleteError, setDeleteError] = createSignal('');
 
   // Per-field pulse for remote updates (matches desktop behavior).
@@ -363,6 +369,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   };
 
   return (
+    <>
     <div
       class="fixed inset-0 bg-black/72 backdrop-blur-xl sm:hidden"
       style={{ 'z-index': props.zIndex ?? 210 }}
@@ -720,6 +727,7 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                     editorEl = el;
                     void renderMermaid(el, isDark(), mermaidOpts);
                   }}
+                  onPreviewRequest={setContentPreview}
                   onEditorFocus={() => { editorFocused = true; setEditorActive(true); if (editorEl) revertMermaid(editorEl); }}
                   onEditorBlur={() => { editorFocused = false; setEditorActive(false); if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
                 />
@@ -848,6 +856,16 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
         </div>
       </div>
     </div>
+    <Show when={imagePreview()}>
+      {(preview) => (
+        <MediaGalleryLightbox
+          items={preview().items}
+          initialIndex={preview().index}
+          onClose={() => setContentPreview(null)}
+        />
+      )}
+    </Show>
+    </>
   );
 };
 

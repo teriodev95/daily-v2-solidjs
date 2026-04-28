@@ -2,7 +2,7 @@ import { createSignal, onMount, For, Show, type Component } from 'solid-js';
 import type { Attachment } from '../types';
 import { api } from '../lib/api';
 import { Paperclip, Upload, Trash2, FileIcon, Loader2, ImagePlus } from 'lucide-solid';
-import ImageLightbox from './ImageLightbox';
+import MediaGalleryLightbox, { type MediaGalleryItem } from './MediaGalleryLightbox';
 
 interface AttachmentSectionProps {
   storyId: string;
@@ -24,7 +24,7 @@ const AttachmentSection: Component<AttachmentSectionProps> = (props) => {
   const [items, setItems] = createSignal<Attachment[]>([]);
   const [uploading, setUploading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-  const [lightboxSrc, setLightboxSrc] = createSignal<{ src: string; alt: string } | null>(null);
+  const [galleryIndex, setGalleryIndex] = createSignal<number | null>(null);
   const [dragOver, setDragOver] = createSignal(false);
 
   let fileInput!: HTMLInputElement;
@@ -107,6 +107,24 @@ const AttachmentSection: Component<AttachmentSectionProps> = (props) => {
     }
   };
 
+  const imageItems = (): MediaGalleryItem[] =>
+    items()
+      .filter((att) => isImage(att.mime_type))
+      .map((att) => {
+        const src = api.attachments.fileUrl(att.id);
+        return {
+          src,
+          msrc: src,
+          alt: att.file_name,
+        };
+      });
+
+  const openImage = (att: Attachment) => {
+    const src = api.attachments.fileUrl(att.id);
+    const index = imageItems().findIndex((item) => item.src === src);
+    setGalleryIndex(Math.max(0, index));
+  };
+
   return (
     <>
       <div
@@ -155,12 +173,24 @@ const AttachmentSection: Component<AttachmentSectionProps> = (props) => {
               {(att) => {
                 const imgUrl = isImage(att.mime_type) ? api.attachments.fileUrl(att.id) : null;
                 return (
-                  <div class="group relative rounded-xl overflow-hidden bg-base-200/40 border border-base-content/[0.06] shadow-sm hover:border-base-content/[0.12] transition-all duration-300 cursor-pointer"
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={imgUrl ? `Abrir imagen ${att.file_name}` : `Abrir archivo ${att.file_name}`}
+                    class="group relative rounded-xl overflow-hidden bg-base-200/40 border border-base-content/[0.06] shadow-sm hover:border-base-content/[0.12] focus:outline-none focus:ring-1 focus:ring-ios-blue-500/35 transition-all duration-300 cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (imgUrl) { setLightboxSrc({ src: imgUrl, alt: att.file_name }); }
+                      if (imgUrl) { openImage(att); }
                       else { window.open(api.attachments.fileUrl(att.id), '_blank'); }
-                    }}>
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (imgUrl) { openImage(att); }
+                      else { window.open(api.attachments.fileUrl(att.id), '_blank'); }
+                    }}
+                  >
                     <Show
                       when={imgUrl}
                       fallback={
@@ -183,8 +213,10 @@ const AttachmentSection: Component<AttachmentSectionProps> = (props) => {
                     </Show>
 
                     <button
+                      type="button"
+                      aria-label={`Eliminar ${att.file_name}`}
                       onClick={(e) => { e.stopPropagation(); handleDelete(att); }}
-                      class="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-white/70 hover:text-white hover:bg-red-500/90 opacity-0 group-hover:opacity-100 transition-all z-10"
+                      class="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-white/70 hover:text-white hover:bg-red-500/90 opacity-0 group-hover:opacity-100 focus:opacity-100 group-focus-within:opacity-100 transition-all z-10"
                     >
                       <Trash2 size={12} strokeWidth={2.5} />
                     </button>
@@ -223,14 +255,12 @@ const AttachmentSection: Component<AttachmentSectionProps> = (props) => {
       </div>
 
       {/* Lightbox */}
-      <Show when={lightboxSrc()}>
-        {(data) => (
-          <ImageLightbox
-            src={data().src}
-            alt={data().alt}
-            onClose={() => setLightboxSrc(null)}
+      <Show when={galleryIndex() !== null && imageItems().length > 0}>
+        <MediaGalleryLightbox
+          items={imageItems()}
+          initialIndex={galleryIndex() ?? 0}
+          onClose={() => setGalleryIndex(null)}
           />
-        )}
       </Show>
     </>
   );

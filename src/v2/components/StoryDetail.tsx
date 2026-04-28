@@ -11,10 +11,11 @@ import {
 import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
 import { formatTimeAgo } from '../lib/relativeDate';
 import AttachmentSection from './AttachmentSection';
-import { ContentEditor } from './ContentEditor';
+import { ContentEditor, type ContentPreviewRequest } from './ContentEditor';
 import DatePickerPopover from './DatePickerPopover';
 import CopyForAgentButton from './CopyForAgentButton';
 import DetailViewModeControl, { readDetailViewMode, type DetailViewMode } from './DetailViewModeControl';
+import MediaGalleryLightbox from './MediaGalleryLightbox';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
 import { isDark } from '../lib/theme';
 import { playInteractionSuccess } from '../lib/interactionMotion';
@@ -123,6 +124,7 @@ const StoryDetail: Component<Props> = (props) => {
   const [showPriorityPicker, setShowPriorityPicker] = createSignal(false);
   const [showStatusPicker, setShowStatusPicker] = createSignal(false);
   const [viewMode, setViewMode] = createSignal<DetailViewMode>(props.embedded ? 'normal' : readDetailViewMode());
+  const [contentPreview, setContentPreview] = createSignal<ContentPreviewRequest | null>(null);
   let dateTriggerRef!: HTMLButtonElement;
   let titleRef: HTMLTextAreaElement | undefined;
   let editorEl: HTMLElement | undefined;
@@ -215,6 +217,10 @@ const StoryDetail: Component<Props> = (props) => {
   const [deleteError, setDeleteError] = createSignal('');
   const [detailLoaded, setDetailLoaded] = createSignal(false);
   const activeViewMode = () => props.embedded ? 'normal' : viewMode();
+  const imagePreview = () => {
+    const preview = contentPreview();
+    return preview?.type === 'image' ? preview : null;
+  };
 
   onMount(async () => {
     // Lock body scroll while the standalone modal is open.
@@ -443,6 +449,7 @@ const StoryDetail: Component<Props> = (props) => {
   };
 
   return (
+    <>
     <div
       class={detailOverlayClass()}
       style={props.embedded ? undefined : { "z-index": props.zIndex ?? 100 }}
@@ -828,6 +835,7 @@ const StoryDetail: Component<Props> = (props) => {
                   editorEl = el;
                   void renderMermaid(el, isDark(), mermaidOpts);
                 }}
+                onPreviewRequest={setContentPreview}
                 onEditorFocus={() => { editorFocused = true; setEditorActive(true); if (editorEl) revertMermaid(editorEl); }}
                 onEditorBlur={() => { editorFocused = false; setEditorActive(false); if (editorEl) void renderMermaid(editorEl, isDark(), mermaidOpts); }}
               />
@@ -955,6 +963,18 @@ const StoryDetail: Component<Props> = (props) => {
         </div>
       </div>
     </div>
+    <Show when={imagePreview()}>
+      {(preview) => {
+        return (
+          <MediaGalleryLightbox
+            items={preview().items}
+            initialIndex={preview().index}
+            onClose={() => setContentPreview(null)}
+          />
+        );
+      }}
+    </Show>
+    </>
   );
 };
 

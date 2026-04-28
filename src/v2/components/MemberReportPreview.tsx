@@ -362,6 +362,11 @@ const StoryRow: Component<{
               {props.project!.prefix}
             </span>
           </Show>
+          <Show when={!props.project && !props.story.project_id}>
+            <span class="shrink-0 rounded-md bg-base-content/[0.06] px-1.5 py-0.5 text-[10px] font-bold leading-none text-base-content/38">
+              SP
+            </span>
+          </Show>
           <span class={`truncate text-[12.5px] font-semibold leading-tight ${props.variant === 'done' ? 'text-base-content/38 line-through decoration-base-content/24' : 'text-base-content/74 group-hover:text-base-content/88'}`}>
             {props.story.title}
           </span>

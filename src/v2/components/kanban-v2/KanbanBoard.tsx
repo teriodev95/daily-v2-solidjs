@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type Component } from 'solid-js';
 import { CheckCircle2, ChevronDown, Circle, Clipboard, Command, ExternalLink, EyeOff, FolderKanban, Inbox, Loader2, PlayCircle, Trash2, X } from 'lucide-solid';
 import type { Project, Story, StoryStatus } from '../../types';
-import { api, type KanbanResponse } from '../../lib/api';
+import { api, type KanbanBucket, type KanbanResponse } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useData } from '../../lib/data';
 import { onRealtime, onRealtimeStatus, type RealtimeEvent } from '../../lib/realtime';
@@ -68,6 +68,18 @@ interface CardMenuState {
 const FILTERS_STORAGE_KEY = 'kanban_v2_filters_v1';
 const DRAG_THRESHOLD = 6;
 const BOARD_COLUMN_ORDER: StoryStatus[] = ['backlog', 'todo', 'in_progress'];
+const UNPROJECTED_FILTER_ID = '__unprojected__';
+const UNPROJECTED_PROJECT: Project = {
+  id: UNPROJECTED_FILTER_ID,
+  team_id: '',
+  name: 'Sin proyecto',
+  prefix: 'Sin proyecto',
+  color: '#8a8f98',
+  icon_url: null,
+  status: 'active',
+  created_by: '',
+  created_at: '',
+};
 const DONE_RANGE_LABELS: Record<DoneRange, string> = {
   week: 'Esta semana',
   month: 'Este mes',
@@ -119,7 +131,10 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
 
   const visible = createMemo(() => visibleBuckets(buckets(), searchQuery()));
   const draggingId = () => activeDrag()?.started ? activeDrag()!.story.id : null;
-  const activeProjects = () => data.projects().filter((project) => project.status === 'active');
+  const activeProjects = () => [
+    UNPROJECTED_PROJECT,
+    ...data.projects().filter((project) => project.status === 'active'),
+  ];
   const doneCount = () => buckets()?.done.total ?? 0;
   const doneRangeLabel = () => DONE_RANGE_LABELS[doneRange()];
   const selectedDoneStory = () => doneStories().find((story) => story.id === doneSelectedId()) ?? null;
@@ -151,7 +166,9 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       if (!raw) return;
       const parsed = JSON.parse(raw) as Partial<PersistedFilters>;
       if (parsed.scope === 'mine' || parsed.scope === 'all') setScope(parsed.scope);
-      if (Array.isArray(parsed.projects)) setSelectedProjectIds(parsed.projects.filter((id) => typeof id === 'string'));
+      if (Array.isArray(parsed.projects)) {
+        setSelectedProjectIds(parsed.projects.filter((id) => typeof id === 'string').slice(-1));
+      }
       if (parsed.done_range === 'week' || parsed.done_range === 'month' || parsed.done_range === 'all') setDoneRange(parsed.done_range);
     } catch {
       // Ignore corrupt local preferences.
@@ -171,16 +188,43 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     }, 250);
   };
 
+  const filterKanbanBySelectedProjects = (next: KanbanResponse, selectedProjects: string[]): KanbanResponse => {
+    if (selectedProjects.length === 0) return next;
+
+    const includeUnprojected = selectedProjects.includes(UNPROJECTED_FILTER_ID);
+    const realProjectIds = selectedProjects.filter((id) => id !== UNPROJECTED_FILTER_ID);
+    const matchesProject = (story: Story) => {
+      if (!story.project_id) return includeUnprojected;
+      return realProjectIds.includes(story.project_id);
+    };
+    const filterBucket = (bucket: KanbanBucket): KanbanBucket => {
+      const items = bucket.items.filter(matchesProject);
+      return { ...bucket, items, total: items.length };
+    };
+
+    return {
+      backlog: filterBucket(next.backlog),
+      todo: filterBucket(next.todo),
+      in_progress: filterBucket(next.in_progress),
+      done: filterBucket(next.done),
+    };
+  };
+
   const loadKanban = async (opts: { silent?: boolean } = {}) => {
     const silent = opts.silent ?? !!buckets();
     if (!silent) setLoading(true);
     try {
+      const selectedProjects = selectedProjectIds();
+      const includesUnprojected = selectedProjects.includes(UNPROJECTED_FILTER_ID);
+      // Production may not yet support the pseudo "Sin proyecto" id. When it is
+      // selected, fetch the current scope broadly and apply the project filter
+      // locally so unprojected backlog stories do not disappear into limbo.
       const next = await api.stories.kanban({
         scope: scope(),
-        projects: selectedProjectIds(),
+        projects: includesUnprojected ? [] : selectedProjects,
         done_range: doneRange(),
       });
-      setBuckets((prev) => mergeBuckets(prev, next));
+      setBuckets((prev) => mergeBuckets(prev, filterKanbanBySelectedProjects(next, selectedProjects)));
     } catch (err) {
       console.error('kanban load failed', err);
       if (!silent) showToast('No se pudo cargar el tablero');
@@ -192,7 +236,11 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   const matchesCurrentFilters = (story: Story) => {
     if (!story.is_active) return false;
     const projects = selectedProjectIds();
-    if (projects.length > 0 && (!story.project_id || !projects.includes(story.project_id))) return false;
+    if (projects.length > 0) {
+      const includeUnprojected = projects.includes(UNPROJECTED_FILTER_ID);
+      if (!story.project_id && !includeUnprojected) return false;
+      if (story.project_id && !projects.includes(story.project_id)) return false;
+    }
     if (scope() === 'mine') {
       const uid = auth.user()?.id;
       if (!uid) return false;
@@ -285,7 +333,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   };
 
   const toggleProject = (id: string) => {
-    setSelectedProjectIds((ids) => ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]);
+    setSelectedProjectIds((ids) => ids.includes(id) ? [] : [id]);
   };
 
   const quickAdd = async (title: string, status: StoryStatus) => {
@@ -296,7 +344,9 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     };
     const uid = auth.user()?.id;
     if (uid) payload.assignee_id = uid;
-    if (selectedProjectIds().length === 1) payload.project_id = selectedProjectIds()[0];
+    if (selectedProjectIds().length === 1 && selectedProjectIds()[0] !== UNPROJECTED_FILTER_ID) {
+      payload.project_id = selectedProjectIds()[0];
+    }
 
     const created = await api.stories.create(payload);
     setBuckets((current) => current ? insertStory(current, created as Story) : current);

@@ -65,6 +65,8 @@ export async function renderAll(
         el.replaceWith(makeErrorElement(src, 'sintaxis Mermaid inválida'));
         continue;
       }
+      el.classList.add('cursor-zoom-in');
+      el.setAttribute('title', 'Abrir diagrama');
       el.innerHTML = svg;
     } catch (err) {
       if (opts.shouldAbort?.() || !el.isConnected) continue;
@@ -86,8 +88,9 @@ export async function renderAll(
         continue;
       }
       const wrapper = document.createElement('div');
-      wrapper.className = 'mermaid-rendered';
+      wrapper.className = 'mermaid-rendered cursor-zoom-in';
       wrapper.setAttribute('data-src', src);
+      wrapper.setAttribute('title', 'Abrir diagrama');
       wrapper.dataset.rendered = 'true';
       wrapper.setAttribute('contenteditable', 'false');
       wrapper.innerHTML = svg;

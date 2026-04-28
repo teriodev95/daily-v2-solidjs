@@ -22,6 +22,7 @@ type StoryStatus = 'backlog' | 'todo' | 'in_progress' | 'done';
 
 const VALID_STATUSES: StoryStatus[] = ['backlog', 'todo', 'in_progress', 'done'];
 const ORDER_STEP = 1024;
+const UNPROJECTED_FILTER_ID = '__unprojected__';
 
 const fromHex = (hex: string): Uint8Array => {
   const bytes = new Uint8Array(hex.length / 2);
@@ -228,9 +229,12 @@ stories.get('/kanban', async (c) => {
 
   const projectsRaw = c.req.query('projects');
   let projectIds: string[] | null = null; // null = no project filter
+  let includeUnprojected = false;
   if (projectsRaw && projectsRaw !== '__all__') {
     const parts = projectsRaw.split(',').map(s => s.trim()).filter(Boolean);
-    projectIds = parts.length > 0 ? parts : null;
+    includeUnprojected = parts.includes(UNPROJECTED_FILTER_ID);
+    projectIds = parts.filter((id) => id !== UNPROJECTED_FILTER_ID);
+    if (projectIds.length === 0 && !includeUnprojected) projectIds = null;
   }
 
   const doneRangeRaw = c.req.query('done_range');
@@ -271,7 +275,10 @@ stories.get('/kanban', async (c) => {
     );
 
   const matchesFilters = (s: typeof baseRows[number]) => {
-    if (projectIds && (!s.project_id || !projectIds.includes(s.project_id))) return false;
+    if (projectIds || includeUnprojected) {
+      if (!s.project_id) return includeUnprojected;
+      if (!projectIds?.includes(s.project_id)) return false;
+    }
     if (scope === 'mine') {
       const mine =
         s.assignee_id === user.userId ||
@@ -384,7 +391,11 @@ stories.get('/', async (c) => {
   let rows = await db.select().from(schema.stories).where(eq(schema.stories.team_id, user.teamId));
 
   if (!includeInactive) rows = rows.filter(s => s.is_active);
-  if (projectId) rows = rows.filter(s => s.project_id === projectId);
+  if (projectId === UNPROJECTED_FILTER_ID) {
+    rows = rows.filter(s => !s.project_id);
+  } else if (projectId) {
+    rows = rows.filter(s => s.project_id === projectId);
+  }
   if (category) rows = rows.filter(s => s.category === category);
   if (status) rows = rows.filter(s => s.status === status);
   if (isShared === 'true') rows = rows.filter(s => s.is_shared);
@@ -408,7 +419,7 @@ stories.get('/', async (c) => {
       .from(schema.storyAssignees)
       .where(eq(schema.storyAssignees.user_id, assigneeId));
     const linkedStoryIds = new Set(assigneeLinks.map(l => l.story_id));
-    rows = rows.filter(s => s.assignee_id === assigneeId || linkedStoryIds.has(s.id));
+    rows = rows.filter(s => s.assignee_id === assigneeId || s.created_by === assigneeId || linkedStoryIds.has(s.id));
   }
 
   // Pagination (only when explicitly requested).

@@ -171,6 +171,11 @@ const KanbanCard: Component<KanbanCardProps> = (props) => {
               {props.project!.prefix}
             </span>
           </Show>
+          <Show when={!props.project && !props.story.project_id}>
+            <span class="truncate rounded-md bg-base-content/[0.06] px-1.5 py-0.5 text-[10px] font-bold leading-none text-base-content/38">
+              SP
+            </span>
+          </Show>
           <Show when={props.story.code}>
             <span class="truncate font-mono text-[10px] font-semibold leading-none text-base-content/35">
               {props.story.code}

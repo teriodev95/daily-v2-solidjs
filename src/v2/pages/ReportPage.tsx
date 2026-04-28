@@ -735,6 +735,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
         <Show when={!p.story.code && proj}>
           <span class="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style={{ "background-color": `${proj!.color}15`, color: proj!.color }}>{proj!.prefix}</span>
         </Show>
+        <Show when={!p.story.code && !proj && !p.story.project_id}>
+          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 bg-base-content/[0.06] text-base-content/38">SP</span>
+        </Show>
       </>
     );
   };

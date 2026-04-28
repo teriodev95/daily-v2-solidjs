@@ -240,7 +240,7 @@ const AdminPage: Component = () => {
           </div>
           <button
             type="button"
-            onClick={sectionMeta().action}
+            onClick={() => sectionMeta().action()}
             class="inline-flex h-10 items-center justify-center gap-2 rounded-[14px] bg-base-content px-3.5 text-xs font-semibold text-base-100 transition-colors hover:bg-base-content/82 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
           >
             <Plus size={15} strokeWidth={2.4} />
