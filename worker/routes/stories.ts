@@ -419,7 +419,7 @@ stories.get('/', async (c) => {
       .from(schema.storyAssignees)
       .where(eq(schema.storyAssignees.user_id, assigneeId));
     const linkedStoryIds = new Set(assigneeLinks.map(l => l.story_id));
-    rows = rows.filter(s => s.assignee_id === assigneeId || s.created_by === assigneeId || linkedStoryIds.has(s.id));
+    rows = rows.filter(s => s.assignee_id === assigneeId || linkedStoryIds.has(s.id));
   }
 
   // Pagination (only when explicitly requested).
