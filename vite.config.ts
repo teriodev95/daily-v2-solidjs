@@ -61,7 +61,7 @@ export default defineConfig({
           },
           {
             // Hashed static assets (JS, CSS) — safe to cache
-            urlPattern: /\/assets\/.*\.[a-f0-9]{8}\.(js|css)$/,
+            urlPattern: /\/assets\/.*\.(js|css)$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'static-assets',

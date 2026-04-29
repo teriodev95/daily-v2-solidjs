@@ -1,3 +1,5 @@
+import { chunkLoadErrorMessage, isChunkLoadError, recoverFromChunkLoadError } from './chunkRecovery';
+
 let counter = 0;
 const nextId = () => {
   try {
@@ -41,6 +43,11 @@ const compactMessage = (message: string) =>
     .replace(/^Error:\s*/i, '')
     .trim()
     .slice(0, 220);
+
+const getErrorMessage = (err: unknown) => {
+  if (isChunkLoadError(err)) return chunkLoadErrorMessage;
+  return err instanceof Error ? err.message : String(err);
+};
 
 const removeLeakedMermaidErrors = () => {
   if (typeof document === 'undefined') return;
@@ -134,7 +141,8 @@ export async function renderAll(
       el.innerHTML = svg;
     } catch (err) {
       if (opts.shouldAbort?.() || !el.isConnected) continue;
-      const message = err instanceof Error ? err.message : String(err);
+      if (recoverFromChunkLoadError(err)) continue;
+      const message = getErrorMessage(err);
       el.replaceWith(makeErrorElement(src, message));
     }
   }
@@ -156,7 +164,8 @@ export async function renderAll(
       pre.replaceWith(wrapper);
     } catch (err) {
       if (opts.shouldAbort?.() || !pre.isConnected) continue;
-      const message = err instanceof Error ? err.message : String(err);
+      if (recoverFromChunkLoadError(err)) continue;
+      const message = getErrorMessage(err);
       pre.replaceWith(makeErrorElement(src, message));
     }
   }

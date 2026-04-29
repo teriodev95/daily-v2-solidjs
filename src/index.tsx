@@ -5,8 +5,11 @@ import { registerSW } from 'virtual:pwa-register';
 import './index.css';
 // import App from './App';  // v1 - preserved
 import AppV2 from './v2/AppV2';
+import { installChunkLoadRecovery } from './v2/lib/chunkRecovery';
 
 const root = document.getElementById('root');
+
+installChunkLoadRecovery();
 
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   throw new Error(
