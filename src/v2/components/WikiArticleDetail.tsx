@@ -3,12 +3,13 @@ import type { WikiArticle, WikiSuggestedLink, LibrarianStatus } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
 import { X, Check, Loader2, Trash2, BookOpen, Clock, AlertCircle } from 'lucide-solid';
-import { ContentEditor, type ContentEditorHandle } from './ContentEditor';
+import { ContentEditor, type ContentEditorHandle, type ContentPreviewRequest } from './ContentEditor';
 import { processWikiLinks } from '../lib/wikiLinks';
 import CopyForAgentButton from './CopyForAgentButton';
 import DetailViewModeControl, { readDetailViewMode, type DetailViewMode } from './DetailViewModeControl';
 import { renderAll as renderMermaid, revertAll as revertMermaid } from '../lib/mermaid';
 import { isDark } from '../lib/theme';
+import MediaGalleryLightbox from './MediaGalleryLightbox';
 
 interface Props {
   article: WikiArticle;
@@ -42,6 +43,11 @@ const WikiArticleDetail: Component<Props> = (props) => {
   const [librarianStatus, setLibrarianStatus] = createSignal<LibrarianStatus>(props.article.librarian_status ?? 'pending');
   const [librarianMode, setLibrarianMode] = createSignal<string>('auto');
   const [viewMode, setViewMode] = createSignal<DetailViewMode>(readDetailViewMode());
+  const [contentPreview, setContentPreview] = createSignal<ContentPreviewRequest | null>(null);
+  const imagePreview = () => {
+    const preview = contentPreview();
+    return preview?.type === 'image' ? preview : null;
+  };
   let editorHandle: ContentEditorHandle | undefined;
   let editorEl: HTMLElement | undefined;
   let editorFocused = false;
@@ -192,11 +198,12 @@ const WikiArticleDetail: Component<Props> = (props) => {
   };
 
   return (
-    <div
-      class={detailOverlayClass()}
-      onClick={(e) => { if (e.target === e.currentTarget) props.onClose(); }}
-    >
-      <div class={detailShellClass()} style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}>
+    <>
+      <div
+        class={detailOverlayClass()}
+        onClick={(e) => { if (e.target === e.currentTarget) props.onClose(); }}
+      >
+        <div class={detailShellClass()} style={{ "-ms-overflow-style": "none", "scrollbar-width": "none" }}>
 
       {/* Header — sticky bar */}
       <div class={headerClass()}>
@@ -394,6 +401,7 @@ const WikiArticleDetail: Component<Props> = (props) => {
             onChange={(md) => scheduleSave({ content: md })}
             processHtml={processWikiLinks}
             onLinkClick={(target) => props.onNavigate?.(target)}
+            onPreviewRequest={setContentPreview}
             onReady={(handle) => { editorHandle = handle; }}
             onEditorMount={(el) => {
               editorEl = el;
@@ -427,7 +435,17 @@ const WikiArticleDetail: Component<Props> = (props) => {
         </div>
       </div>
       </div>
-    </div>
+      </div>
+      <Show when={imagePreview()}>
+        {(preview) => (
+          <MediaGalleryLightbox
+            items={preview().items}
+            initialIndex={preview().index}
+            onClose={() => setContentPreview(null)}
+          />
+        )}
+      </Show>
+    </>
   );
 };
 
