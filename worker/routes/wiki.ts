@@ -154,30 +154,64 @@ wiki.get('/graph', async (c) => {
       eq(schema.wikiArticles.team_id, user.teamId),
     ));
 
-  // Exclude archived articles from graph
+  // Exclude archived articles from graph. `_Indice` / `_Índice` is a catalog
+  // document, not a semantic relation hub, so it is hidden unless requested for
+  // diagnostics.
+  const includeIndex = c.req.query('include_index') === '1' || c.req.query('include_index') === 'true';
+  const parseTags = (value: string | null) => {
+    try {
+      const parsed = JSON.parse(value || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+  const normalizeTitle = (value: string) =>
+    value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  const isIndexArticle = (a: typeof articles[number]) => {
+    const tags: string[] = parseTags(a.tags);
+    return normalizeTitle(a.title) === '_indice' || tags.some(tag => normalizeTitle(tag) === '_indice');
+  };
   const activeArticles = articles.filter(a => !a.is_archived);
+  const graphArticles = activeArticles.filter(a => includeIndex || !isIndexArticle(a));
 
-  const titleMap = new Map(activeArticles.map(a => [a.title.toLowerCase(), a.id]));
+  const titleMap = new Map(activeArticles.map(a => [normalizeTitle(a.title), a.id]));
+  const graphNodeIds = new Set(graphArticles.map(a => a.id));
 
-  const nodes = activeArticles.map(a => ({
+  const nodes = graphArticles.map(a => ({
     id: a.id,
     name: a.title,
-    tags: JSON.parse(a.tags || '[]'),
+    tags: parseTags(a.tags),
   }));
 
-  const links: { source: string; target: string }[] = [];
-  for (const article of activeArticles) {
+  const linksByKey = new Map<string, { source: string; target: string; count: number }>();
+  let rawLinkCount = 0;
+  for (const article of graphArticles) {
     const linkRegex = /\[\[(.+?)(?:\|.+?)?\]\]/g;
     let match;
     while ((match = linkRegex.exec(article.content)) !== null) {
-      const targetId = titleMap.get(match[1].toLowerCase());
-      if (targetId && targetId !== article.id) {
-        links.push({ source: article.id, target: targetId });
+      const targetId = titleMap.get(normalizeTitle(match[1]));
+      if (targetId && targetId !== article.id && graphNodeIds.has(targetId)) {
+        rawLinkCount += 1;
+        const key = `${article.id}->${targetId}`;
+        const current = linksByKey.get(key);
+        if (current) current.count += 1;
+        else linksByKey.set(key, { source: article.id, target: targetId, count: 1 });
       }
     }
   }
 
-  return c.json({ nodes, links });
+  const links = [...linksByKey.values()];
+  return c.json({
+    nodes,
+    links,
+    meta: {
+      raw_links: rawLinkCount,
+      unique_links: links.length,
+      duplicate_edges: Math.max(0, rawLinkCount - links.length),
+      index_nodes_excluded: activeArticles.length - graphArticles.length,
+    },
+  });
 });
 
 // Create article

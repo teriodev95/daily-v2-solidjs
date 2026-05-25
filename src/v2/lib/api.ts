@@ -92,6 +92,17 @@ type ReportDetailed = DailyReport & {
   backlog: StoryWithAssignees[];
 };
 
+export interface WikiGraphResponse {
+  nodes: { id: string; name: string; tags: string[] }[];
+  links: { source: string; target: string; count?: number }[];
+  meta?: {
+    raw_links: number;
+    unique_links: number;
+    duplicate_edges: number;
+    index_nodes_excluded: number;
+  };
+}
+
 // ─── API Tokens ──────────────────────────────────
 
 export type TokenScope = 'none' | 'read' | 'write';
@@ -307,7 +318,11 @@ export const api = {
       if (projectId) q.set('project_id', projectId);
       return request<WikiArticle[]>(`/api/wiki/search?${q}`);
     },
-    graph: (projectId: string) => request(`/api/wiki/graph?project_id=${projectId}`),
+    graph: (projectId: string, params?: { includeIndex?: boolean }) => {
+      const q = new URLSearchParams({ project_id: projectId });
+      if (params?.includeIndex) q.set('include_index', '1');
+      return request<WikiGraphResponse>(`/api/wiki/graph?${q}`);
+    },
     resolve: (title: string, projectId: string) =>
       request<WikiArticle>(`/api/wiki/resolve?title=${encodeURIComponent(title)}&project_id=${projectId}`),
     batch: (ids: string[]) =>
