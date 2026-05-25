@@ -46,9 +46,13 @@ Content-Type: application/json
   "assignee_id": "<user_id>",               // opcional
   "project_id": "<project_id>",             // opcional
   "due_date": "2026-04-10",                 // opcional, YYYY-MM-DD
-  "estimate": 3                              // opcional, numérico
+  "estimate": 3,                             // opcional, numérico
+  "start_time": "09:00",                    // opcional, HH:mm (24h)
+  "end_time": "10:30"                       // opcional, HH:mm (24h)
 }
 ```
+
+`start_time` y `end_time` se envían como pareja: ambos presentes (bloque horario) o ambos omitidos (todo el día). En `PATCH`, mandar ambos `null` limpia el bloque. `end_time` debe ser mayor a `start_time`.
 
 ### Obtener
 

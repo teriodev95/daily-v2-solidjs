@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import { isRecurringOnDate, isRecurring, toLocalDateStr } from '../lib/recurrence';
-import { CalendarDays, ChevronLeft, ChevronRight, Plus, RefreshCw, CheckCircle2, Circle, X } from 'lucide-solid';
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, RefreshCw, CheckCircle2, Circle, X, Clock } from 'lucide-solid';
 import StoryDetail from '../components/StoryDetail';
 import TopNavigation from '../components/TopNavigation';
 
@@ -92,6 +92,138 @@ const priorityColor: Record<string, string> = {
   low: 'bg-base-content/5 text-base-content/60 border-transparent',
 };
 
+// ── Timeline constants (Apple Calendar-like) ───────────────────────────
+const HOUR_HEIGHT = 60; // px per hour (1px per minute)
+const DAY_START_HOUR = 5; // 5 a.m.
+const DAY_END_HOUR = 23; // 11 p.m.
+const TOTAL_HOURS = DAY_END_HOUR - DAY_START_HOUR + 1;
+const TIMELINE_HEIGHT = TOTAL_HOURS * HOUR_HEIGHT;
+const TIME_GUTTER_WIDTH = 56; // px for the left-side hour labels
+
+// Read time fields. Soft-cast keeps this resilient if the Story type lags behind a
+// partial migration (no-op once start_time/end_time are present on the type).
+const getStartTime = (s: Story): string | null => (s as any).start_time ?? null;
+const getEndTime = (s: Story): string | null => (s as any).end_time ?? null;
+
+// "HH:mm" -> { h, m }. Returns null on bad input.
+const parseHHmm = (s: string | null | undefined): { h: number; m: number } | null => {
+  if (!s) return null;
+  const m = /^(\d{1,2}):(\d{2})/.exec(s);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(mm)) return null;
+  return { h: Math.max(0, Math.min(23, h)), m: Math.max(0, Math.min(59, mm)) };
+};
+
+// Minutes since DAY_START_HOUR (clamped to timeline range).
+const minutesSinceDayStart = (hhmm: string | null | undefined): number => {
+  const p = parseHHmm(hhmm);
+  if (!p) return 0;
+  return (p.h - DAY_START_HOUR) * 60 + p.m;
+};
+
+const topPx = (hhmm: string | null | undefined): number => {
+  const m = minutesSinceDayStart(hhmm);
+  // Clamp inside the timeline so events that start before 5am still render at the top.
+  const clamped = Math.max(0, Math.min(TOTAL_HOURS * 60, m));
+  return clamped * (HOUR_HEIGHT / 60);
+};
+
+const heightPx = (start: string | null | undefined, end: string | null | undefined): number => {
+  const s = parseHHmm(start);
+  if (!s) return HOUR_HEIGHT; // default 1h block when no end provided
+  const e = parseHHmm(end);
+  if (!e) return HOUR_HEIGHT;
+  const startMin = s.h * 60 + s.m;
+  const endMin = e.h * 60 + e.m;
+  const duration = Math.max(15, endMin - startMin); // minimum 15min visual height
+  return duration * (HOUR_HEIGHT / 60);
+};
+
+// Snap granularity for drag-resize and drag-move on the timeline.
+const SNAP_MINUTES = 15;
+
+// "HH:mm" -> absolute minutes from 00:00, or null on bad input.
+const hhmmToMinutes = (hhmm: string | null | undefined): number | null => {
+  const p = parseHHmm(hhmm);
+  return p ? p.h * 60 + p.m : null;
+};
+
+// Absolute minutes -> "HH:mm" (clamped to 00:00–23:59).
+const minutesToHHmm = (totalMinutes: number): string => {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.round(totalMinutes)));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+// Round to the nearest SNAP_MINUTES bucket.
+const snapToStep = (totalMinutes: number, step: number = SNAP_MINUTES): number =>
+  Math.round(totalMinutes / step) * step;
+
+// "5 a.m.", "12 p.m.", "1 p.m.", "11 p.m."
+const formatHourLabel = (h: number): string => {
+  if (h === 0) return '12 a.m.';
+  if (h === 12) return '12 p.m.';
+  if (h < 12) return `${h} a.m.`;
+  return `${h - 12} p.m.`;
+};
+
+// "07:00" -> "7 a.m.", "14:30" -> "2:30 p.m.", "12:00" -> "12 p.m."
+const formatTimeShort = (hhmm: string | null | undefined): string => {
+  const p = parseHHmm(hhmm);
+  if (!p) return '';
+  const suffix = p.h < 12 ? 'a.m.' : 'p.m.';
+  let h12 = p.h % 12;
+  if (h12 === 0) h12 = 12;
+  if (p.m === 0) return `${h12} ${suffix}`;
+  return `${h12}:${String(p.m).padStart(2, '0')} ${suffix}`;
+};
+
+// Now indicator (current HH:mm string).
+const currentHHmm = (): string => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+// Returns true if current time is inside the visible timeline window.
+const isNowInRange = (): boolean => {
+  const h = new Date().getHours();
+  return h >= DAY_START_HOUR && h <= DAY_END_HOUR;
+};
+
+// Google Calendar-style stacked layout. Each event keeps full column width
+// and gets a "depth" = how many earlier-in-sort events overlap it. The depth
+// drives a small lateral offset + z-index, so a short event nested inside a
+// long one renders on top with a visible indent (clearer than splitting the
+// column into thin lanes).
+//
+// Sort order: longest duration first, then earliest start, then stable input
+// order. That puts the natural "container" at depth 0 and any inner events
+// stack on top of it.
+const STACK_OFFSET_PX = 14; // px per nesting level (left indent) — leaves a draggable lane on the parent
+const computeStackDepth = <T extends { start: number; end: number }>(items: T[]): Map<T, number> => {
+  const depth = new Map<T, number>();
+  const sorted = [...items].sort((a, b) =>
+    (b.end - b.start) - (a.end - a.start) || (a.start - b.start),
+  );
+  for (let i = 0; i < sorted.length; i++) {
+    const it = sorted[i];
+    let d = 0;
+    for (let j = 0; j < i; j++) {
+      const other = sorted[j];
+      // other comes before it in the sort (longer / starts earlier). It
+      // counts toward depth when it temporally overlaps `it` at the start.
+      if (other.start <= it.start && other.end > it.start) d++;
+    }
+    depth.set(it, d);
+  }
+  return depth;
+};
+
+const HOURS_RANGE: number[] = Array.from({ length: TOTAL_HOURS }, (_, i) => DAY_START_HOUR + i);
+
 const CalendarPage: Component<Props> = (props) => {
   const auth = useAuth();
   const data = useData();
@@ -100,16 +232,30 @@ const CalendarPage: Component<Props> = (props) => {
   today.setHours(0, 0, 0, 0);
   const currentWeekStart = buildWeek(today)[0];
 
-  const [view, setView] = createSignal<'month' | 'week'>('month');
-  const [baseDate, setBaseDate] = createSignal(today);
+  // Persisted calendar state (last view, last navigated date, last user filter).
+  // Versioned key so a shape change in the future doesn't break old caches.
+  const CALENDAR_STATE_KEY = 'dc-calendar-state-v1';
+  type StoredState = { view?: 'day' | 'week' | 'month'; baseDate?: string; selectedUserIds?: string[] };
+  const readStoredState = (): StoredState | null => {
+    try {
+      const raw = localStorage.getItem(CALENDAR_STATE_KEY);
+      return raw ? JSON.parse(raw) as StoredState : null;
+    } catch { return null; }
+  };
+  const stored = readStoredState();
+
+  const [view, setView] = createSignal<'day' | 'week' | 'month'>(stored?.view ?? 'month');
+  const [baseDate, setBaseDate] = createSignal(
+    stored?.baseDate ? new Date(stored.baseDate) : today,
+  );
   const [selectedDay, setSelectedDay] = createSignal<Date>(today);
   const [showDayModal, setShowDayModal] = createSignal(false);
   const [selectedStoryForDetail, setSelectedStoryForDetail] = createSignal<Story | null>(null);
 
   const userId = () => auth.user()?.id ?? '';
 
-  const [selectedUserIds, setSelectedUserIds] = createSignal<string[]>([]);
-  const [filterInitialized, setFilterInitialized] = createSignal(false);
+  const [selectedUserIds, setSelectedUserIds] = createSignal<string[]>(stored?.selectedUserIds ?? []);
+  const [filterInitialized, setFilterInitialized] = createSignal(!!stored?.selectedUserIds?.length);
 
   createEffect(() => {
     const uid = userId();
@@ -117,6 +263,16 @@ const CalendarPage: Component<Props> = (props) => {
       setSelectedUserIds([uid]);
       setFilterInitialized(true);
     }
+  });
+
+  // Persist view/date/filter on any change. Cheap (single localStorage write per tick).
+  createEffect(() => {
+    const state: StoredState = {
+      view: view(),
+      baseDate: baseDate().toISOString(),
+      selectedUserIds: selectedUserIds(),
+    };
+    try { localStorage.setItem(CALENDAR_STATE_KEY, JSON.stringify(state)); } catch {}
   });
 
   const [stories, { mutate: mutateStories, refetch: refetchStories }] = createResource(
@@ -135,7 +291,13 @@ const CalendarPage: Component<Props> = (props) => {
   };
 
   const visibleDays = createMemo(() => {
-    return view() === 'month' ? buildMonth(baseDate()) : buildWeek(baseDate());
+    const v = view();
+    if (v === 'month') return buildMonth(baseDate());
+    if (v === 'week') return buildWeek(baseDate());
+    // day view: just the single base date (used for itemsByDate map + range query)
+    const d = new Date(baseDate());
+    d.setHours(0, 0, 0, 0);
+    return [d];
   });
 
   const visibleWeeks = createMemo(() => {
@@ -187,6 +349,18 @@ const CalendarPage: Component<Props> = (props) => {
 
   const isCompletedOn = (storyId: string, dateKey: string) => completionSet().has(`${storyId}:${dateKey}`);
 
+  // Now indicator tick: re-render minute-by-minute when day/week view active so the red
+  // "current time" line stays accurate. Keeps things simple — just bumps a signal.
+  const [nowTick, setNowTick] = createSignal(Date.now());
+  onMount(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 60_000);
+    onCleanup(() => window.clearInterval(id));
+  });
+  // Compute current top position (in px) inside the timeline. nowTick is read so the
+  // memo re-runs every minute.
+  const nowTopPx = createMemo(() => { nowTick(); return topPx(currentHHmm()); });
+  const nowVisible = createMemo(() => { nowTick(); return isNowInRange(); });
+
   const itemsByDate = createMemo(() => {
     const all = stories() ?? [];
     const selected = new Set(selectedUserIds());
@@ -225,15 +399,19 @@ const CalendarPage: Component<Props> = (props) => {
 
   const goPrev = () => {
     const d = new Date(baseDate());
-    if (view() === 'month') d.setMonth(d.getMonth() - 1);
-    else d.setDate(d.getDate() - 7);
+    const v = view();
+    if (v === 'month') d.setMonth(d.getMonth() - 1);
+    else if (v === 'week') d.setDate(d.getDate() - 7);
+    else d.setDate(d.getDate() - 1);
     setBaseDate(d);
   };
 
   const goNext = () => {
     const d = new Date(baseDate());
-    if (view() === 'month') d.setMonth(d.getMonth() + 1);
-    else d.setDate(d.getDate() + 7);
+    const v = view();
+    if (v === 'month') d.setMonth(d.getMonth() + 1);
+    else if (v === 'week') d.setDate(d.getDate() + 7);
+    else d.setDate(d.getDate() + 1);
     setBaseDate(d);
   };
 
@@ -266,10 +444,15 @@ const CalendarPage: Component<Props> = (props) => {
   };
 
   const formatHeader = () => {
-    if (view() === 'month') {
+    const v = view();
+    if (v === 'month') {
       const m = baseDate().getMonth();
       const y = baseDate().getFullYear();
       return `${MONTH_NAMES[m].charAt(0).toUpperCase() + MONTH_NAMES[m].slice(1)} ${y}`;
+    }
+    if (v === 'day') {
+      const d = baseDate();
+      return `${d.getDate()} de ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
     }
     const days = visibleDays();
     if (!days.length) return '';
@@ -284,16 +467,106 @@ const CalendarPage: Component<Props> = (props) => {
     setShowDayModal(true);
   };
 
-  const handleQuickAddClick = (e: MouseEvent, d: Date) => {
+  // ── QuickAdd popover (Google Calendar-style) ──
+  // Anchored to the click point; supports all-day (from month / all-day band)
+  // and timed (from week/day timeline columns) creation.
+  type QuickAddState = {
+    dateKey: string;
+    startTime: string | null;
+    endTime: string | null;
+    anchorX: number; // viewport coords
+    anchorY: number;
+  };
+  const [quickAdd, setQuickAdd] = createSignal<QuickAddState | null>(null);
+  const [quickAddTitle, setQuickAddTitle] = createSignal('');
+  const [quickAddSubmitting, setQuickAddSubmitting] = createSignal(false);
+  const [quickAddError, setQuickAddError] = createSignal<string | null>(null);
+  let quickAddInputRef: HTMLInputElement | undefined;
+
+  const openQuickAdd = (e: MouseEvent, dateKey: string, startTime: string | null, endTime: string | null) => {
     e.stopPropagation();
-    props.onRequestQuickAdd?.(toLocalDateStr(d));
-    setShowDayModal(false); // Close day modal if opening quick add
+    setQuickAdd({ dateKey, startTime, endTime, anchorX: e.clientX, anchorY: e.clientY });
+    setQuickAddTitle('');
+    setQuickAddSubmitting(false);
+    setQuickAddError(null);
+    // Focus input next tick (after Show renders the element).
+    queueMicrotask(() => quickAddInputRef?.focus());
   };
 
+  const closeQuickAdd = () => {
+    setQuickAdd(null);
+    setQuickAddTitle('');
+    setQuickAddSubmitting(false);
+    setQuickAddError(null);
+  };
+
+  const submitQuickAdd = async () => {
+    const state = quickAdd();
+    const title = quickAddTitle().trim();
+    if (!state || !title || quickAddSubmitting()) return;
+    setQuickAddSubmitting(true);
+    setQuickAddError(null);
+    // Assign to whichever user is active in the top filter — that's the
+    // calendar the user is looking at right now. Fallback to the logged-in
+    // user when no filter is active so the HU doesn't get filtered out.
+    const assigneeId = selectedUserIds()[0] ?? userId();
+    const payload: Record<string, unknown> = {
+      title,
+      due_date: state.dateKey,
+      scheduled_date: state.dateKey,
+      ...(assigneeId ? { assignee_id: assigneeId } : {}),
+    };
+    if (state.startTime && state.endTime) {
+      payload.start_time = state.startTime;
+      payload.end_time = state.endTime;
+    }
+    try {
+      const created = await api.stories.create(payload);
+      // Optimistic insert — the new story is visible immediately, before refetch.
+      mutateStories((prev) => [...(prev ?? []), created as any]);
+      closeQuickAdd();
+      // Refetch in background to reconcile with any server-side defaults.
+      void refetchStories();
+    } catch (err: any) {
+      const msg = err?.message || err?.body?.error || 'No se pudo crear la HU';
+      setQuickAddError(typeof msg === 'string' ? msg : 'No se pudo crear la HU');
+      setQuickAddSubmitting(false);
+    }
+  };
+
+  const openQuickAddMoreOptions = () => {
+    const state = quickAdd();
+    if (!state) return;
+    closeQuickAdd();
+    props.onRequestQuickAdd?.(state.dateKey);
+  };
+
+  // Compute (startTime, endTime) from a click on a timeline column.
+  // Returns a 1-hour block snapped to SNAP_MINUTES.
+  const timelineClickToTimeRange = (e: MouseEvent): { startTime: string; endTime: string } | null => {
+    const col = e.currentTarget as HTMLElement;
+    if (!col) return null;
+    const rect = col.getBoundingClientRect();
+    const offsetY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    const minutesFromTop = (offsetY / HOUR_HEIGHT) * 60;
+    const snapped = snapToStep(minutesFromTop);
+    const absStart = DAY_START_HOUR * 60 + snapped;
+    const maxStart = 23 * 60 + 59 - 60;
+    const clampedStart = Math.max(0, Math.min(maxStart, absStart));
+    return { startTime: minutesToHHmm(clampedStart), endTime: minutesToHHmm(clampedStart + 60) };
+  };
+
+  const handleQuickAddClick = (e: MouseEvent, d: Date) => {
+    e.stopPropagation();
+    openQuickAdd(e, toLocalDateStr(d), null, null);
+    setShowDayModal(false);
+  };
+
+  // Single-select: clicking a chip replaces the active user. Clicking the
+  // already-active user clears the filter. Avoids the multi-select chaos in
+  // the timeline (overlapping events from many people).
   const toggleUserFilter = (id: string) => {
-    setSelectedUserIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedUserIds((prev) => (prev[0] === id ? [] : [id]));
   };
 
   const clearUserFilter = () => setSelectedUserIds([]);
@@ -305,6 +578,17 @@ const CalendarPage: Component<Props> = (props) => {
   const [dragHoverKey, setDragHoverKey] = createSignal<string | null>(null);
   const [justDroppedId, setJustDroppedId] = createSignal<string | null>(null);
 
+  // Payload carried over the drag wire. startTimeStr/durationMin let timeline
+  // drops reposition the event in time (preserving duration) when the cursor
+  // lands on a timeline column, while month drops fall back to date-only moves.
+  type DragPayload = {
+    id: string;
+    from: string;
+    field: 'scheduled_date' | 'due_date';
+    startTimeStr: string | null;
+    durationMin: number | null;
+  };
+
   const handleDragStart = (
     e: DragEvent,
     story: Story,
@@ -312,16 +596,30 @@ const CalendarPage: Component<Props> = (props) => {
   ) => {
     if (isRecurring(story) || !e.dataTransfer) return;
     const field: 'scheduled_date' | 'due_date' = story.scheduled_date ? 'scheduled_date' : 'due_date';
-    const payload = JSON.stringify({ id: story.id, from: sourceKey, field });
+    const startStr = getStartTime(story);
+    const endStr = getEndTime(story);
+    const startMin = hhmmToMinutes(startStr);
+    const endMin = hhmmToMinutes(endStr);
+    const durationMin =
+      startMin != null && endMin != null ? Math.max(SNAP_MINUTES, endMin - startMin) : null;
+    const payload: DragPayload = {
+      id: story.id,
+      from: sourceKey,
+      field,
+      startTimeStr: startStr,
+      durationMin,
+    };
+    const serialized = JSON.stringify(payload);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-daily-story', payload);
-    e.dataTransfer.setData('text/plain', payload);
+    e.dataTransfer.setData('application/x-daily-story', serialized);
+    e.dataTransfer.setData('text/plain', serialized);
     setDraggingId(story.id);
   };
 
   const handleDragEnd = () => {
     setDraggingId(null);
     setDragHoverKey(null);
+    setDropTimeHint(null);
   };
 
   const handleDragOverCell = (e: DragEvent, dateKey: string) => {
@@ -335,25 +633,51 @@ const CalendarPage: Component<Props> = (props) => {
     if (dragHoverKey() === dateKey) setDragHoverKey(null);
   };
 
+  // Live ghost while dragging over a timeline column: shows where the event
+  // would land (snapped) and what its new start time would be.
+  type DropTimeHint = { dateKey: string; topPx: number; startTimeStr: string };
+  const [dropTimeHint, setDropTimeHint] = createSignal<DropTimeHint | null>(null);
+
+  const computeTimelineDrop = (e: DragEvent, columnEl: HTMLElement): { startMin: number; topPx: number } | null => {
+    if (!columnEl) return null;
+    const rect = columnEl.getBoundingClientRect();
+    const offsetY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    const minutesFromTop = (offsetY / HOUR_HEIGHT) * 60;
+    const snapped = snapToStep(minutesFromTop);
+    const startMin = DAY_START_HOUR * 60 + snapped;
+    return { startMin, topPx: snapped * (HOUR_HEIGHT / 60) };
+  };
+
+  const handleDragOverTimeline = (e: DragEvent, dateKey: string) => {
+    if (!draggingId()) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    if (dragHoverKey() !== dateKey) setDragHoverKey(dateKey);
+    const drop = computeTimelineDrop(e, e.currentTarget as HTMLElement);
+    if (!drop) return;
+    setDropTimeHint({ dateKey, topPx: drop.topPx, startTimeStr: minutesToHHmm(drop.startMin) });
+  };
+
   const handleDropCell = async (e: DragEvent, targetKey: string) => {
     e.preventDefault();
     setDragHoverKey(null);
     setDraggingId(null);
+    setDropTimeHint(null);
 
     const raw = e.dataTransfer?.getData('application/x-daily-story')
       ?? e.dataTransfer?.getData('text/plain');
     if (!raw) return;
-    let payload: { id: string; from: string; field: 'scheduled_date' | 'due_date' };
+    let payload: DragPayload;
     try {
       payload = JSON.parse(raw);
     } catch {
       return;
     }
 
-    if (payload.from === targetKey) return;
-
     const current = (stories() ?? []).find((s) => s.id === payload.id);
     if (!current || isRecurring(current)) return;
+
+    if (payload.from === targetKey) return;
 
     const previous = { [payload.field]: (current as any)[payload.field] } as Record<string, unknown>;
     const patch = { [payload.field]: targetKey } as Record<string, unknown>;
@@ -370,12 +694,155 @@ const CalendarPage: Component<Props> = (props) => {
     try {
       await api.stories.update(payload.id, patch);
     } catch {
-      // rollback
       mutateStories((prev) =>
         (prev ?? []).map((s) => (s.id === payload.id ? { ...s, ...previous } : s)) as any,
       );
     }
   };
+
+  // Drop on a Week/Day timeline column. Reads the Y offset to derive a new
+  // start_time (snapped). Preserves the existing duration when the source had
+  // both times; defaults to a 1h block when promoting an "all-day" event.
+  const handleDropOnTimelineCell = async (e: DragEvent, targetKey: string) => {
+    e.preventDefault();
+    setDragHoverKey(null);
+    setDraggingId(null);
+    setDropTimeHint(null);
+
+    const raw = e.dataTransfer?.getData('application/x-daily-story')
+      ?? e.dataTransfer?.getData('text/plain');
+    if (!raw) return;
+    let payload: DragPayload;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    const current = (stories() ?? []).find((s) => s.id === payload.id);
+    if (!current || isRecurring(current)) return;
+
+    const drop = computeTimelineDrop(e, e.currentTarget as HTMLElement);
+    if (!drop) return;
+
+    const duration = payload.durationMin ?? 60;
+    const maxStart = 23 * 60 + 59 - duration;
+    const newStartMin = Math.max(0, Math.min(maxStart, drop.startMin));
+    const newEndMin = newStartMin + duration;
+    const newStartTime = minutesToHHmm(newStartMin);
+    const newEndTime = minutesToHHmm(newEndMin);
+
+    // No-op if dropped exactly where it already was.
+    const samePosition =
+      payload.from === targetKey &&
+      getStartTime(current) === newStartTime &&
+      getEndTime(current) === newEndTime;
+    if (samePosition) return;
+
+    const patch: Record<string, unknown> = {
+      [payload.field]: targetKey,
+      start_time: newStartTime,
+      end_time: newEndTime,
+    };
+    const previous: Record<string, unknown> = {
+      [payload.field]: (current as any)[payload.field],
+      start_time: getStartTime(current),
+      end_time: getEndTime(current),
+    };
+
+    mutateStories((prev) =>
+      (prev ?? []).map((s) => (s.id === payload.id ? { ...s, ...patch } : s)) as any,
+    );
+
+    setJustDroppedId(payload.id);
+    window.setTimeout(() => {
+      setJustDroppedId((id) => (id === payload.id ? null : id));
+    }, 620);
+
+    try {
+      await api.stories.update(payload.id, patch);
+    } catch {
+      mutateStories((prev) =>
+        (prev ?? []).map((s) => (s.id === payload.id ? { ...s, ...previous } : s)) as any,
+      );
+    }
+  };
+
+  // ── Resize (drag the bottom edge of a timed block) ──
+  type ResizeState = {
+    storyId: string;
+    startTimeStr: string;
+    initialEndMin: number;
+    initialClientY: number;
+    currentEndTimeStr: string;
+  };
+  const [resizing, setResizing] = createSignal<ResizeState | null>(null);
+
+  const startResize = (e: MouseEvent, story: Story) => {
+    const startStr = getStartTime(story);
+    const endStr = getEndTime(story);
+    if (!startStr || !endStr) return;
+    const endMin = hhmmToMinutes(endStr);
+    if (endMin == null) return;
+    e.stopPropagation();
+    e.preventDefault();
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    setResizing({
+      storyId: story.id,
+      startTimeStr: startStr,
+      initialEndMin: endMin,
+      initialClientY: e.clientY,
+      currentEndTimeStr: endStr,
+    });
+  };
+
+  const onResizeMove = (e: MouseEvent) => {
+    const state = resizing();
+    if (!state) return;
+    const deltaPx = e.clientY - state.initialClientY;
+    const deltaMin = deltaPx / (HOUR_HEIGHT / 60);
+    const startMin = hhmmToMinutes(state.startTimeStr) ?? 0;
+    const snapped = snapToStep(state.initialEndMin + deltaMin);
+    const constrained = Math.max(startMin + SNAP_MINUTES, Math.min(23 * 60 + 59, snapped));
+    const next = minutesToHHmm(constrained);
+    if (next !== state.currentEndTimeStr) {
+      setResizing({ ...state, currentEndTimeStr: next });
+    }
+  };
+
+  const endResize = async () => {
+    const state = resizing();
+    if (!state) return;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    setResizing(null);
+    const initialEnd = minutesToHHmm(state.initialEndMin);
+    if (state.currentEndTimeStr === initialEnd) return;
+    const patch = { start_time: state.startTimeStr, end_time: state.currentEndTimeStr };
+    const previous = { start_time: state.startTimeStr, end_time: initialEnd };
+    mutateStories((prev) =>
+      (prev ?? []).map((s) => (s.id === state.storyId ? { ...s, ...patch } : s)) as any,
+    );
+    try {
+      await api.stories.update(state.storyId, patch);
+    } catch {
+      mutateStories((prev) =>
+        (prev ?? []).map((s) => (s.id === state.storyId ? { ...s, ...previous } : s)) as any,
+      );
+    }
+  };
+
+  onMount(() => {
+    window.addEventListener('mousemove', onResizeMove);
+    window.addEventListener('mouseup', endResize);
+  });
+  onCleanup(() => {
+    window.removeEventListener('mousemove', onResizeMove);
+    window.removeEventListener('mouseup', endResize);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
 
   return (
     <>
@@ -412,15 +879,29 @@ const CalendarPage: Component<Props> = (props) => {
           </div>
         }
         actions={
-          <div class="relative grid h-9 w-[168px] grid-cols-2 items-center rounded-[18px] border border-base-content/[0.055] bg-base-content/[0.025] p-1 shrink-0">
+          <div class="relative grid h-9 w-[228px] grid-cols-3 items-center rounded-[18px] border border-base-content/[0.055] bg-base-content/[0.025] p-1 shrink-0">
             <div
               aria-hidden="true"
               class="absolute left-1 top-1 h-7 rounded-[14px] border border-base-content/[0.045] bg-base-100/95 shadow-[0_1px_6px_rgba(15,23,42,0.08)] transition-transform duration-200 ease-out"
               style={{
-                width: 'calc((100% - 8px) / 2)',
-                transform: view() === 'month' ? 'translateX(100%)' : 'translateX(0)',
+                width: 'calc((100% - 8px) / 3)',
+                transform: view() === 'day'
+                  ? 'translateX(0)'
+                  : view() === 'week'
+                    ? 'translateX(100%)'
+                    : 'translateX(200%)',
               }}
             />
+            <button
+              type="button"
+              onClick={() => setView('day')}
+              aria-pressed={view() === 'day'}
+              class={`relative z-10 h-7 rounded-[14px] text-center text-[11px] font-semibold transition-colors ${
+                view() === 'day' ? 'text-base-content' : 'text-base-content/42 hover:text-base-content/68'
+              }`}
+            >
+              Día
+            </button>
             <button
               type="button"
               onClick={() => setView('week')}
@@ -504,9 +985,10 @@ const CalendarPage: Component<Props> = (props) => {
         </Show>
       </div>
 
-      {/* ── Grid ── */}
+      {/* ── Month Grid ── */}
+      <Show when={view() === 'month'}>
       <div class="flex-1 bg-base-200/30 rounded-2xl border border-base-content/[0.08] overflow-hidden flex flex-col shadow-sm">
-        
+
         {/* Days Header */}
         <div class="grid grid-cols-[38px_repeat(7,minmax(0,1fr))] sm:grid-cols-[46px_repeat(7,minmax(0,1fr))] border-b border-base-content/[0.08] bg-base-100/50 backdrop-blur-md">
           <div class="py-2 text-center text-[9px] font-bold uppercase tracking-[0.12em] text-base-content/24 bg-base-content/[0.012] border-r border-base-content/[0.045]">
@@ -548,7 +1030,11 @@ const CalendarPage: Component<Props> = (props) => {
                     const isDropHover = () => dragHoverKey() === dateKey;
                     return (
                       <div
-                        onClick={() => handleCellClick(d)}
+                        onClick={(e) => {
+                          // Skip if the click landed on a child interactive element (HU card, Plus button).
+                          if (e.target !== e.currentTarget) return;
+                          openQuickAdd(e, dateKey, null, null);
+                        }}
                         onDragOver={(e) => handleDragOverCell(e, dateKey)}
                         onDragLeave={() => handleDragLeaveCell(dateKey)}
                         onDrop={(e) => handleDropCell(e, dateKey)}
@@ -625,7 +1111,12 @@ const CalendarPage: Component<Props> = (props) => {
                               </button>
                             </Show>
                             
-                            <span class="truncate pr-1 flex-1">{item.story.title}</span>
+                            <span class="truncate pr-1 flex-1">
+                              <Show when={getStartTime(item.story)}>
+                                <span class="font-bold opacity-80 mr-1">{formatTimeShort(getStartTime(item.story))}</span>
+                              </Show>
+                              {item.story.title}
+                            </span>
                           </div>
                         )
                       }}
@@ -659,7 +1150,361 @@ const CalendarPage: Component<Props> = (props) => {
           </For>
         </div>
       </div>
-      
+      </Show>
+
+      {/* ── Week / Day Timeline View (Apple Calendar-style) ── */}
+      <Show when={view() === 'week' || view() === 'day'}>
+        {(() => {
+          const v = () => view();
+          const days = createMemo<Date[]>(() => v() === 'week' ? buildWeek(baseDate()) : [(() => { const d = new Date(baseDate()); d.setHours(0,0,0,0); return d; })()]);
+
+          // Split items into all-day + timed for each visible day
+          const dayItems = createMemo(() => {
+            const map = new Map<string, {
+              allDay: { story: Story; isRecurring: boolean; isCompleted: boolean }[];
+              timed: { story: Story; isRecurring: boolean; isCompleted: boolean; start: number; end: number; startStr: string; endStr: string }[];
+            }>();
+            const byDate = itemsByDate();
+            for (const d of days()) {
+              const key = toLocalDateStr(d);
+              const all = byDate.get(key) ?? [];
+              const allDay: any[] = [];
+              const timed: any[] = [];
+              for (const it of all) {
+                const startStr = getStartTime(it.story);
+                if (!startStr) {
+                  allDay.push(it);
+                  continue;
+                }
+                const sp = parseHHmm(startStr);
+                if (!sp) { allDay.push(it); continue; }
+                const startMin = sp.h * 60 + sp.m;
+                const endStr = getEndTime(it.story) ?? (() => {
+                  // default to start + 60min when no explicit end
+                  const e = new Date(); e.setHours(sp.h, sp.m + 60, 0, 0);
+                  return `${String(e.getHours()).padStart(2,'0')}:${String(e.getMinutes()).padStart(2,'0')}`;
+                })();
+                const ep = parseHHmm(endStr);
+                const endMin = ep ? ep.h * 60 + ep.m : startMin + 60;
+                timed.push({ ...it, start: startMin, end: Math.max(startMin + 15, endMin), startStr, endStr });
+              }
+              map.set(key, { allDay, timed });
+            }
+            return map;
+          });
+
+          // For all-day band height: max #items across visible days
+          const allDayRows = createMemo(() => {
+            let max = 0;
+            for (const { allDay } of dayItems().values()) max = Math.max(max, allDay.length);
+            return max;
+          });
+
+          return (
+            <div class="flex-1 bg-base-200/30 rounded-2xl border border-base-content/[0.08] overflow-hidden flex flex-col shadow-sm">
+
+              {/* Day Header strip */}
+              <div
+                class="grid border-b border-base-content/[0.08] bg-base-100/50 backdrop-blur-md"
+                style={{ 'grid-template-columns': `${TIME_GUTTER_WIDTH}px repeat(${days().length}, minmax(0, 1fr))` }}
+              >
+                <div class="py-3 text-center text-[9px] font-bold uppercase tracking-[0.12em] text-base-content/30 bg-base-content/[0.012] border-r border-base-content/[0.045] flex flex-col items-center justify-center">
+                  <Clock size={12} class="opacity-50" />
+                </div>
+                <For each={days()}>
+                  {(d) => {
+                    const isToday = isSameDay(d, today);
+                    const weekday = DAY_NAMES_SHORT[(d.getDay() + 6) % 7];
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => { setBaseDate(d); setView('day'); }}
+                        class="py-2 flex flex-col items-center justify-center gap-0.5 border-r border-base-content/[0.045] last:border-r-0 hover:bg-base-content/[0.02] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ios-blue-500/40"
+                      >
+                        <span class="text-[10px] font-bold uppercase tracking-widest text-base-content/40">{weekday}</span>
+                        <span class={`inline-flex h-7 min-w-7 items-center justify-center rounded-full text-[13px] font-bold transition-all px-2 ${
+                          isToday ? 'bg-ios-blue-500 text-white shadow-sm' : 'text-base-content/70'
+                        }`}>
+                          {d.getDate()}
+                        </span>
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
+
+              {/* All-day band (only if at least 1 day has all-day items) */}
+              <Show when={allDayRows() > 0}>
+                <div
+                  class="grid border-b border-base-content/[0.08] bg-base-100/30"
+                  style={{ 'grid-template-columns': `${TIME_GUTTER_WIDTH}px repeat(${days().length}, minmax(0, 1fr))` }}
+                >
+                  <div class="px-2 py-2 border-r border-base-content/[0.045] flex items-start justify-end">
+                    <span class="text-[9px] font-bold uppercase tracking-[0.12em] text-base-content/40 mt-0.5">Todo el día</span>
+                  </div>
+                  <For each={days()}>
+                    {(d) => {
+                      const key = toLocalDateStr(d);
+                      const isDropHover = () => dragHoverKey() === key;
+                      return (
+                        <div
+                          onDragOver={(e) => handleDragOverCell(e, key)}
+                          onDragLeave={() => handleDragLeaveCell(key)}
+                          onDrop={(e) => handleDropCell(e, key)}
+                          class={`border-r border-base-content/[0.045] last:border-r-0 px-1.5 py-1.5 flex flex-col gap-1 min-h-[44px] transition-colors ${
+                            isDropHover() ? 'bg-ios-blue-500/10 ring-2 ring-inset ring-ios-blue-500/40' : ''
+                          }`}
+                        >
+                          <For each={dayItems().get(key)?.allDay ?? []}>
+                            {(item) => {
+                              const styleDesc = priorityColor[item.story.priority] || priorityColor.low;
+                              const isDragging = () => draggingId() === item.story.id;
+                              const isJustDropped = () => justDroppedId() === item.story.id;
+                              const canDrag = !item.isRecurring;
+                              return (
+                                <div
+                                  draggable={canDrag}
+                                  onDragStart={(e) => handleDragStart(e, item.story, key)}
+                                  onDragEnd={handleDragEnd}
+                                  onClick={(e) => { e.stopPropagation(); setSelectedStoryForDetail(item.story); }}
+                                  class={`group/item flex items-center gap-1 w-full text-left px-1.5 py-1 rounded-md border text-[10px] font-semibold leading-tight truncate transition-all ${
+                                    item.isCompleted ? 'opacity-50 line-through bg-base-content/5 border-transparent text-base-content/40' : styleDesc
+                                  } ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${
+                                    isDragging() ? 'opacity-40 scale-95' : ''
+                                  } ${isJustDropped() ? 'animate-story-drop' : ''}`}
+                                >
+                                  <Show when={!item.isRecurring} fallback={
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); toggleCompletion(item.story.id, key, item.isCompleted); }}
+                                      class="shrink-0 transition-transform active:scale-90"
+                                    >
+                                      <Show when={item.isCompleted} fallback={<Circle size={10} class="text-current opacity-50" />}>
+                                        <CheckCircle2 size={10} class="text-ios-green-500" />
+                                      </Show>
+                                    </button>
+                                  }>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); markStoryDone(item.story.id); }}
+                                      class="shrink-0 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                      title="Marcar como hecha"
+                                    >
+                                      <CheckCircle2 size={10} class="text-ios-green-500" />
+                                    </button>
+                                  </Show>
+                                  <span class="truncate flex-1">{item.story.title}</span>
+                                </div>
+                              );
+                            }}
+                          </For>
+                        </div>
+                      );
+                    }}
+                  </For>
+                </div>
+              </Show>
+
+              {/* Timeline body (scrollable) */}
+              <div class="flex-1 overflow-y-auto">
+                <div
+                  class="relative grid"
+                  style={{
+                    'grid-template-columns': `${TIME_GUTTER_WIDTH}px repeat(${days().length}, minmax(0, 1fr))`,
+                    height: `${TIMELINE_HEIGHT}px`,
+                  }}
+                >
+                  {/* Hour labels column */}
+                  <div class="relative border-r border-base-content/[0.045] bg-base-content/[0.012]">
+                    <For each={HOURS_RANGE}>
+                      {(h, i) => (
+                        <div
+                          class="absolute right-2 -translate-y-1/2 text-[10px] font-semibold uppercase tracking-wider text-base-content/35 tabular-nums"
+                          style={{ top: `${i() * HOUR_HEIGHT}px` }}
+                        >
+                          {/* Hide the very first label so it doesn't clip at the top edge */}
+                          <Show when={i() > 0}>{formatHourLabel(h)}</Show>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+
+                  {/* Day columns */}
+                  <For each={days()}>
+                    {(d) => {
+                      const key = toLocalDateStr(d);
+                      const isToday = isSameDay(d, today);
+                      const timed = () => dayItems().get(key)?.timed ?? [];
+                      const stackDepth = createMemo(() => computeStackDepth(timed()));
+                      const isDropHover = () => dragHoverKey() === key;
+                      const hint = () => {
+                        const h = dropTimeHint();
+                        return h && h.dateKey === key ? h : null;
+                      };
+                      return (
+                        <div
+                          onDragOver={(e) => handleDragOverTimeline(e, key)}
+                          onDragLeave={() => handleDragLeaveCell(key)}
+                          onDrop={(e) => handleDropOnTimelineCell(e, key)}
+                          onClick={(e) => {
+                            // Click empty area: quick-add at the clicked hour (timeline grants hour resolution).
+                            if (e.target === e.currentTarget) {
+                              const range = timelineClickToTimeRange(e);
+                              if (range) openQuickAdd(e, key, range.startTime, range.endTime);
+                            }
+                          }}
+                          class={`relative border-r border-base-content/[0.045] last:border-r-0 transition-colors ${
+                            isDropHover() ? 'bg-ios-blue-500/[0.06]' : ''
+                          }`}
+                        >
+                          {/* Hour gridlines */}
+                          <For each={HOURS_RANGE}>
+                            {(_, i) => (
+                              <div
+                                class={`pointer-events-none absolute left-0 right-0 ${i() === 0 ? '' : 'border-t'} border-base-content/[0.05]`}
+                                style={{ top: `${i() * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
+                              >
+                                {/* Half-hour subtle marker */}
+                                <div class="absolute left-0 right-0 border-t border-dashed border-base-content/[0.025]" style={{ top: `${HOUR_HEIGHT / 2}px` }} />
+                              </div>
+                            )}
+                          </For>
+
+                          {/* Today subtle column tint */}
+                          <Show when={isToday}>
+                            <div class="pointer-events-none absolute inset-0 bg-ios-blue-500/[0.025]" />
+                          </Show>
+
+                          {/* Now indicator */}
+                          <Show when={isToday && nowVisible()}>
+                            <div
+                              class="pointer-events-none absolute left-0 right-0 z-20"
+                              style={{ top: `${nowTopPx()}px` }}
+                            >
+                              <div class="relative">
+                                <div class="absolute -left-1 -top-[5px] w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_0_2px_rgba(239,68,68,0.18)]" />
+                                <div class="h-[2px] bg-red-500" />
+                              </div>
+                            </div>
+                          </Show>
+
+                          {/* Drop-time hint while dragging over this column */}
+                          <Show when={hint()}>
+                            {(h) => (
+                              <div
+                                class="pointer-events-none absolute left-0 right-0 z-30"
+                                style={{ top: `${h().topPx}px` }}
+                              >
+                                <div class="relative h-0">
+                                  <div class="h-[2px] bg-ios-blue-500/80 shadow-[0_0_0_2px_rgba(0,122,255,0.18)]" />
+                                  <span class="absolute -top-[18px] right-1 rounded-md bg-ios-blue-500 px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums shadow-[0_2px_6px_rgba(0,0,0,0.18)]">
+                                    {formatTimeShort(h().startTimeStr)}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </Show>
+
+                          {/* Timed events */}
+                          <For each={timed()}>
+                            {(item) => {
+                              const depth = () => stackDepth().get(item) ?? 0;
+                              const top = topPx(item.startStr);
+                              const isResizingThis = () => resizing()?.storyId === item.story.id;
+                              const effectiveEndStr = () => {
+                                const r = resizing();
+                                return r && r.storyId === item.story.id ? r.currentEndTimeStr : item.endStr;
+                              };
+                              const height = () => heightPx(item.startStr, effectiveEndStr());
+                              const styleDesc = priorityColor[item.story.priority] || priorityColor.low;
+                              const isDragging = () => draggingId() === item.story.id;
+                              const isJustDropped = () => justDroppedId() === item.story.id;
+                              const canDrag = !item.isRecurring;
+                              const canResize = () => !item.isRecurring && !!item.endStr;
+                              return (
+                                <div
+                                  draggable={canDrag && !isResizingThis()}
+                                  onDragStart={(e) => handleDragStart(e, item.story, key)}
+                                  onDragEnd={handleDragEnd}
+                                  onClick={(e) => { e.stopPropagation(); if (!isResizingThis()) setSelectedStoryForDetail(item.story); }}
+                                  class={`group/event absolute rounded-md border px-1.5 py-1 text-[11px] font-semibold leading-tight overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-[opacity,transform,box-shadow] ${
+                                    item.isCompleted ? 'opacity-50 line-through bg-base-content/5 border-transparent text-base-content/40' : styleDesc
+                                  } ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${
+                                    isDragging() ? 'opacity-40 scale-95' : ''
+                                  } ${isJustDropped() ? 'animate-story-drop' : ''} ${
+                                    isResizingThis() ? 'ring-2 ring-ios-blue-500/50 shadow-[0_4px_14px_rgba(0,122,255,0.18)]' : ''
+                                  } ${depth() > 0 ? 'ring-1 ring-base-100/60 shadow-[0_2px_8px_rgba(0,0,0,0.18)]' : ''}`}
+                                  style={{
+                                    top: `${top}px`,
+                                    height: `${height()}px`,
+                                    left: `${depth() * STACK_OFFSET_PX + 2}px`,
+                                    right: '2px',
+                                    'z-index': 10 + depth(),
+                                  }}
+                                  title={`${item.story.title} (${formatTimeShort(item.startStr)}${effectiveEndStr() ? ' – ' + formatTimeShort(effectiveEndStr()) : ''})`}
+                                >
+                                  <div class="flex items-center gap-1 truncate">
+                                    <Show when={!item.isRecurring} fallback={
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); toggleCompletion(item.story.id, key, item.isCompleted); }}
+                                        class="shrink-0 transition-transform active:scale-90"
+                                      >
+                                        <Show when={item.isCompleted} fallback={<Circle size={10} class="text-current opacity-50" />}>
+                                          <CheckCircle2 size={10} class="text-ios-green-500" />
+                                        </Show>
+                                      </button>
+                                    }>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); markStoryDone(item.story.id); }}
+                                        class="shrink-0 opacity-0 group-hover/event:opacity-100 transition-opacity"
+                                      >
+                                        <CheckCircle2 size={10} class="text-ios-green-500" />
+                                      </button>
+                                    </Show>
+                                    <span class="truncate">{item.story.title}</span>
+                                  </div>
+                                  <Show when={height() >= 32}>
+                                    <div class="text-[10px] font-medium opacity-70 mt-0.5 tabular-nums">
+                                      {formatTimeShort(item.startStr)}{effectiveEndStr() ? ` – ${formatTimeShort(effectiveEndStr())}` : ''}
+                                    </div>
+                                  </Show>
+                                  {/* Drag handle hint — top edge. Visible on hover, signals
+                                      the prioritized grab area (especially when another event
+                                      stacks above and covers most of the body). */}
+                                  <Show when={canDrag}>
+                                    <div
+                                      class="pointer-events-none absolute top-0 left-0 right-0 h-3 flex items-start justify-center pt-[3px] opacity-0 group-hover/event:opacity-100 transition-opacity"
+                                      aria-hidden="true"
+                                    >
+                                      <div class="h-[3px] w-7 rounded-full bg-current/40" />
+                                    </div>
+                                  </Show>
+                                  {/* Resize handle — bottom edge. Visible on hover or while resizing. */}
+                                  <Show when={canResize()}>
+                                    <div
+                                      onMouseDown={(e) => startResize(e, item.story)}
+                                      class={`absolute bottom-0 left-0 right-0 h-2.5 cursor-ns-resize transition-opacity flex items-end justify-center pb-[2px] ${
+                                        isResizingThis() ? 'opacity-100' : 'opacity-0 group-hover/event:opacity-100'
+                                      }`}
+                                      aria-label="Arrastrar para cambiar la duración"
+                                      title="Arrastrar para cambiar la duración"
+                                    >
+                                      <div class="h-[3px] w-7 rounded-full bg-current/40" />
+                                    </div>
+                                  </Show>
+                                </div>
+                              );
+                            }}
+                          </For>
+                        </div>
+                      );
+                    }}
+                  </For>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </Show>
+
       {/* ── Selected Day Detail Panel (mostly useful for smaller screens or week view details) ── */}
       <div class="mt-4 bg-base-200/30 rounded-2xl border border-base-content/[0.08] p-5 pb-8 sm:hidden">
          <div class="flex items-center justify-between mb-4">
@@ -762,6 +1607,100 @@ const CalendarPage: Component<Props> = (props) => {
             });
           }}
         />
+      </Show>
+
+      {/* QuickAdd popover — Google Calendar-style, anchored to the click point */}
+      <Show when={quickAdd()}>
+        {(state) => {
+          // Compute viewport-safe popover position (default 320×170 ish).
+          const POPOVER_W = 320;
+          const POPOVER_H = 200;
+          const left = () => {
+            const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
+            return Math.min(Math.max(8, state().anchorX - 20), vw - POPOVER_W - 8);
+          };
+          const top = () => {
+            const vh = typeof window !== 'undefined' ? window.innerHeight : 768;
+            // Prefer below the click; flip above if it would overflow.
+            const below = state().anchorY + 12;
+            return below + POPOVER_H + 8 > vh ? Math.max(8, state().anchorY - POPOVER_H - 12) : below;
+          };
+          const dateLabel = () => {
+            const [y, m, d] = state().dateKey.split('-').map(Number);
+            const dt = new Date(y, m - 1, d);
+            return dt.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+          };
+          const timeLabel = () => {
+            if (!state().startTime || !state().endTime) return 'Todo el día';
+            return `${formatTimeShort(state().startTime)} – ${formatTimeShort(state().endTime)}`;
+          };
+          return (
+            <>
+              <div class="fixed inset-0 z-[60]" onMouseDown={closeQuickAdd} />
+              <div
+                class="fixed z-[61] w-[320px] rounded-2xl border border-base-content/[0.08] bg-base-100/98 shadow-[0_20px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl"
+                style={{ left: `${left()}px`, top: `${top()}px` }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div class="flex items-center justify-between px-4 pt-3 pb-2">
+                  <span class="text-[10px] font-bold uppercase tracking-[0.12em] text-base-content/40">Nuevo</span>
+                  <button
+                    type="button"
+                    onClick={closeQuickAdd}
+                    aria-label="Cerrar"
+                    class="text-base-content/35 hover:text-base-content/70 transition-colors p-1 -m-1 rounded"
+                  >
+                    <X size={14} strokeWidth={2.5} />
+                  </button>
+                </div>
+                <div class="px-4">
+                  <input
+                    ref={quickAddInputRef}
+                    type="text"
+                    value={quickAddTitle()}
+                    onInput={(e) => setQuickAddTitle(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submitQuickAdd(); }
+                      if (e.key === 'Escape') { e.preventDefault(); closeQuickAdd(); }
+                    }}
+                    placeholder="Añade un título"
+                    class="w-full bg-transparent border-b-2 border-base-content/[0.08] focus:border-ios-blue-500 px-0 py-2 text-[17px] font-semibold text-base-content placeholder:text-base-content/30 outline-none transition-colors"
+                  />
+                </div>
+                <div class="px-4 pt-3 flex items-start gap-2 text-[12px] text-base-content/55">
+                  <Clock size={13} class="mt-[2px] shrink-0 text-base-content/35" />
+                  <div class="flex-1 min-w-0">
+                    <div class="font-medium capitalize">{dateLabel()}</div>
+                    <div class="text-[11px] text-base-content/40 tabular-nums">{timeLabel()}</div>
+                  </div>
+                </div>
+                <Show when={quickAddError()}>
+                  <div class="mx-4 mt-3 px-2.5 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] font-medium text-red-400">
+                    {quickAddError()}
+                  </div>
+                </Show>
+                <div class="px-4 pt-3 pb-3 mt-2 flex items-center justify-between gap-2 border-t border-base-content/[0.05]">
+                  <button
+                    type="button"
+                    onClick={openQuickAddMoreOptions}
+                    class="text-[12px] font-semibold text-ios-blue-500 hover:text-ios-blue-600 transition-colors"
+                  >
+                    Más opciones
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void submitQuickAdd()}
+                    disabled={!quickAddTitle().trim() || quickAddSubmitting()}
+                    class="rounded-full bg-ios-blue-500 px-4 py-1.5 text-[12px] font-bold text-white shadow-sm hover:bg-ios-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
+                  >
+                    {quickAddSubmitting() ? 'Creando…' : 'Crear'}
+                  </button>
+                </div>
+              </div>
+            </>
+          );
+        }}
       </Show>
 
       </div>

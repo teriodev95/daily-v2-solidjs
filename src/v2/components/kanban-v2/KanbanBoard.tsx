@@ -93,6 +93,11 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   const data = useData();
   const auth = useAuth();
 
+  const canHardDeleteStory = (_story: Story) => {
+    // TODO: re-enable hard delete once the silent-failure bug is resolved.
+    return false;
+  };
+
   const [buckets, setBuckets] = createSignal<KanbanResponse | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [searchQuery, setSearchQuery] = createSignal('');
@@ -986,6 +991,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
             x={menu().x}
             y={menu().y}
             busy={menuBusy()}
+            canHardDelete={canHardDeleteStory(menu().story)}
             onOpen={() => menu().story.status === 'done' && donePanelOpen() ? openDoneStory(menu().story) : openStory(menu().story)}
             onCopyLink={() => void copyStoryLinkFromMenu(menu().story)}
             onMove={(status) => void moveStoryFromMenu(menu().story, status)}
@@ -1287,6 +1293,7 @@ const CardContextMenu: Component<{
   x: number;
   y: number;
   busy: string | null;
+  canHardDelete: boolean;
   onOpen: () => void;
   onCopyLink: () => void;
   onMove: (status: StoryStatus) => void;
@@ -1368,6 +1375,7 @@ const CardContextMenu: Component<{
       {props.busy === 'hide' ? 'Ocultando...' : 'Ocultar'}
     </button>
 
+    <Show when={props.canHardDelete}>
     <div class="my-1 border-t border-base-content/[0.06]" />
     <Show
       when={props.confirmingDelete}
@@ -1406,6 +1414,7 @@ const CardContextMenu: Component<{
           </button>
         </div>
       </div>
+    </Show>
     </Show>
   </div>
 );

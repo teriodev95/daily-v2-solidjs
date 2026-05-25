@@ -2,6 +2,7 @@ import { createEffect, createSignal, on, onMount, onCleanup, For, Show, type Com
 import type { WikiArticle, WikiSuggestedLink, LibrarianStatus } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
+import { useAuth } from '../lib/auth';
 import { X, Check, Loader2, Trash2, BookOpen, Clock, AlertCircle } from 'lucide-solid';
 import { ContentEditor, type ContentEditorHandle, type ContentPreviewRequest } from './ContentEditor';
 import { processWikiLinks } from '../lib/wikiLinks';
@@ -23,6 +24,10 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const WikiArticleDetail: Component<Props> = (props) => {
   const data = useData();
+  const auth = useAuth();
+  // TODO: re-enable hard delete once the silent-failure bug is resolved.
+  const canManage = () => false;
+  void auth;
   const projectName = () =>
     data.projects().find((p) => p.id === props.article.project_id)?.name ?? '';
   const contextLabel = () => {
@@ -414,26 +419,28 @@ const WikiArticleDetail: Component<Props> = (props) => {
       </div>
 
       {/* Footer — delete action */}
-      <div class="shrink-0 py-3 border-t border-base-content/[0.04]">
-        <div class={footerContainerClass()}>
-          <Show
-            when={confirming()}
-            fallback={
-              <button onClick={() => setConfirming(true)} class="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/20 hover:text-red-500 hover:bg-red-500/10 px-2.5 py-1.5 rounded-lg transition-all">
-                <Trash2 size={12} /> Eliminar artículo
-              </button>
-            }
-          >
-            <div class="flex items-center gap-3">
-              <span class="text-[11px] font-medium text-red-500">¿Eliminar?</span>
-              <button onClick={() => setConfirming(false)} disabled={deleting()} class="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/10 transition-all">Cancelar</button>
-              <button onClick={handleDelete} disabled={deleting()} class="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-all disabled:opacity-50">
-                {deleting() ? 'Eliminando...' : 'Sí, eliminar'}
-              </button>
-            </div>
-          </Show>
+      <Show when={canManage()}>
+        <div class="shrink-0 py-3 border-t border-base-content/[0.04]">
+          <div class={footerContainerClass()}>
+            <Show
+              when={confirming()}
+              fallback={
+                <button onClick={() => setConfirming(true)} class="flex items-center gap-1.5 text-[11px] font-semibold text-base-content/20 hover:text-red-500 hover:bg-red-500/10 px-2.5 py-1.5 rounded-lg transition-all">
+                  <Trash2 size={12} /> Eliminar artículo
+                </button>
+              }
+            >
+              <div class="flex items-center gap-3">
+                <span class="text-[11px] font-medium text-red-500">¿Eliminar?</span>
+                <button onClick={() => setConfirming(false)} disabled={deleting()} class="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/10 transition-all">Cancelar</button>
+                <button onClick={handleDelete} disabled={deleting()} class="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-all disabled:opacity-50">
+                  {deleting() ? 'Eliminando...' : 'Sí, eliminar'}
+                </button>
+              </div>
+            </Show>
+          </div>
         </div>
-      </div>
+      </Show>
       </div>
       </div>
       <Show when={imagePreview()}>

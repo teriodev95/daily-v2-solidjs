@@ -3,7 +3,6 @@ import { eq, and, or, like, sql, isNull } from 'drizzle-orm';
 import * as Y from 'yjs';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
-import { requireAdmin } from '../middleware/auth';
 import {
   generateShareToken,
   hashToken,
@@ -17,6 +16,34 @@ const parseRecurrenceDays = (s: any) => ({
   ...s,
   recurrence_days: s.recurrence_days ? JSON.parse(s.recurrence_days) : null,
 });
+
+// Validates an optional "HH:mm" time block on a story.
+// Contract:
+//   - both null/undefined → ok (all-day)
+//   - both strings matching /^([01]\d|2[0-3]):[0-5]\d$/ AND end > start → ok
+//   - any other combination → 400
+// HH:mm sorts lexicographically the same as numerically, so plain string
+// comparison is enough to enforce end > start.
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+type ValidateResult = { ok: true } | { ok: false; error: string; field?: string };
+function validateTimeRange(start: string | null | undefined, end: string | null | undefined): ValidateResult {
+  const startPresent = start !== null && start !== undefined;
+  const endPresent = end !== null && end !== undefined;
+  if (!startPresent && !endPresent) return { ok: true };
+  if (startPresent !== endPresent) {
+    return { ok: false, error: 'start_time and end_time must be sent together or both omitted', field: startPresent ? 'end_time' : 'start_time' };
+  }
+  if (typeof start !== 'string' || !TIME_RE.test(start)) {
+    return { ok: false, error: 'start_time must match HH:mm (00:00–23:59)', field: 'start_time' };
+  }
+  if (typeof end !== 'string' || !TIME_RE.test(end)) {
+    return { ok: false, error: 'end_time must match HH:mm (00:00–23:59)', field: 'end_time' };
+  }
+  if (end <= start) {
+    return { ok: false, error: 'end_time must be greater than start_time', field: 'end_time' };
+  }
+  return { ok: true };
+}
 
 type StoryStatus = 'backlog' | 'todo' | 'in_progress' | 'done';
 
@@ -473,8 +500,11 @@ stories.post('/', async (c) => {
     assignees?: string[];
     due_date?: string;
     scheduled_date?: string;
+    start_time?: string | null;
+    end_time?: string | null;
     is_shared?: boolean;
     sort_order?: number;
+    completed_at?: string | null;
     frequency?: string;
     day_of_week?: number;
     day_of_month?: number;
@@ -498,11 +528,18 @@ stories.post('/', async (c) => {
   if (body.frequency && !validFrequencies.includes(body.frequency)) {
     return c.json({ error: `frequency must be one of: ${validFrequencies.join(', ')}`, field: 'frequency' }, 400);
   }
+  const timeCheck = validateTimeRange(body.start_time, body.end_time);
+  if (!timeCheck.ok) {
+    return c.json({ error: timeCheck.error, field: timeCheck.field }, 400);
+  }
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const extraAssignees = [...new Set((body.assignees ?? []).filter(uid => uid && uid !== body.assignee_id))];
   const status = (body.status as StoryStatus | undefined) ?? 'backlog';
+  const completedAt = body.completed_at !== undefined
+    ? body.completed_at
+    : (status === 'done' ? now : null);
   const sortOrder = typeof body.sort_order === 'number'
     ? body.sort_order
     : await nextTopOrder(db, user.teamId, status);
@@ -522,8 +559,11 @@ stories.post('/', async (c) => {
     created_by: user.userId,
     due_date: body.due_date ?? null,
     scheduled_date: body.scheduled_date ?? null,
+    start_time: body.start_time ?? null,
+    end_time: body.end_time ?? null,
     is_shared: body.is_shared ?? false,
     sort_order: sortOrder,
+    completed_at: completedAt,
     frequency: body.frequency as any ?? null,
     day_of_week: body.day_of_week ?? null,
     day_of_month: body.day_of_month ?? null,
@@ -622,6 +662,26 @@ stories.patch('/:id', async (c) => {
     const validStatuses = ['backlog', 'todo', 'in_progress', 'done'];
     if (!validStatuses.includes(fields.status as string)) {
       return c.json({ error: `status must be one of: ${validStatuses.join(', ')}`, field: 'status' }, 400);
+    }
+  }
+
+  // Time block: must be sent as a pair (both or neither). The pair may be both
+  // null (clear schedule) or both valid "HH:mm" strings with end > start.
+  const sPresent = 'start_time' in fields;
+  const ePresent = 'end_time' in fields;
+  if (sPresent || ePresent) {
+    if (sPresent !== ePresent) {
+      return c.json({
+        error: 'start_time and end_time must be sent together',
+        field: sPresent ? 'end_time' : 'start_time',
+      }, 400);
+    }
+    const timeCheck = validateTimeRange(
+      fields.start_time as string | null,
+      fields.end_time as string | null,
+    );
+    if (!timeCheck.ok) {
+      return c.json({ error: timeCheck.error, field: timeCheck.field }, 400);
     }
   }
 
@@ -757,12 +817,15 @@ stories.post('/:id/move', async (c) => {
   return c.json(updated);
 });
 
-stories.delete('/:id', requireAdmin, async (c) => {
+stories.delete('/:id', async (c) => {
   const db = c.get('db');
   const user = c.get('user');
   const id = c.req.param('id');
   const [story] = await db.select().from(schema.stories).where(eq(schema.stories.id, id)).limit(1);
   if (!story || story.team_id !== user.teamId) return c.json({ error: 'Not found' }, 404);
+  if (user.role !== 'admin' && story.created_by !== user.userId) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
 
   // Clean up R2 attachments
   const attachmentRows = await db

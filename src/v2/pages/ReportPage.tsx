@@ -302,6 +302,12 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const [ctxMenu, setCtxMenu] = createSignal<{ story?: Story; goal?: { id: string, text: string }; assignment?: Assignment; x: number; y: number } | null>(null);
   const [ctxMenuBusy, setCtxMenuBusy] = createSignal<string | null>(null);
   const [confirmingStoryDelete, setConfirmingStoryDelete] = createSignal(false);
+  const [hardDeleteError, setHardDeleteError] = createSignal<string | null>(null);
+
+  const canHardDeleteStory = (_story: Story) => {
+    // TODO: re-enable hard delete once the silent-failure bug is resolved.
+    return false;
+  };
 
   const openCtxMenu = (e: MouseEvent, story: Story) => {
     e.preventDefault();
@@ -325,6 +331,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const closeCtxMenu = () => {
     setCtxMenu(null);
     setConfirmingStoryDelete(false);
+    setHardDeleteError(null);
   };
 
   const ctxMoveAndClose = (storyId: string, status: StoryStatus) => {
@@ -401,12 +408,15 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const ctxHardDeleteStory = async (story: Story) => {
     if (ctxMenuBusy()) return;
     setCtxMenuBusy('delete');
+    setHardDeleteError(null);
     try {
       await api.stories.delete(story.id);
       setLocalStories(prev => prev.filter(s => s.id !== story.id));
       if (selectedStory()?.id === story.id) setSelectedStory(null);
       closeCtxMenu();
       props.onStoryDeleted?.();
+    } catch (e: any) {
+      setHardDeleteError(e?.message || 'No se pudo eliminar');
     } finally {
       setCtxMenuBusy(null);
     }
@@ -507,7 +517,12 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   onCleanup(() => { if (deleteTimer) clearTimeout(deleteTimer); });
 
   // Close context menu on outside click or Escape, Ctrl+Z undo
-  const handleGlobalClick = () => { if (ctxMenu()) closeCtxMenu(); };
+  const handleGlobalClick = (e: MouseEvent) => {
+    if (!ctxMenu()) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('[role="menu"]')) return;
+    closeCtxMenu();
+  };
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') closeCtxMenu();
     if (e.key === 'z' && (e.metaKey || e.ctrlKey) && !e.shiftKey && deletePending()) {
@@ -1162,12 +1177,14 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                 busy={ctxMenuBusy()}
                 statusLabels={statusLabels}
                 confirmingDelete={confirmingStoryDelete()}
+                canHardDelete={canHardDeleteStory(s)}
+                deleteError={hardDeleteError()}
                 onOpen={() => { closeCtxMenu(); setSelectedStory(s); }}
                 onCopyLink={() => void ctxCopyStoryLink(s)}
                 onMove={(status) => ctxMoveAndClose(s.id, status)}
                 onHide={() => ctxDelete(s)}
-                onRequestDelete={() => setConfirmingStoryDelete(true)}
-                onCancelDelete={() => setConfirmingStoryDelete(false)}
+                onRequestDelete={() => { setHardDeleteError(null); setConfirmingStoryDelete(true); }}
+                onCancelDelete={() => { setHardDeleteError(null); setConfirmingStoryDelete(false); }}
                 onConfirmDelete={() => void ctxHardDeleteStory(s)}
               />
             );
@@ -1178,6 +1195,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
             return (
               <div
+                role="menu"
                 class="fixed z-[100] min-w-[180px] py-1.5 rounded-xl bg-base-100 border border-base-content/[0.08] shadow-xl shadow-black/20 animate-ctx-menu"
                 style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
                 onClick={(e) => e.stopPropagation()}
@@ -1225,6 +1243,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
             const a = menu().assignment!;
             return (
               <div
+                role="menu"
                 class="fixed z-[100] min-w-[180px] py-1.5 rounded-xl bg-base-100 border border-base-content/[0.08] shadow-xl shadow-black/20 animate-ctx-menu"
                 style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
                 onClick={(e) => e.stopPropagation()}
@@ -1519,6 +1538,8 @@ const StoryContextMenu: Component<{
   busy: string | null;
   statusLabels: Record<StoryStatus, string>;
   confirmingDelete: boolean;
+  canHardDelete: boolean;
+  deleteError: string | null;
   onOpen: () => void;
   onCopyLink: () => void;
   onMove: (status: StoryStatus) => void;
@@ -1600,6 +1621,7 @@ const StoryContextMenu: Component<{
       Ocultar
     </button>
 
+    <Show when={props.canHardDelete}>
     <div class="my-1 border-t border-base-content/[0.06]" />
     <Show
       when={props.confirmingDelete}
@@ -1619,6 +1641,9 @@ const StoryContextMenu: Component<{
       <div class="px-3 py-2">
         <p class="text-[12px] font-semibold text-red-500">¿Eliminar esta HU?</p>
         <p class="mt-1 text-[11px] leading-snug text-base-content/42">Esta acción borra la historia y sus datos asociados.</p>
+        <Show when={props.deleteError}>
+          <p class="mt-1.5 text-[11px] font-medium text-red-500">{props.deleteError}</p>
+        </Show>
         <div class="mt-2 flex items-center justify-end gap-2">
           <button
             type="button"
@@ -1638,6 +1663,7 @@ const StoryContextMenu: Component<{
           </button>
         </div>
       </div>
+    </Show>
     </Show>
   </div>
 );

@@ -417,6 +417,9 @@ wiki.patch('/:id/archive', async (c) => {
 
   const [article] = await db.select().from(schema.wikiArticles).where(eq(schema.wikiArticles.id, id)).limit(1);
   if (!article || article.team_id !== user.teamId) return c.json({ error: 'Not found' }, 404);
+  if (user.role !== 'admin' && article.created_by !== user.userId) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
 
   // Protect _Índice from being archived
   if (article.title === '_Índice') return c.json({ error: 'Cannot archive the index article' }, 400);
@@ -436,6 +439,9 @@ wiki.delete('/:id', async (c) => {
 
   const [article] = await db.select().from(schema.wikiArticles).where(eq(schema.wikiArticles.id, id)).limit(1);
   if (!article || article.team_id !== user.teamId) return c.json({ error: 'Not found' }, 404);
+  if (user.role !== 'admin' && article.created_by !== user.userId) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
 
   // Protect _Índice from being deleted
   if (article.title === '_Índice') return c.json({ error: 'Cannot delete the index article' }, 400);

@@ -45,6 +45,8 @@ export const stories = sqliteTable('stories', {
   created_by: text('created_by').notNull().references(() => users.id),
   due_date: text('due_date'),
   scheduled_date: text('scheduled_date'),
+  start_time: text('start_time'),
+  end_time: text('end_time'),
   completed_at: text('completed_at'),
   is_shared: integer('is_shared', { mode: 'boolean' }).notNull().default(false),
   sort_order: integer('sort_order').notNull().default(0),

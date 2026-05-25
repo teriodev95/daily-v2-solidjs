@@ -2,11 +2,13 @@ import { createSignal, createEffect, on, onMount, onCleanup, For, Show, type Com
 import { onRealtime, onRealtimeStatus } from '../lib/realtime';
 import type { Story, AcceptanceCriteria, User } from '../types';
 import { useData } from '../lib/data';
+import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
   ClipboardCheck, Trash2,
   Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban, Archive, AlertCircle,
+  Clock,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
 import { formatTimeAgo } from '../lib/relativeDate';
@@ -106,17 +108,26 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const StoryDetail: Component<Props> = (props) => {
   const data = useData();
+  const auth = useAuth();
+  // TODO: re-enable hard delete once the silent-failure bug is resolved.
+  const canHardDelete = () => false;
+  void auth;
 
   // Editable fields
   const [title, setTitle] = createSignal(props.story.title);
   const [content, setContent] = createSignal(props.story.description || '');
   const [dueDate, setDueDate] = createSignal(props.story.due_date || '');
+  // Time range: both null = "all day"; both set = scheduled block.
+  // Backend rejects mixed states, so the UI always saves both together.
+  const [startTime, setStartTime] = createSignal<string>(props.story.start_time || '');
+  const [endTime, setEndTime] = createSignal<string>(props.story.end_time || '');
   const [assigneeId, setAssigneeId] = createSignal(props.story.assignee_id || '');
   const [assigneeIds, setAssigneeIds] = createSignal<string[]>([]);
   const [showAssigneePicker, setShowAssigneePicker] = createSignal(false);
   const [estimate, setEstimate] = createSignal(props.story.estimate || 0);
   const [showEstimatePicker, setShowEstimatePicker] = createSignal(false);
   const [showDatePicker, setShowDatePicker] = createSignal(false);
+  const [showTimePicker, setShowTimePicker] = createSignal(false);
   const [projectId, setProjectId] = createSignal(props.story.project_id || '');
   const [showProjectPicker, setShowProjectPicker] = createSignal(false);
   const [priority, setPriority] = createSignal(props.story.priority || 'medium');
@@ -264,6 +275,8 @@ const StoryDetail: Component<Props> = (props) => {
         };
 
         apply('due_date', dueDate(), detail.due_date || '', setDueDate);
+        apply('start_time', startTime(), detail.start_time || '', setStartTime);
+        apply('end_time', endTime(), detail.end_time || '', setEndTime);
         apply('estimate', estimate(), detail.estimate || 0, setEstimate);
         apply('assignee_id', assigneeId(), detail.assignee_id || '', setAssigneeId);
         apply('project_id', projectId(), (detail as any).project_id || '', setProjectId);
@@ -423,6 +436,63 @@ const StoryDetail: Component<Props> = (props) => {
     el.style.height = el.scrollHeight + 'px';
   };
 
+  // Time-range helpers. Both null = "all day"; both set = scheduled block.
+  // A single side is invalid and is never sent to the backend.
+  // `hasSchedule` reflects any time data (defensive for legacy partial state):
+  // the toggle shows "Con horario" and the inputs render so the user can complete it.
+  const hasSchedule = () => !!startTime() || !!endTime();
+  const timeRangeInvalid = () =>
+    !!startTime() && !!endTime() && endTime() <= startTime();
+
+  const saveTimeRange = (start: string | null, end: string | null) => {
+    saveImmediate({ start_time: start, end_time: end });
+  };
+
+  const setAllDay = () => {
+    setStartTime('');
+    setEndTime('');
+    saveTimeRange(null, null);
+  };
+
+  const setScheduled = () => {
+    // Sensible defaults so the inputs aren't empty when the user opts in.
+    const nextStart = startTime() || '09:00';
+    const nextEnd = endTime() || '10:00';
+    setStartTime(nextStart);
+    setEndTime(nextEnd);
+    saveTimeRange(nextStart, nextEnd);
+  };
+
+  const updateStartTime = (value: string) => {
+    setStartTime(value);
+    if (!value || !endTime() || value >= endTime()) return;
+    saveTimeRange(value, endTime());
+  };
+
+  const updateEndTime = (value: string) => {
+    setEndTime(value);
+    if (!value || !startTime() || value <= startTime()) return;
+    saveTimeRange(startTime(), value);
+  };
+
+  // Compact label for the time-range chip in the header.
+  // Same suffix → "9 – 10 a.m."; crossing → "11 a.m. – 1 p.m."
+  const formatTimeChip = (start: string, end: string): string => {
+    const fmt = (hhmm: string): { num: string; sfx: 'a.m.' | 'p.m.' } => {
+      const [hStr, mStr] = hhmm.split(':');
+      const h = Number(hStr);
+      const m = Number(mStr);
+      const sfx = h < 12 ? 'a.m.' : 'p.m.';
+      let h12 = h % 12;
+      if (h12 === 0) h12 = 12;
+      const num = m === 0 ? `${h12}` : `${h12}:${String(m).padStart(2, '0')}`;
+      return { num, sfx };
+    };
+    const s = fmt(start);
+    const e = fmt(end);
+    return s.sfx === e.sfx ? `${s.num}–${e.num} ${s.sfx}` : `${s.num} ${s.sfx}–${e.num} ${e.sfx}`;
+  };
+
   const detailOverlayClass = () => {
     if (props.embedded) return 'h-full min-h-0';
     const base = 'fixed inset-0 bg-black/60 backdrop-blur-md flex items-end justify-center';
@@ -461,15 +531,16 @@ const StoryDetail: Component<Props> = (props) => {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Unified property bar */}
-        <div class="sticky top-0 bg-base-100/80 backdrop-blur-xl z-20 px-4 sm:px-6 py-3 border-b border-base-content/[0.04]">
-          <div class="flex items-center gap-1.5 flex-wrap">
+        <div class="sticky top-0 bg-base-100/80 backdrop-blur-xl z-20 px-4 sm:px-6 py-3.5 border-b border-base-content/[0.04]">
+          <div class="flex items-center gap-y-2 gap-x-1.5">
+            <div class="flex items-center gap-y-2 gap-x-1.5 flex-1 flex-wrap min-w-0 [&>*]:shrink-0 [&_button]:whitespace-nowrap [&_span]:whitespace-nowrap">
 
             {/* Project chip */}
             <div class="relative">
               <button
                 onClick={() => setShowProjectPicker(v => !v)}
                 classList={{ 'animate-remote-pulse': isPulsing('project_id') }}
-                class={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all ${project()
+                class={`flex items-center gap-1.5 text-[11px] font-bold h-7 px-2.5 rounded-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30 ${project()
                   ? 'hover:opacity-80'
                   : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08]'
                 }`}
@@ -520,7 +591,7 @@ const StoryDetail: Component<Props> = (props) => {
               <button
                 onClick={() => setShowStatusPicker(v => !v)}
                 classList={{ 'animate-remote-pulse': isPulsing('status') }}
-                class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-base-content/[0.04] hover:bg-base-content/[0.07] transition-all"
+                class="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-base-content/[0.04] hover:bg-base-content/[0.07] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
               >
                 <span class={`w-2 h-2 rounded-full ${stat().color}`} />
                 <span class="text-[11px] font-semibold text-base-content/60">{stat().label}</span>
@@ -564,7 +635,7 @@ const StoryDetail: Component<Props> = (props) => {
               <button
                 onClick={() => setShowPriorityPicker(v => !v)}
                 classList={{ 'animate-remote-pulse': isPulsing('priority') }}
-                class={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all ${prio().bg} ${prio().color} hover:opacity-80`}
+                class={`flex items-center gap-1 text-[11px] font-semibold h-7 px-2.5 rounded-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30 ${prio().bg} ${prio().color} hover:opacity-80`}
               >
                 {(() => { const PIcon = prio().icon; return <PIcon size={11} strokeWidth={2.5} />; })()}
                 {prio().label}
@@ -602,7 +673,7 @@ const StoryDetail: Component<Props> = (props) => {
                 ref={dateTriggerRef}
                 onClick={() => setShowDatePicker(!showDatePicker())}
                 classList={{ 'animate-remote-pulse': isPulsing('due_date') }}
-                class={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                class={`flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30 ${
                   dueDate()
                     ? 'bg-ios-blue-500/10 text-ios-blue-500 hover:bg-ios-blue-500/15'
                     : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.07]'
@@ -652,12 +723,77 @@ const StoryDetail: Component<Props> = (props) => {
               </Show>
             </div>
 
+            {/* Time chip — sibling of date. Subtle when empty, active when set. */}
+            <div class="relative">
+              <button
+                onClick={() => {
+                  if (!hasSchedule()) setScheduled();
+                  setShowTimePicker(!showTimePicker());
+                }}
+                classList={{ 'animate-remote-pulse': isPulsing('start_time') || isPulsing('end_time') }}
+                aria-label={hasSchedule() ? 'Editar horario' : 'Agregar horario'}
+                class={`flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30 ${
+                  hasSchedule()
+                    ? 'bg-ios-blue-500/10 text-ios-blue-500 hover:bg-ios-blue-500/15'
+                    : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.07]'
+                }`}
+              >
+                <Clock size={11} />
+                <Show when={hasSchedule()} fallback={<span>Hora</span>}>
+                  <span class="tabular-nums">{formatTimeChip(startTime(), endTime())}</span>
+                </Show>
+              </button>
+              <Show when={showTimePicker()}>
+                <div class="fixed inset-0 z-20" onMouseDown={() => setShowTimePicker(false)} />
+                <div
+                  class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-3 backdrop-blur-md min-w-[240px]"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div class="flex items-center gap-2">
+                    <label class="flex-1">
+                      <span class="block text-[10px] font-semibold uppercase tracking-[0.08em] text-base-content/35 mb-1">Inicio</span>
+                      <input
+                        type="time"
+                        value={startTime()}
+                        onInput={(e) => updateStartTime(e.currentTarget.value)}
+                        class="w-full bg-base-100/60 border border-base-content/[0.08] rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-base-content outline-none focus:border-ios-blue-500/40 focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
+                      />
+                    </label>
+                    <span class="text-base-content/30 pt-5 text-[13px] font-medium">—</span>
+                    <label class="flex-1">
+                      <span class="block text-[10px] font-semibold uppercase tracking-[0.08em] text-base-content/35 mb-1">Fin</span>
+                      <input
+                        type="time"
+                        value={endTime()}
+                        onInput={(e) => updateEndTime(e.currentTarget.value)}
+                        class="w-full bg-base-100/60 border border-base-content/[0.08] rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-base-content outline-none focus:border-ios-blue-500/40 focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
+                      />
+                    </label>
+                  </div>
+                  <Show when={timeRangeInvalid()}>
+                    <p class="mt-2 text-[11px] font-medium text-red-500/85">
+                      La hora de fin debe ser posterior al inicio
+                    </p>
+                  </Show>
+                  <Show when={hasSchedule()}>
+                    <button
+                      onClick={() => { setAllDay(); setShowTimePicker(false); }}
+                      class="mt-2 text-[10px] font-bold text-base-content/25 hover:text-red-400 transition-colors uppercase tracking-wider"
+                    >
+                      Quitar horario
+                    </button>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+
             {/* Estimate chip */}
             <div class="relative">
               <button
                 onClick={() => setShowEstimatePicker(!showEstimatePicker())}
                 classList={{ 'animate-remote-pulse': isPulsing('estimate') }}
-                class={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                class={`flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30 ${
                   estimate() > 0
                     ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/15'
                     : 'bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.07]'
@@ -692,34 +828,52 @@ const StoryDetail: Component<Props> = (props) => {
             {/* Separator */}
             <div class="w-px h-4 bg-base-content/[0.06] mx-0.5" />
 
-            {/* Assignee chip */}
-            <Show when={currentAssignee()}>
-              <div
-                classList={{ 'animate-remote-pulse': isPulsing('assignee_id') || isPulsing('assignees') }}
-                class="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-base-content/[0.04]"
+            {/* Assignees — primary + stacked extras + discrete add button */}
+            <Show when={currentAssignee()} fallback={
+              <button
+                onClick={() => setShowAssigneePicker(!showAssigneePicker())}
+                class="flex items-center gap-1 h-7 px-2.5 rounded-lg bg-base-content/[0.04] text-base-content/45 hover:bg-base-content/[0.07] hover:text-base-content/70 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+                title="Asignar"
               >
-                <img src={currentAssignee()!.avatar_url!} alt="" class="w-5 h-5 rounded-full object-cover" title={currentAssignee()!.name} />
-                <span class="text-[11px] font-medium text-base-content/60">{currentAssignee()!.name.split(' ')[0]}</span>
-              </div>
+                <UserPlus size={11} />
+                <span class="text-[11px] font-semibold">Asignar</span>
+              </button>
+            }>
+              <button
+                onClick={() => setShowAssigneePicker(!showAssigneePicker())}
+                classList={{ 'animate-remote-pulse': isPulsing('assignee_id') || isPulsing('assignees') }}
+                class="flex items-center gap-1.5 h-7 pl-1 pr-2 rounded-lg bg-base-content/[0.04] hover:bg-base-content/[0.07] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+                title="Cambiar asignado"
+              >
+                <img src={currentAssignee()!.avatar_url!} alt="" class="w-5 h-5 rounded-full object-cover" />
+                <span class="text-[11px] font-medium text-base-content/70">{currentAssignee()!.name.split(' ')[0]}</span>
+              </button>
             </Show>
 
-            {/* Extra assignees */}
+            {/* Extra assignees — stacked avatars, clickable to open picker */}
             <Show when={extraAssigneeUsers().length > 0}>
-              <div class="flex -space-x-1">
+              <button
+                onClick={() => setShowAssigneePicker(!showAssigneePicker())}
+                class="flex items-center -space-x-1 h-7 px-0.5 rounded-lg hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+                title="Gestionar asignados"
+              >
                 <For each={extraAssigneeUsers()}>
                   {(u) => <img src={u.avatar_url!} alt="" class="w-5 h-5 rounded-full ring-2 ring-base-100 object-cover" title={u.name} />}
                 </For>
-              </div>
+              </button>
             </Show>
 
-            {/* Add assignee */}
-            <button
-              onClick={() => setShowAssigneePicker(!showAssigneePicker())}
-              class="w-6 h-6 rounded-full flex items-center justify-center text-base-content/30 hover:text-ios-blue-500 hover:bg-ios-blue-500/10 transition-all border border-dashed border-base-content/15 hover:border-ios-blue-500/30"
-              title="Asignar"
-            >
-              <UserPlus size={11} />
-            </button>
+            {/* Add another assignee — only when at least one is set */}
+            <Show when={currentAssignee()}>
+              <button
+                onClick={() => setShowAssigneePicker(!showAssigneePicker())}
+                class="flex items-center justify-center h-7 w-7 rounded-lg bg-base-content/[0.04] text-base-content/40 hover:bg-base-content/[0.08] hover:text-base-content/75 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+                title="Agregar asignado"
+                aria-label="Agregar asignado"
+              >
+                <UserPlus size={11} />
+              </button>
+            </Show>
 
             {/* Recurring badge */}
             <Show when={props.story.frequency}>
@@ -729,8 +883,10 @@ const StoryDetail: Component<Props> = (props) => {
               </div>
             </Show>
 
-            {/* Spacer + save + share + close */}
-            <div class="flex items-center gap-1.5 ml-auto">
+            </div>
+
+            {/* Actions — pinned to the right; never wrap, never scroll. */}
+            <div class="flex items-center gap-1.5 shrink-0 pl-1.5">
               <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={3} showEditingPointer />
               <Show when={saveStatus() === 'saved' || saveStatus() === 'error'}>
                 <span class="flex items-center gap-1 transition-opacity">
@@ -931,32 +1087,34 @@ const StoryDetail: Component<Props> = (props) => {
                 </button>
               </div>
             </Show>
-            <Show when={deleteError()}>
-              <p class="text-[13px] text-red-500 font-medium mb-3">{deleteError()}</p>
-            </Show>
-            <Show
-              when={confirming()}
-              fallback={
-                <button
-                  onClick={() => setConfirming(true)}
-                  class="flex items-center gap-2 text-[12px] font-semibold text-base-content/30 hover:text-red-500 hover:bg-red-500/10 px-3 py-1.5 -ml-3 rounded-lg transition-all"
-                >
-                  <Trash2 size={14} />
-                  Eliminar
-                </button>
-              }
-            >
-              <div class="flex items-center gap-3">
-                <span class="text-[12px] font-medium text-red-500">¿Estás seguro de eliminar?</span>
-                <button onClick={() => setConfirming(false)} disabled={deleting()}
-                  class="text-[12px] font-medium px-4 py-2 rounded-xl bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/10 hover:text-base-content transition-all">
-                  Cancelar
-                </button>
-                <button onClick={handleDelete} disabled={deleting()}
-                  class="text-[12px] font-medium px-4 py-2 rounded-xl bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-all disabled:opacity-50">
-                  {deleting() ? 'Eliminando...' : 'Sí, eliminar'}
-                </button>
-              </div>
+            <Show when={canHardDelete()}>
+              <Show when={deleteError()}>
+                <p class="text-[13px] text-red-500 font-medium mb-3">{deleteError()}</p>
+              </Show>
+              <Show
+                when={confirming()}
+                fallback={
+                  <button
+                    onClick={() => setConfirming(true)}
+                    class="flex items-center gap-2 text-[12px] font-semibold text-base-content/30 hover:text-red-500 hover:bg-red-500/10 px-3 py-1.5 -ml-3 rounded-lg transition-all"
+                  >
+                    <Trash2 size={14} />
+                    Eliminar
+                  </button>
+                }
+              >
+                <div class="flex items-center gap-3">
+                  <span class="text-[12px] font-medium text-red-500">¿Estás seguro de eliminar?</span>
+                  <button onClick={() => setConfirming(false)} disabled={deleting()}
+                    class="text-[12px] font-medium px-4 py-2 rounded-xl bg-base-content/[0.04] text-base-content/60 hover:bg-base-content/10 hover:text-base-content transition-all">
+                    Cancelar
+                  </button>
+                  <button onClick={handleDelete} disabled={deleting()}
+                    class="text-[12px] font-medium px-4 py-2 rounded-xl bg-red-500/15 text-red-500 hover:bg-red-500/25 transition-all disabled:opacity-50">
+                    {deleting() ? 'Eliminando...' : 'Sí, eliminar'}
+                  </button>
+                </div>
+              </Show>
             </Show>
           </div>
 

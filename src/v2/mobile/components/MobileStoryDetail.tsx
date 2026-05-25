@@ -10,6 +10,7 @@ import {
   CheckCircle,
   Circle,
   ClipboardCheck,
+  Clock,
   FolderKanban,
   Loader2,
   RefreshCw,
@@ -63,10 +64,16 @@ const statusOptions = [
 const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
   const auth = useAuth();
   const data = useData();
+  // TODO: re-enable hard delete once the silent-failure bug is resolved.
+  const canHardDelete = () => false;
 
   const [title, setTitle] = createSignal(props.story.title);
   const [content, setContent] = createSignal(props.story.description || '');
   const [dueDate, setDueDate] = createSignal(props.story.due_date || '');
+  // Time range: both null = "all day"; both set = scheduled block.
+  // Backend rejects mixed states, so the UI always saves both together.
+  const [startTime, setStartTime] = createSignal<string>(props.story.start_time || '');
+  const [endTime, setEndTime] = createSignal<string>(props.story.end_time || '');
   const [status, setStatus] = createSignal(props.story.status);
   const [projectId, setProjectId] = createSignal(props.story.project_id || '');
   const [assigneeId, setAssigneeId] = createSignal(props.story.assignee_id || '');
@@ -187,6 +194,8 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
         };
 
         apply('due_date', dueDate(), detail.due_date || '', setDueDate);
+        apply('start_time', startTime(), detail.start_time || '', setStartTime);
+        apply('end_time', endTime(), detail.end_time || '', setEndTime);
         apply('status', status(), detail.status, setStatus);
         apply('estimate', estimate(), detail.estimate || 0, setEstimate);
         apply('assignee_id', assigneeId(), detail.assignee_id || '', setAssigneeId);
@@ -366,6 +375,44 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
       status: nextStatus,
       completed_at: nextStatus === 'done' ? new Date().toISOString() : null,
     });
+  };
+
+  // Time-range helpers. Both null = "all day"; both set = scheduled block.
+  // A single side is invalid and is never sent to the backend.
+  // `hasSchedule` reflects any time data (defensive for legacy partial state):
+  // the toggle shows "Con horario" and the inputs render so the user can complete it.
+  const hasSchedule = () => !!startTime() || !!endTime();
+  const timeRangeInvalid = () =>
+    !!startTime() && !!endTime() && endTime() <= startTime();
+
+  const saveTimeRange = (start: string | null, end: string | null) => {
+    saveImmediate({ start_time: start, end_time: end });
+  };
+
+  const setAllDay = () => {
+    setStartTime('');
+    setEndTime('');
+    saveTimeRange(null, null);
+  };
+
+  const setScheduled = () => {
+    const nextStart = startTime() || '09:00';
+    const nextEnd = endTime() || '10:00';
+    setStartTime(nextStart);
+    setEndTime(nextEnd);
+    saveTimeRange(nextStart, nextEnd);
+  };
+
+  const updateStartTime = (value: string) => {
+    setStartTime(value);
+    if (!value || !endTime() || value >= endTime()) return;
+    saveTimeRange(value, endTime());
+  };
+
+  const updateEndTime = (value: string) => {
+    setEndTime(value);
+    if (!value || !startTime() || value <= startTime()) return;
+    saveTimeRange(startTime(), value);
   };
 
   return (
@@ -559,6 +606,55 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                   saveImmediate({ due_date: event.currentTarget.value });
                 }}
               />
+              {/* Time row — sibling of date inside the same section for compactness */}
+              <div
+                classList={{ 'animate-remote-pulse': isPulsing('start_time') || isPulsing('end_time') }}
+                class="pt-2 border-t border-base-content/[0.05]"
+              >
+                <Show
+                  when={hasSchedule()}
+                  fallback={
+                    <button
+                      type="button"
+                      onClick={setScheduled}
+                      class="flex items-center gap-1.5 text-[12px] font-medium text-base-content/45 active:text-base-content/80 transition-colors"
+                    >
+                      <Clock size={12} />
+                      <span>+ Agregar hora</span>
+                    </button>
+                  }
+                >
+                  <div class="flex items-center gap-2">
+                    <Clock size={12} class="text-base-content/45 shrink-0" />
+                    <input
+                      type="time"
+                      value={startTime()}
+                      onInput={(e) => updateStartTime(e.currentTarget.value)}
+                      class="flex-1 min-w-0 bg-base-100/60 border border-base-content/[0.08] rounded-lg px-2 py-1.5 text-[13px] font-medium text-base-content outline-none focus:border-ios-blue-500/40 focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
+                    />
+                    <span class="text-base-content/30 text-[12px] font-medium">—</span>
+                    <input
+                      type="time"
+                      value={endTime()}
+                      onInput={(e) => updateEndTime(e.currentTarget.value)}
+                      class="flex-1 min-w-0 bg-base-100/60 border border-base-content/[0.08] rounded-lg px-2 py-1.5 text-[13px] font-medium text-base-content outline-none focus:border-ios-blue-500/40 focus:ring-1 focus:ring-ios-blue-500/20 transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={setAllDay}
+                      aria-label="Quitar horario"
+                      class="text-base-content/35 active:text-base-content/80 transition-colors p-1 -m-1 rounded shrink-0"
+                    >
+                      <X size={14} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                  <Show when={timeRangeInvalid()}>
+                    <p class="mt-1.5 text-[11px] font-medium text-red-500/85">
+                      La hora de fin debe ser posterior al inicio
+                    </p>
+                  </Show>
+                </Show>
+              </div>
             </section>
 
             <section class="space-y-3 rounded-[28px] border border-base-content/[0.07] bg-base-content/[0.03] p-4">
@@ -816,40 +912,42 @@ const MobileStoryDetail: Component<MobileStoryDetailProps> = (props) => {
                 </button>
               </Show>
 
-              <Show when={deleteError()}>
-                <p class="text-[12px] font-medium text-red-500">{deleteError()}</p>
-              </Show>
+              <Show when={canHardDelete()}>
+                <Show when={deleteError()}>
+                  <p class="text-[12px] font-medium text-red-500">{deleteError()}</p>
+                </Show>
 
-              <Show
-                when={confirming()}
-                fallback={
-                  <button
-                    onClick={() => setConfirming(true)}
-                    class="flex items-center gap-2 text-[12px] font-semibold text-red-400"
-                  >
-                    <Trash2 size={14} />
-                    Eliminar tarea
-                  </button>
-                }
-              >
-                <div class="rounded-2xl border border-red-500/20 bg-red-500/8 p-4">
-                  <p class="text-[13px] font-semibold text-red-400">¿Eliminar definitivamente?</p>
-                  <div class="mt-3 grid grid-cols-2 gap-2">
+                <Show
+                  when={confirming()}
+                  fallback={
                     <button
-                      onClick={() => setConfirming(false)}
-                      class="rounded-2xl bg-base-content/[0.06] px-4 py-3 text-[12px] font-semibold text-base-content/65"
+                      onClick={() => setConfirming(true)}
+                      class="flex items-center gap-2 text-[12px] font-semibold text-red-400"
                     >
-                      Cancelar
+                      <Trash2 size={14} />
+                      Eliminar tarea
                     </button>
-                    <button
-                      onClick={handleDelete}
-                      disabled={deleting()}
-                      class="rounded-2xl bg-red-500 px-4 py-3 text-[12px] font-semibold text-white disabled:opacity-50"
-                    >
-                      {deleting() ? 'Eliminando...' : 'Sí, eliminar'}
-                    </button>
+                  }
+                >
+                  <div class="rounded-2xl border border-red-500/20 bg-red-500/8 p-4">
+                    <p class="text-[13px] font-semibold text-red-400">¿Eliminar definitivamente?</p>
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setConfirming(false)}
+                        class="rounded-2xl bg-base-content/[0.06] px-4 py-3 text-[12px] font-semibold text-base-content/65"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleDelete}
+                        disabled={deleting()}
+                        class="rounded-2xl bg-red-500 px-4 py-3 text-[12px] font-semibold text-white disabled:opacity-50"
+                      >
+                        {deleting() ? 'Eliminando...' : 'Sí, eliminar'}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                </Show>
               </Show>
             </section>
           </div>

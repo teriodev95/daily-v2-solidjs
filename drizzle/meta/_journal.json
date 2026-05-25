@@ -36,6 +36,13 @@
       "when": 1777800000000,
       "tag": "0015_add_story_doc_updates",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1779000000000,
+      "tag": "0018_add_story_times",
+      "breakpoints": true
     }
   ]
 }

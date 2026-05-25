@@ -53,6 +53,10 @@ export interface Story {
   created_by: string;
   due_date: string | null;
   scheduled_date: string | null;
+  // Optional time-block ("HH:mm"). Both null = all-day; both present = timed
+  // block. The server rejects sending only one side (400). end > start.
+  start_time: string | null;
+  end_time: string | null;
   completed_at: string | null;
   is_shared: boolean;
   sort_order: number;

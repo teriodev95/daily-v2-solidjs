@@ -3,6 +3,7 @@ import { useOnceReady } from '../lib/onceReady';
 import type { WikiArticle } from '../types';
 import { api } from '../lib/api';
 import { useData } from '../lib/data';
+import { useAuth } from '../lib/auth';
 import { BookOpen, Plus, Search, X, Network, Settings, Archive, Trash2, Hash, Ghost, FileText, ChevronRight, Activity, ArrowRight, Loader2 } from 'lucide-solid';
 import WikiArticleDetail from '../components/WikiArticleDetail';
 import WikiGraph from '../components/WikiGraph';
@@ -20,7 +21,14 @@ const hashCode = (s: string) => s.split('').reduce((a, b) => { a = ((a << 5) - a
 
 const WikiPage: Component<Props> = (props) => {
   const data = useData();
+  const auth = useAuth();
   const [isPending, startTransition] = useTransition();
+
+  const canManageArticle = (article: WikiArticle) => {
+    const u = auth.user();
+    if (!u) return false;
+    return u.role === 'admin' || article.created_by === u.id;
+  };
 
   const activeProjects = () => data.projects().filter(p => p.status === 'active');
   const [selectedProjectId, setSelectedProjectId] = createSignal<string>(activeProjects()[0]?.id ?? '');
@@ -364,6 +372,7 @@ const WikiPage: Component<Props> = (props) => {
                         onClick={() => setSelectedArticle(article)}
                         onContextMenu={(e) => {
                           if (isIndex()) return;
+                          if (!canManageArticle(article)) return;
                           e.preventDefault();
                           setConfirmDeleteId(null);
                           setContextMenu({ id: article.id, x: e.clientX, y: e.clientY });
@@ -483,13 +492,7 @@ const WikiPage: Component<Props> = (props) => {
             >
               <Archive size={14} /> Archivar
             </button>
-            <div class="h-px w-full bg-base-content/[0.06] my-1" />
-            <button
-              onClick={() => { setContextMenu(null); setConfirmDeleteId(menu().id); }}
-              class="w-full text-left px-3.5 py-2 text-[12px] font-medium text-red-500/80 hover:bg-red-500/[0.06] hover:text-red-600 transition-colors flex items-center gap-2.5"
-            >
-              <Trash2 size={14} /> Eliminar
-            </button>
+            {/* TODO: re-enable hard delete once the silent-failure bug is resolved. */}
           </div>
         )}
       </Show>
