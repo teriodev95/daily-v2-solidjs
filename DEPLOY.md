@@ -53,6 +53,11 @@ npx wrangler secret put TOKEN_ENCRYPTION_KEY
 npx wrangler secret put DEEPSEEK_API_KEY
 npx wrangler secret put API_KEY
 
+# Vault de secretos (módulo "Secretos"). 64 hex chars (32 bytes) para AES-256-GCM.
+# Genera un valor fresco e independiente de TOKEN_ENCRYPTION_KEY:
+#   openssl rand -hex 32
+npx wrangler secret put SECRETS_ENCRYPTION_KEY
+
 # Realtime
 npx wrangler secret put CENTRIFUGO_API_URL    # https://centrifugo-api.terio.dev/api
 npx wrangler secret put CENTRIFUGO_API_KEY    # ver wiki "Centrifugo production realtime"
@@ -62,6 +67,11 @@ Verificar:
 ```bash
 npx wrangler secret list
 ```
+
+> **Módulo Secretos**: además de setear `SECRETS_ENCRYPTION_KEY`, aplica la migración nueva en remoto antes de usar el módulo:
+> ```bash
+> npx wrangler d1 migrations apply daily-check-db --remote   # incluye 0019_add_secrets
+> ```
 
 **Archivos clave:**
 - `worker/index.ts` — rutas y middleware

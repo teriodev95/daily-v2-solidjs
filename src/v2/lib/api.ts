@@ -128,6 +128,36 @@ export interface CreateTokenInput {
   expires_in_days?: number | null;
 }
 
+// ─── Secrets (internal vault) ─────────────────────
+
+export interface SecretMeta {
+  id: string;
+  team_id: string;
+  project_id: string | null;
+  name: string;
+  key: string;
+  environment: string | null;
+  tags: string[];
+  created_by: string;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+  revoked_at: string | null;
+  last_event: { event_type: string; created_at: string } | null;
+}
+
+export interface SecretAuditEvent {
+  id: number;
+  secret_id: string;
+  event_type: string;
+  actor_type: string;
+  actor_user_id: string | null;
+  actor_token_id: string | null;
+  project_id: string | null;
+  metadata: string;
+  created_at: string;
+}
+
 // ─── Share Tokens (per-story URL share for agents) ───
 
 export interface ShareTokenResponse {
@@ -359,6 +389,29 @@ export const api = {
     reveal: (id: string) => request<{ token: string }>(`/api/tokens/${id}/reveal`),
     revoke: (id: string) =>
       request<{ ok: boolean }>(`/api/tokens/${id}`, { method: 'DELETE' }),
+  },
+
+  secrets: {
+    list: (params?: { project_id?: string; environment?: string; tag?: string; q?: string }) => {
+      const qs = new URLSearchParams();
+      if (params) {
+        for (const [k, v] of Object.entries(params)) {
+          if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+        }
+      }
+      const s = qs.toString();
+      return request<SecretMeta[]>(`/api/secrets${s ? `?${s}` : ''}`);
+    },
+    create: (data: { name: string; key: string; value: string; project_id?: string | null; environment?: string | null; tags?: string[] }) =>
+      request<SecretMeta>('/api/secrets', { method: 'POST', body: JSON.stringify(data) }),
+    get: (id: string) => request<SecretMeta>(`/api/secrets/${id}`),
+    update: (id: string, data: Partial<{ name: string; key: string; value: string; project_id: string | null; environment: string | null; tags: string[] }>) =>
+      request<SecretMeta>(`/api/secrets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    remove: (id: string) =>
+      request<{ ok: boolean }>(`/api/secrets/${id}`, { method: 'DELETE' }),
+    reveal: (id: string) =>
+      request<{ value: string }>(`/api/secrets/${id}/reveal`, { method: 'POST' }),
+    audit: (id: string) => request<SecretAuditEvent[]>(`/api/secrets/${id}/audit`),
   },
 
   presence: {

@@ -28,6 +28,7 @@ const VALID_MODULES = [
   'calendar',
   'learnings',
   'goals',
+  'secrets',
 ] as const;
 
 type ModuleName = (typeof VALID_MODULES)[number];

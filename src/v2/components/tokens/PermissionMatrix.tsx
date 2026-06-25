@@ -11,6 +11,7 @@ export const MODULES: { key: string; label: string }[] = [
   { key: 'calendar', label: 'Calendario' },
   { key: 'learnings', label: 'Aprendizajes' },
   { key: 'goals', label: 'Metas' },
+  { key: 'secrets', label: 'Secretos' },
 ];
 
 export const SCOPE_OPTIONS: { value: TokenScope; label: string }[] = [

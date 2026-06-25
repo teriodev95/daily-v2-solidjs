@@ -4,7 +4,7 @@ import { cors } from 'hono/cors';
 import { drizzle } from 'drizzle-orm/d1';
 import type { Env, Variables } from './types';
 import * as dbSchema from './db/schema';
-import { authMiddleware } from './middleware/auth';
+import { authMiddleware, requireAdmin } from './middleware/auth';
 import { tokenAuthMiddleware, agentRateLimitMiddleware } from './middleware/tokenAuth';
 import agentRoutes from './routes/agent';
 import authRoutes from './routes/auth';
@@ -20,6 +20,7 @@ import completionsRoutes from './routes/completions';
 import learningsRoutes from './routes/learnings';
 import wikiRoutes from './routes/wiki';
 import tokensRoutes from './routes/tokens';
+import secretsRoutes from './routes/secrets';
 import presenceRoutes from './routes/presence';
 import { wikiAgentRoutes } from './features/wikiShare';
 import seedRoutes from './db/seed';
@@ -155,6 +156,23 @@ app.use('/api/wiki/*', tokenAuthMiddleware);
 app.use('/api/wiki/*', authMiddleware);
 app.use('/api/wiki/*', enforceScope('wiki'));
 
+// Secrets vault: admin-only + dedicated `secrets` scope. The legacy global
+// API_KEY (a non-`dk_` Bearer token) is explicitly forbidden here — secrets
+// must be accessed via a real user session (cookie, no Authorization header)
+// or a scoped PAT (`Bearer dk_*`). This blocks the broad always-admin API_KEY
+// from ever reaching the vault.
+app.use('/api/secrets/*', async (c, next) => {
+  const authHeader = c.req.header('Authorization') ?? '';
+  if (authHeader.startsWith('Bearer ') && !authHeader.slice('Bearer '.length).startsWith('dk_')) {
+    return c.json({ error: 'global_api_key_forbidden_for_secrets' }, 403);
+  }
+  return next();
+});
+app.use('/api/secrets/*', tokenAuthMiddleware);
+app.use('/api/secrets/*', authMiddleware);
+app.use('/api/secrets/*', requireAdmin);
+app.use('/api/secrets/*', enforceScope('secrets'));
+
 // Token management itself: only accessible via session auth — this is
 // a user-level operation (and MUST prevent PATs from minting more PATs,
 // revealing other PATs, or revoking them). We explicitly do NOT wire
@@ -182,6 +200,22 @@ app.use('/api/presence/*', authMiddleware);
 
 // Meta endpoint — discovery for agents
 app.get('/api/meta', async (c) => {
+  // Token-scoped capabilities. /api/meta runs tokenAuthMiddleware, so when a PAT
+  // authenticates, `scopes` is populated. We surface the secrets capability
+  // (canonical source of truth for the frontend) only when the token actually
+  // holds a secrets scope of 'read' or 'write'.
+  const scopes = c.get('scopes') ?? {};
+  const secretsScope = scopes['secrets'];
+  const capabilities: Record<string, unknown> = {};
+  if (secretsScope === 'read' || secretsScope === 'write') {
+    capabilities.secrets = {
+      granted: secretsScope,
+      metadata: 'GET /api/secrets',
+      reveal: 'POST /api/secrets/:id/reveal',
+      audit: 'GET /api/secrets/:id/audit',
+    };
+  }
+
   return c.json({
     priorities: ['low', 'medium', 'high', 'critical'],
     statuses: ['backlog', 'todo', 'in_progress', 'done'],
@@ -194,6 +228,7 @@ app.get('/api/meta', async (c) => {
       attachments: { list: 'GET /api/attachments/story/:storyId', upload: 'POST /api/attachments/story/:storyId', download: 'GET /api/attachments/file/:id', delete: 'DELETE /api/attachments/:id' },
       learnings: { list: 'GET /api/learnings', create: 'POST /api/learnings', get: 'GET /api/learnings/:id', update: 'PATCH /api/learnings/:id', delete: 'DELETE /api/learnings/:id' },
       wiki: { list: 'GET /api/wiki?project_id=X', search: 'GET /api/wiki/search?q=X', graph: 'GET /api/wiki/graph?project_id=X', create: 'POST /api/wiki', get: 'GET /api/wiki/:id', update: 'PATCH /api/wiki/:id', delete: 'DELETE /api/wiki/:id' },
+      secrets: { list: 'GET /api/secrets', create: 'POST /api/secrets', get: 'GET /api/secrets/:id', update: 'PATCH /api/secrets/:id', delete: 'DELETE /api/secrets/:id', reveal: 'POST /api/secrets/:id/reveal', audit: 'GET /api/secrets/:id/audit' },
       agent: {
         manifest: 'GET /agent/story/:id',
         description: 'GET /agent/story/:id/description',
@@ -215,6 +250,7 @@ app.get('/api/meta', async (c) => {
       },
       meta: { get: 'GET /api/meta' },
     },
+    capabilities,
   });
 });
 
@@ -231,6 +267,7 @@ app.route('/api/completions', completionsRoutes);
 app.route('/api/learnings', learningsRoutes);
 app.route('/api/wiki', wikiRoutes);
 app.route('/api/tokens', tokensRoutes);
+app.route('/api/secrets', secretsRoutes);
 app.route('/api/presence', presenceRoutes);
 
 // ---------- Agent API ----------

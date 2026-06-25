@@ -1,7 +1,7 @@
 import { createEffect, createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
 import { connectRealtime, disconnectRealtime, setRealtimeActor } from './lib/realtime';
 import { setActiveTab as setSharedActiveTab } from './lib/activeTab';
-import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays, ListChecks, Archive, BookOpen } from 'lucide-solid';
+import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays, ListChecks, Archive, BookOpen, Lock } from 'lucide-solid';
 import dailyIcon from '../assets/daily-icon.png';
 import type { ReportCategory, Story } from './types';
 import { AuthProvider, useAuth } from './lib/auth';
@@ -14,6 +14,7 @@ import AdminPage from './pages/AdminPage';
 import TasksPage from './pages/TasksPage';
 import WikiPage from './pages/WikiPage';
 import TokensPage from './pages/TokensPage';
+import SecretsPage from './pages/SecretsPage';
 import CreateStoryModal from './components/CreateStoryModal';
 import SearchModal from './components/SearchModal';
 import CalendarPage from './pages/CalendarPage';
@@ -29,7 +30,7 @@ import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
 import { interactionMotion } from './lib/interactionMotion';
 
-type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar' | 'tokens';
+type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar' | 'tokens' | 'secrets';
 
 const AppShell: Component = () => {
   const auth = useAuth();
@@ -115,6 +116,7 @@ const AppShell: Component = () => {
     const t = [...baseTabs];
     if (user()?.role === 'admin') {
       t.push({ id: 'admin', label: 'Admin', icon: Settings, key: 'A' });
+      t.push({ id: 'secrets', label: 'Secretos', icon: Lock, key: 'S' });
     }
     return t;
   };
@@ -127,6 +129,7 @@ const AppShell: Component = () => {
     ];
     if (user()?.role === 'admin') {
       t.push({ id: 'admin', label: 'Admin', icon: Settings, key: 'A' });
+      t.push({ id: 'secrets', label: 'Secretos', icon: Lock, key: 'S' });
     }
     return t;
   };
@@ -156,6 +159,7 @@ const AppShell: Component = () => {
         case 'e': e.preventDefault(); switchTab('team'); break;
         case 'p': e.preventDefault(); switchTab('projects'); break;
         case 'a': if (user()?.role === 'admin') { e.preventDefault(); switchTab('admin'); } break;
+        case 's': if (user()?.role === 'admin') { e.preventDefault(); switchTab('secrets'); } break;
         case 't': e.preventDefault(); triggerShare(); break;
         case 'w': e.preventDefault(); switchTab('wiki'); break;
         case 'c': e.preventDefault(); switchTab('calendar'); break;
@@ -225,6 +229,11 @@ const AppShell: Component = () => {
         <div class={activeTab() === 'tokens' ? 'stagger-in' : ''} style={{ display: activeTab() === 'tokens' ? undefined : 'none' }}>
           <TokensPage />
         </div>
+        <Show when={user()?.role === 'admin'}>
+          <div class={activeTab() === 'secrets' ? 'stagger-in' : ''} style={{ display: activeTab() === 'secrets' ? undefined : 'none' }}>
+            <SecretsPage />
+          </div>
+        </Show>
       </main>
 
       {/* =========================================

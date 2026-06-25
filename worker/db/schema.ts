@@ -216,6 +216,43 @@ export const storyDocUpdates = sqliteTable('story_doc_updates', {
   created_at: text('created_at').notNull(),
 });
 
+// Internal encrypted vault. Each secret stores its value AES-256-GCM-encrypted
+// (see lib/aesGcm.ts); the plaintext is only ever returned by the reveal
+// endpoint and never logged. Team-scoped, optionally pinned to a project.
+// Deletion is soft (revoked_at) so the audit trail stays intact.
+export const secrets = sqliteTable('secrets', {
+  id: text('id').primaryKey(),
+  team_id: text('team_id').notNull().references(() => teams.id),
+  project_id: text('project_id').references(() => projects.id),
+  name: text('name').notNull(),
+  key: text('key').notNull(),
+  encrypted_value: text('encrypted_value').notNull(),
+  environment: text('environment'),
+  tags: text('tags').notNull().default('[]'),
+  created_by: text('created_by').notNull().references(() => users.id),
+  updated_by: text('updated_by').references(() => users.id),
+  created_at: text('created_at').notNull(),
+  updated_at: text('updated_at').notNull(),
+  revoked_at: text('revoked_at'),
+});
+
+// Append-only audit log for the secrets vault. One row per meaningful action
+// (created, updated, revealed, deleted, ...). Never stores the secret value —
+// only metadata about who did what and when. `actor_type` records the auth
+// channel: 'session' (cookie), 'pat' (Bearer dk_*) or 'system'.
+export const secretAuditEvents = sqliteTable('secret_audit_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  secret_id: text('secret_id').notNull().references(() => secrets.id),
+  team_id: text('team_id').notNull(),
+  project_id: text('project_id'),
+  actor_user_id: text('actor_user_id'),
+  actor_token_id: text('actor_token_id'),
+  actor_type: text('actor_type').notNull(), // 'session' | 'pat' | 'system'
+  event_type: text('event_type').notNull(),
+  metadata: text('metadata').notNull().default('{}'),
+  created_at: text('created_at').notNull(),
+});
+
 // Re-export wiki share tokens table from its feature folder so Drizzle's
 // schema introspection (drizzle-kit + the typed `AppDb`) picks it up.
 // The feature module imports `projects` and `users` from this file — that's

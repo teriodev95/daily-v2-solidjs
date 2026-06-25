@@ -48,6 +48,11 @@ const AgentBootstrapModal: Component<Props> = (props) => {
     return list.find((t) => t.id === id) ?? list[0];
   });
 
+  // Whether the selected token can reach the Secrets vault, and at what level.
+  const secretsScope = createMemo<'none' | 'read' | 'write'>(
+    () => chosenToken()?.scopes?.secrets ?? 'none',
+  );
+
   const [rawToken] = createResource(chosenToken, async (t) => {
     if (!t) return null;
     const res = await api.tokens.reveal(t.id);
@@ -257,6 +262,10 @@ const AgentBootstrapModal: Component<Props> = (props) => {
                 <AlertTriangle size={13} class="text-amber-500 shrink-0 mt-px" />
                 <p class="text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed flex-1">
                   Contiene tu token. Trátalo como una contraseña.{' '}
+                  <Show when={secretsScope() !== 'none'}>
+                    Como este token tiene el scope <code class="font-mono bg-amber-500/10 px-1 py-px rounded">secrets</code>, el agente podrá listar la metadata de tus secretos
+                    <Show when={secretsScope() === 'write'}> y revelar sus valores</Show>.{' '}
+                  </Show>
                   <button
                     onClick={openTokens}
                     class="underline underline-offset-2 hover:text-amber-500 font-medium"

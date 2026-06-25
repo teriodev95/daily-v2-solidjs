@@ -33,3 +33,6 @@ simple = { limit = 60, period = 60 }
 #   TOKEN_ENCRYPTION_KEY  # 64 hex chars (32 bytes) for AES-256-GCM PAT encryption.
 #                         # Set with: wrangler secret put TOKEN_ENCRYPTION_KEY
 #                         # For local dev, use .dev.vars.
+#   SECRETS_ENCRYPTION_KEY  # 64 hex chars (32 bytes) for AES-256-GCM secrets-vault encryption.
+#                           # Set with: wrangler secret put SECRETS_ENCRYPTION_KEY
+#                           # For local dev, use .dev.vars.

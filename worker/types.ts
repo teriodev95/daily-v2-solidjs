@@ -10,6 +10,7 @@ export interface Env {
   DEEPSEEK_API_KEY: string;
   AI: Ai;
   TOKEN_ENCRYPTION_KEY: string;
+  SECRETS_ENCRYPTION_KEY: string;
   // Centrifugo realtime publisher. Secrets; see wiki "Centrifugo production realtime".
   CENTRIFUGO_API_URL?: string;
   CENTRIFUGO_API_KEY?: string;

@@ -6,14 +6,18 @@
  * - Storage uses SHA-256 hash for lookup and AES-256-GCM for reversible encryption.
  * - A fresh 12-byte IV is generated per encryption via crypto.getRandomValues.
  * - The symmetric key must be provided via env (TOKEN_ENCRYPTION_KEY), never hardcoded.
+ *
+ * The AES-256-GCM primitive lives in lib/aesGcm.ts; encryptToken/decryptToken
+ * are thin wrappers so the on-disk format stays shared (and byte-identical)
+ * with the secrets vault.
  */
+
+import { encryptString, decryptString, bufToHex } from './aesGcm';
 
 const TOKEN_PREFIX = 'dk_live_';
 const RAW_TOKEN_BODY_LEN = 32;
 const TOKEN_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-const IV_BYTES = 12; // 96-bit IV for AES-GCM
-const KEY_BYTES = 32; // 256-bit key
 
 /**
  * Generates a raw PAT: "dk_live_<32 random alphanumeric chars>".
@@ -53,24 +57,11 @@ export async function hashToken(raw: string): Promise<string> {
 
 /**
  * Encrypts the raw token with AES-256-GCM using the key from env.
- * Returns base64(IV || ciphertext || authTag). The Web Crypto API appends
- * the 16-byte auth tag to the ciphertext automatically, so the stored
- * payload is [12-byte IV][ciphertext+tag].
+ * Returns base64(IV || ciphertext+tag). Delegates to the shared aesGcm
+ * primitive; the on-disk format is unchanged.
  */
 export async function encryptToken(raw: string, keyHex: string): Promise<string> {
-  const key = await importAesKey(keyHex, ['encrypt']);
-  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
-  const plaintext = new TextEncoder().encode(raw);
-  const cipherBuf = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: iv as BufferSource },
-    key,
-    plaintext as BufferSource,
-  );
-  const cipher = new Uint8Array(cipherBuf);
-  const combined = new Uint8Array(iv.length + cipher.length);
-  combined.set(iv, 0);
-  combined.set(cipher, iv.length);
-  return bytesToBase64(combined);
+  return encryptString(raw, keyHex);
 }
 
 /**
@@ -78,19 +69,7 @@ export async function encryptToken(raw: string, keyHex: string): Promise<string>
  * Throws if the payload is malformed or the auth tag does not verify.
  */
 export async function decryptToken(encrypted: string, keyHex: string): Promise<string> {
-  const combined = base64ToBytes(encrypted);
-  if (combined.length <= IV_BYTES) {
-    throw new Error('Invalid encrypted token payload');
-  }
-  const iv = combined.slice(0, IV_BYTES);
-  const cipher = combined.slice(IV_BYTES);
-  const key = await importAesKey(keyHex, ['decrypt']);
-  const plainBuf = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: iv as BufferSource },
-    key,
-    cipher as BufferSource,
-  );
-  return new TextDecoder().decode(plainBuf);
+  return decryptString(encrypted, keyHex);
 }
 
 /**
@@ -142,60 +121,4 @@ export function generateShareToken(): string {
  */
 export function shareTokenPrefix(raw: string): string {
   return raw.slice(0, 11);
-}
-
-// ---------- internals ----------
-
-async function importAesKey(keyHex: string, usages: KeyUsage[]): Promise<CryptoKey> {
-  const keyBytes = hexToBytes(keyHex);
-  if (keyBytes.length !== KEY_BYTES) {
-    throw new Error(
-      `TOKEN_ENCRYPTION_KEY must be ${KEY_BYTES * 2} hex chars (${KEY_BYTES} bytes); got ${keyBytes.length} bytes`,
-    );
-  }
-  return crypto.subtle.importKey(
-    'raw',
-    keyBytes as BufferSource,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    usages,
-  );
-}
-
-function bufToHex(buf: Uint8Array): string {
-  let out = '';
-  for (let i = 0; i < buf.length; i++) {
-    out += buf[i].toString(16).padStart(2, '0');
-  }
-  return out;
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  if (hex.length % 2 !== 0) {
-    throw new Error('Hex string must have even length');
-  }
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    const n = parseInt(hex.substring(i, i + 2), 16);
-    if (Number.isNaN(n)) throw new Error('Invalid hex string');
-    bytes[i / 2] = n;
-  }
-  return bytes;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
 }
