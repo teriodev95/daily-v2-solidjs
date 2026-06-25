@@ -9,6 +9,7 @@ import {
 import { Sparkles, X, Copy, Check, Key, AlertTriangle, ChevronDown } from 'lucide-solid';
 import { api, API_BASE, type Token } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { MODULES } from './tokens/PermissionMatrix';
 
 interface Props {
   onClose: () => void;
@@ -32,7 +33,7 @@ const AgentBootstrapModal: Component<Props> = (props) => {
   const auth = useAuth();
   const user = () => auth.user();
 
-  const [tokens] = createResource(() => api.tokens.list());
+  const [tokens, { refetch: refetchTokens }] = createResource(() => api.tokens.list());
   const activeTokens = (): Token[] =>
     (tokens() ?? []).filter(
       (t) => !t.revoked_at && (!t.expires_at || new Date(t.expires_at).getTime() > Date.now()),
@@ -113,6 +114,29 @@ const AgentBootstrapModal: Component<Props> = (props) => {
     props.onClose();
   };
 
+  // One-click "Agent Master": mint a token with write on every module (incl.
+  // `alma`) so the entry point can read/write the user's memory out of the box,
+  // then select it. The user empowering their own agent via the entry point.
+  const [creating, setCreating] = createSignal(false);
+  const [createError, setCreateError] = createSignal('');
+  const createAgentToken = async () => {
+    if (creating()) return;
+    setCreating(true);
+    setCreateError('');
+    try {
+      const scopes: Record<string, 'write'> = {};
+      for (const m of MODULES) scopes[m.key] = 'write';
+      const created = await api.tokens.create({ name: `Agente — ${todayISO()}`, scopes });
+      await refetchTokens();
+      setSelectedId(created.id);
+      setPicker(false);
+    } catch (e: any) {
+      setCreateError(e?.message ?? 'No se pudo crear el token');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div
       class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md"
@@ -165,13 +189,25 @@ const AgentBootstrapModal: Component<Props> = (props) => {
                       El agente usa un token para autenticarse contra la API. Crea uno y vuelve aquí.
                     </p>
                   </div>
-                  <button
-                    onClick={openTokens}
-                    class="mt-1 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-ios-blue-500 text-white text-xs font-semibold hover:bg-ios-blue-600 transition-colors"
-                  >
-                    <Key size={13} />
-                    Crear token
-                  </button>
+                  <div class="mt-1 flex flex-col items-center gap-2">
+                    <button
+                      onClick={createAgentToken}
+                      disabled={creating()}
+                      class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-ios-blue-500 text-white text-xs font-semibold hover:bg-ios-blue-600 transition-colors disabled:opacity-50"
+                    >
+                      <Sparkles size={13} />
+                      {creating() ? 'Creando…' : 'Crear token de agente'}
+                    </button>
+                    <button
+                      onClick={openTokens}
+                      class="text-[11px] text-base-content/50 hover:text-base-content/80 underline underline-offset-2"
+                    >
+                      Crear uno personalizado
+                    </button>
+                    <Show when={createError()}>
+                      <p class="text-[11px] text-red-500">{createError()}</p>
+                    </Show>
+                  </div>
                 </div>
               }
             >
@@ -233,6 +269,28 @@ const AgentBootstrapModal: Component<Props> = (props) => {
                   </div>
                 </Show>
               </div>
+
+              {/* Alma access — offer a full-access agent token when missing */}
+              <Show when={almaScope() === 'none'}>
+                <div class="flex flex-col gap-2 rounded-xl bg-ios-blue-500/[0.06] border border-ios-blue-500/15 px-3 py-2.5">
+                  <p class="text-[11px] text-base-content/70 leading-relaxed">
+                    Este token no tiene acceso a tu <code class="font-mono text-[10px] bg-base-content/[0.06] px-1 py-px rounded">alma</code>: el agente no podrá leer ni escribir tu memoria técnica.
+                  </p>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={createAgentToken}
+                      disabled={creating()}
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-ios-blue-500 text-white text-[11px] font-semibold hover:bg-ios-blue-600 transition-colors disabled:opacity-50"
+                    >
+                      <Sparkles size={12} />
+                      {creating() ? 'Creando…' : 'Crear token de agente (acceso completo)'}
+                    </button>
+                    <Show when={createError()}>
+                      <span class="text-[11px] text-red-500">{createError()}</span>
+                    </Show>
+                  </div>
+                </div>
+              </Show>
 
               {/* JSON prompt */}
               <div class="relative rounded-xl bg-base-content/[0.04] border border-base-content/[0.06] overflow-hidden">
