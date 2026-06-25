@@ -31,6 +31,7 @@ projects.post('/', requireAdmin, async (c) => {
     prefix: string;
     color: string;
     icon_url?: string;
+    notes?: string;
   }>();
 
   const id = crypto.randomUUID();
@@ -43,6 +44,7 @@ projects.post('/', requireAdmin, async (c) => {
     prefix: body.prefix,
     color: body.color,
     icon_url: body.icon_url ?? null,
+    notes: body.notes ?? '',
     status: 'active',
     created_by: user.userId,
     created_at: now,
@@ -60,6 +62,7 @@ projects.patch('/:id', requireAdmin, async (c) => {
     prefix: string;
     color: string;
     icon_url: string;
+    notes: string;
     status: 'active' | 'archived';
   }>>();
 
@@ -69,6 +72,7 @@ projects.patch('/:id', requireAdmin, async (c) => {
   if (body.prefix !== undefined) allowed.prefix = body.prefix;
   if (body.color !== undefined) allowed.color = body.color;
   if (body.icon_url !== undefined) allowed.icon_url = body.icon_url;
+  if (body.notes !== undefined) allowed.notes = body.notes;
   if (body.status !== undefined) allowed.status = body.status;
 
   if (Object.keys(allowed).length > 0) {

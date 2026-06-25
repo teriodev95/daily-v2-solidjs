@@ -3,7 +3,7 @@ import {
 } from 'solid-js';
 import {
   BrainCircuit, Plus, Trash2, ChevronRight, ChevronDown, Layers, BookText,
-  Bot, User as UserIcon, AlertCircle, Check, Loader2, X,
+  Bot, User as UserIcon, AlertCircle, Check, Loader2, X, Type, Lock,
 } from 'lucide-solid';
 import TopNavigation from '../components/TopNavigation';
 import WikiArticleDetail from '../components/WikiArticleDetail';
@@ -15,6 +15,21 @@ import { useOnceReady } from '../lib/onceReady';
 // Rough token estimate shared with the live budget meter on Tier 0.
 const estimateTokens = (text: string): number => Math.ceil((text?.length ?? 0) / 4);
 const TIER0_BUDGET = 1500;
+
+// Font-size presets for the content — handy when a note grows long.
+const FONT_SIZES = [
+  { label: 'S', px: 13 },
+  { label: 'M', px: 15 },
+  { label: 'L', px: 17 },
+  { label: 'XL', px: 20 },
+];
+const readFontPx = (): number => {
+  try {
+    const v = Number(localStorage.getItem('alma-font-size'));
+    if (FONT_SIZES.some((f) => f.px === v)) return v;
+  } catch { /* ignore */ }
+  return 15;
+};
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -28,12 +43,27 @@ const AlmaPage: Component = () => {
   const [deleting, setDeleting] = createSignal(false);
   const [wikiArticle, setWikiArticle] = createSignal<WikiArticle | null>(null);
   const [creatingTier, setCreatingTier] = createSignal<1 | 2 | null>(null);
+  const [fontPx, setFontPx] = createSignal<number>(readFontPx());
+  const [secretInfo, setSecretInfo] = createSignal<string | null>(null);
+  let secretInfoTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const setFont = (px: number) => {
+    setFontPx(px);
+    try { localStorage.setItem('alma-font-size', String(px)); } catch { /* ignore */ }
+  };
+  // Clicking a secret reference never reveals a value — make that certain.
+  const openSecretRef = (key: string) => {
+    setSecretInfo(`Secreto «${key}»: es una referencia. Gestiónalo en Admin → Secretos; aquí no se muestra su valor.`);
+    clearTimeout(secretInfoTimer);
+    secretInfoTimer = setTimeout(() => setSecretInfo(null), 4000);
+  };
 
   const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => {
     saveTimers.forEach((t) => clearTimeout(t));
     clearTimeout(savedTimer);
+    clearTimeout(secretInfoTimer);
   });
 
   const list = () => docs() ?? [];
@@ -139,12 +169,34 @@ const AlmaPage: Component = () => {
 
       <div class="space-y-5 max-w-3xl mx-auto">
         {/* Page header */}
-        <div>
-          <h1 class="text-lg font-bold">Alma</h1>
-          <p class="text-xs text-base-content/50 mt-1 max-w-xl">
-            Tu memoria técnica por capas. La escribe tu agente cuando se lo indicas y tú la curas:
-            edita, quita o agrega. El núcleo viaja siempre con el agente.
-          </p>
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h1 class="text-lg font-bold">Alma</h1>
+            <p class="text-xs text-base-content/50 mt-1 max-w-xl">
+              Tu memoria técnica por capas. La escribe tu agente cuando se lo indicas y tú la curas:
+              edita, quita o agrega. El núcleo viaja siempre con el agente.
+            </p>
+          </div>
+          {/* Font size — for long notes */}
+          <div class="flex shrink-0 items-center gap-0.5 rounded-lg border border-base-content/[0.08] bg-base-100 p-0.5" title="Tamaño de texto">
+            <Type size={13} class="ml-1 mr-0.5 text-base-content/30" />
+            <For each={FONT_SIZES}>
+              {(f) => (
+                <button
+                  type="button"
+                  onClick={() => setFont(f.px)}
+                  aria-pressed={fontPx() === f.px}
+                  class={`h-6 min-w-[24px] rounded-md px-1.5 text-[11px] font-semibold transition-colors ${
+                    fontPx() === f.px
+                      ? 'bg-ios-blue-500 text-white'
+                      : 'text-base-content/45 hover:bg-base-content/[0.05] hover:text-base-content/80'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              )}
+            </For>
+          </div>
         </div>
 
         <Show when={ready()} fallback={<AlmaSkeleton />}>
@@ -207,9 +259,11 @@ const AlmaPage: Component = () => {
                     </div>
                     <AlmaContentEditor
                       content={doc().content}
-                      placeholder="El núcleo de tu Alma: stack, convenciones, lo que el agente debe saber siempre. Escribe @ para enlazar un artículo de la wiki."
+                      fontSize={fontPx()}
+                      placeholder="El núcleo de tu Alma: stack, convenciones, lo que el agente debe saber siempre. @ enlaza la wiki · $ referencia un secreto."
                       onChange={(md) => scheduleSave(doc().id, { content: md })}
                       onOpenWiki={openWikiByTitle}
+                      onOpenSecret={openSecretRef}
                     />
                   </section>
                 );
@@ -229,6 +283,8 @@ const AlmaPage: Component = () => {
               onField={scheduleSave}
               onDelete={setConfirmDelete}
               onOpenWiki={openWikiByTitle}
+              onOpenSecret={openSecretRef}
+              fontSize={fontPx()}
             />
 
             {/* ── Tier 2: referencia profunda ── */}
@@ -244,6 +300,8 @@ const AlmaPage: Component = () => {
               onField={scheduleSave}
               onDelete={setConfirmDelete}
               onOpenWiki={openWikiByTitle}
+              onOpenSecret={openSecretRef}
+              fontSize={fontPx()}
             />
           </Show>
         </Show>
@@ -299,6 +357,18 @@ const AlmaPage: Component = () => {
           </div>
         )}
       </Show>
+
+      {/* Secret reference info — clicking a secret chip never reveals a value */}
+      <Show when={secretInfo()}>
+        {(msg) => (
+          <div class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] pointer-events-none px-4">
+            <div class="flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-xl backdrop-blur-md bg-base-content/90 text-base-100 text-xs font-medium max-w-sm">
+              <Lock size={13} class="shrink-0 text-amber-400" />
+              <span>{msg()}</span>
+            </div>
+          </div>
+        )}
+      </Show>
     </>
   );
 };
@@ -317,6 +387,8 @@ interface TierSectionProps {
   onField: (id: string, fields: Partial<Pick<AlmaDoc, 'kind' | 'title' | 'content' | 'tags'>>) => void;
   onDelete: (doc: AlmaDoc) => void;
   onOpenWiki: (title: string) => void;
+  onOpenSecret: (key: string) => void;
+  fontSize: number;
 }
 
 const TierSection: Component<TierSectionProps> = (props) => {
@@ -406,9 +478,11 @@ const TierSection: Component<TierSectionProps> = (props) => {
                       />
                       <AlmaContentEditor
                         content={doc.content}
-                        placeholder="Contenido del documento. Soporta markdown, tablas y @ para enlazar la wiki."
+                        fontSize={props.fontSize}
+                        placeholder="Contenido. Markdown y tablas. @ enlaza la wiki · $ referencia un secreto."
                         onChange={(md) => props.onField(doc.id, { content: md })}
                         onOpenWiki={props.onOpenWiki}
+                        onOpenSecret={props.onOpenSecret}
                       />
                     </div>
                   </Show>

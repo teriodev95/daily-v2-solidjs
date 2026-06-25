@@ -20,6 +20,8 @@ const MemberModal: Component<MemberModalProps> = (props) => {
   const [showPassword, setShowPassword] = createSignal(false);
   const [role, setRole] = createSignal<Role>(props.member?.role ?? 'collaborator');
   const [isActive, setIsActive] = createSignal(props.member?.is_active ?? true);
+  const [phone, setPhone] = createSignal(props.member?.phone ?? '');
+  const [birthdate, setBirthdate] = createSignal(props.member?.birthdate ?? '');
   const [avatarFile, setAvatarFile] = createSignal<File | null>(null);
   const [avatarPreview, setAvatarPreview] = createSignal<string | null>(props.member?.avatar_url ?? null);
   const [submitting, setSubmitting] = createSignal(false);
@@ -66,6 +68,8 @@ const MemberModal: Component<MemberModalProps> = (props) => {
         if (name() !== props.member!.name) payload.name = name();
         if (role() !== props.member!.role) payload.role = role();
         if (isActive() !== props.member!.is_active) payload.is_active = isActive();
+        if (phone() !== (props.member!.phone ?? '')) payload.phone = phone().trim() || null;
+        if (birthdate() !== (props.member!.birthdate ?? '')) payload.birthdate = birthdate() || null;
         if (password()) payload.password = password();
 
         if (Object.keys(payload).length > 0) {
@@ -77,6 +81,8 @@ const MemberModal: Component<MemberModalProps> = (props) => {
           email: email(),
           password: password(),
           role: role(),
+          phone: phone().trim() || undefined,
+          birthdate: birthdate() || undefined,
         });
         userId = created.id;
       }
@@ -160,6 +166,29 @@ const MemberModal: Component<MemberModalProps> = (props) => {
               placeholder="Nombre completo"
               class="w-full px-3 py-2.5 rounded-xl bg-base-content/[0.04] border border-base-content/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-ios-blue-500/30 focus:border-ios-blue-500/40 transition-all"
             />
+          </div>
+
+          {/* Phone + birthdate */}
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-semibold uppercase text-base-content/30 tracking-wider">Teléfono</label>
+              <input
+                type="tel"
+                value={phone()}
+                onInput={(e) => setPhone(e.currentTarget.value)}
+                placeholder="+52 55 0000 0000"
+                class="w-full px-3 py-2.5 rounded-xl bg-base-content/[0.04] border border-base-content/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-ios-blue-500/30 focus:border-ios-blue-500/40 transition-all"
+              />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-semibold uppercase text-base-content/30 tracking-wider">Nacimiento</label>
+              <input
+                type="date"
+                value={birthdate()}
+                onInput={(e) => setBirthdate(e.currentTarget.value)}
+                class="w-full px-3 py-2.5 rounded-xl bg-base-content/[0.04] border border-base-content/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-ios-blue-500/30 focus:border-ios-blue-500/40 transition-all"
+              />
+            </div>
           </div>
 
           {/* Email (only on create) */}

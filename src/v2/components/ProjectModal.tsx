@@ -2,6 +2,7 @@ import { createSignal, For, Show, type Component } from 'solid-js';
 import type { Project, ProjectStatus } from '../types';
 import { api } from '../lib/api';
 import { X, Loader2 } from 'lucide-solid';
+import { ContentEditor } from './ContentEditor';
 
 interface ProjectModalProps {
   project?: Project;
@@ -29,6 +30,7 @@ const ProjectModal: Component<ProjectModalProps> = (props) => {
   const [prefix, setPrefix] = createSignal(props.project?.prefix ?? '');
   const [color, setColor] = createSignal(props.project?.color ?? COLORS[0]);
   const [status, setStatus] = createSignal<ProjectStatus>(props.project?.status ?? 'active');
+  const [notes, setNotes] = createSignal(props.project?.notes ?? '');
   const [submitting, setSubmitting] = createSignal(false);
   const [error, setError] = createSignal('');
 
@@ -46,6 +48,7 @@ const ProjectModal: Component<ProjectModalProps> = (props) => {
         if (prefix() !== props.project!.prefix) payload.prefix = prefix();
         if (color() !== props.project!.color) payload.color = color();
         if (status() !== props.project!.status) payload.status = status();
+        if (notes() !== (props.project!.notes ?? '')) payload.notes = notes();
 
         if (Object.keys(payload).length > 0) {
           await api.projects.update(props.project!.id, payload);
@@ -55,6 +58,7 @@ const ProjectModal: Component<ProjectModalProps> = (props) => {
           name: name(),
           prefix: prefix(),
           color: color(),
+          notes: notes(),
         });
       }
 
@@ -72,7 +76,7 @@ const ProjectModal: Component<ProjectModalProps> = (props) => {
       class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md"
       onClick={(e) => { if (e.target === e.currentTarget) props.onClose(); }}
     >
-      <div class="bg-base-100 w-full sm:max-w-md sm:rounded-[24px] rounded-t-[24px] shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="bg-base-100 w-full sm:max-w-lg sm:rounded-[24px] rounded-t-[24px] shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div class="flex items-center justify-between px-5 py-4 border-b border-base-content/[0.06]">
           <h2 class="text-base font-semibold">{isEdit() ? 'Editar proyecto' : 'Nuevo proyecto'}</h2>
@@ -136,6 +140,19 @@ const ProjectModal: Component<ProjectModalProps> = (props) => {
                 )}
               </For>
             </div>
+          </div>
+
+          {/* Notas (Markdown) */}
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-semibold uppercase text-base-content/30 tracking-wider">Notas</label>
+            <div class="rounded-xl bg-base-content/[0.04] border border-base-content/[0.06] overflow-hidden focus-within:ring-2 focus-within:ring-ios-blue-500/30 focus-within:border-ios-blue-500/40 transition-all">
+              <ContentEditor
+                content={notes()}
+                placeholder="Contexto del proyecto, enlaces a repos, canal de Telegram, detalles importantes… (Markdown)"
+                onChange={setNotes}
+              />
+            </div>
+            <p class="text-[9px] text-base-content/20">Markdown. Contexto, repos, canal de Telegram y demás — visible para el equipo.</p>
           </div>
 
           {/* Status (only on edit) */}

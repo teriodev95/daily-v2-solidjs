@@ -200,7 +200,7 @@ export const api = {
   team: {
     get: () => request<Team>('/api/team'),
     getMembers: () => request<UserSafe[]>('/api/team/members'),
-    createMember: (data: { name: string; email: string; password: string; role?: string; avatar_url?: string }) =>
+    createMember: (data: { name: string; email: string; password: string; role?: string; avatar_url?: string; phone?: string; birthdate?: string }) =>
       request<UserSafe>('/api/team/members', { method: 'POST', body: JSON.stringify(data) }),
     updateMember: (id: string, data: Record<string, unknown>) =>
       request<UserSafe>(`/api/team/members/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -214,7 +214,7 @@ export const api = {
   projects: {
     list: (status?: string) =>
       request<Project[]>(`/api/projects${status ? `?status=${status}` : ''}`),
-    create: (data: { name: string; prefix: string; color: string; icon_url?: string }) =>
+    create: (data: { name: string; prefix: string; color: string; icon_url?: string; notes?: string }) =>
       request<Project>('/api/projects', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Record<string, unknown>) =>
       request<Project>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),

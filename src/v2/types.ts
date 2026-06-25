@@ -20,6 +20,8 @@ export interface User {
   name: string;
   email: string;
   avatar_url: string | null;
+  phone?: string | null;
+  birthdate?: string | null;
   role: Role;
   is_active: boolean;
   created_at: string;
@@ -32,6 +34,7 @@ export interface Project {
   prefix: string;
   color: string;
   icon_url: string | null;
+  notes?: string;
   status: ProjectStatus;
   created_by: string;
   created_at: string;

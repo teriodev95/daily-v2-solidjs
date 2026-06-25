@@ -57,6 +57,20 @@
       "when": 1781000000000,
       "tag": "0020_add_alma",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1782000000000,
+      "tag": "0021_add_project_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1783000000000,
+      "tag": "0022_add_member_fields",
+      "breakpoints": true
     }
   ]
 }

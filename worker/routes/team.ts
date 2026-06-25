@@ -13,6 +13,8 @@ const safeUserSelect = {
   name: schema.users.name,
   email: schema.users.email,
   avatar_url: schema.users.avatar_url,
+  phone: schema.users.phone,
+  birthdate: schema.users.birthdate,
   role: schema.users.role,
   is_active: schema.users.is_active,
   created_at: schema.users.created_at,
@@ -42,6 +44,8 @@ team.post('/members', requireAdmin, async (c) => {
     password: string;
     role?: 'admin' | 'collaborator';
     avatar_url?: string;
+    phone?: string;
+    birthdate?: string;
   }>();
 
   const id = crypto.randomUUID();
@@ -56,6 +60,8 @@ team.post('/members', requireAdmin, async (c) => {
     password: hashedPw,
     role: body.role ?? 'collaborator',
     avatar_url: body.avatar_url ?? null,
+    phone: body.phone ?? null,
+    birthdate: body.birthdate ?? null,
     is_active: true,
     created_at: now,
   });
@@ -73,6 +79,8 @@ team.patch('/members/:id', requireAdmin, async (c) => {
     role: 'admin' | 'collaborator';
     is_active: boolean;
     avatar_url: string;
+    phone: string;
+    birthdate: string;
     password: string;
   }>>();
 
@@ -83,6 +91,8 @@ team.patch('/members/:id', requireAdmin, async (c) => {
   if (body.role !== undefined) allowed.role = body.role;
   if (body.is_active !== undefined) allowed.is_active = body.is_active;
   if (body.avatar_url !== undefined) allowed.avatar_url = body.avatar_url;
+  if (body.phone !== undefined) allowed.phone = body.phone;
+  if (body.birthdate !== undefined) allowed.birthdate = body.birthdate;
   if (body.password) allowed.password = await hashPassword(body.password);
 
   if (Object.keys(allowed).length > 0) {
