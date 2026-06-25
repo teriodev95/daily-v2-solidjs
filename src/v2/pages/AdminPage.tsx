@@ -4,21 +4,52 @@ import { useRealtimeRefetch } from '../lib/realtime';
 import { activeTab as globalActiveTab } from '../lib/activeTab';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
-import { api } from '../lib/api';
+import { api, type SecretMeta } from '../lib/api';
 import {
   Users, FolderKanban, Plus, Pencil, Shield,
   ChevronDown, ChevronRight, UserIcon, Archive, Send,
   Flag, CalendarDays, Copy, Check, RefreshCw,
+  Lock, Eye, Trash2, AlertCircle,
 } from 'lucide-solid';
 import MemberModal from '../components/MemberModal';
 import ProjectModal from '../components/ProjectModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal';
 import RecurringStoryModal from '../components/RecurringStoryModal';
+import SecretEditor from '../components/secrets/SecretEditor';
+import SecretRevealSheet from '../components/secrets/SecretRevealSheet';
 import TopNavigation from '../components/TopNavigation';
 import { frequencyLabel, isRecurring } from '../lib/recurrence';
 import type { User, Project, Assignment, Story } from '../types';
 
-type AdminTab = 'team' | 'projects' | 'assignments' | 'recurring';
+type AdminTab = 'team' | 'projects' | 'assignments' | 'recurring' | 'secrets';
+
+const SECRET_EVENT_LABELS: Record<string, string> = {
+  'secret.created': 'Creado',
+  'secret.updated': 'Actualizado',
+  'secret.revealed': 'Revelado',
+  'secret.deleted': 'Eliminado',
+  'secret.associated_project_changed': 'Proyecto cambiado',
+  'secret.tags_changed': 'Etiquetas cambiadas',
+};
+const secretEventLabel = (t: string): string => SECRET_EVENT_LABELS[t] ?? t;
+
+const formatRelative = (dateStr: string | null): string => {
+  if (!dateStr) return 'nunca';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'recién';
+  if (mins < 60) return `hace ${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `hace ${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'ayer';
+  if (days < 7) return `hace ${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `hace ${weeks} sem`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `hace ${months} mes${months === 1 ? '' : 'es'}`;
+  return `hace ${Math.floor(days / 365)} año${Math.floor(days / 365) === 1 ? '' : 's'}`;
+};
 
 const AdminPage: Component = () => {
   const auth = useAuth();
@@ -62,6 +93,37 @@ const AdminPage: Component = () => {
 
   const activeRecurring = () => (recurringList() ?? []).filter(s => s.is_active);
   const inactiveRecurring = () => (recurringList() ?? []).filter(s => !s.is_active);
+
+  // Secrets (internal vault) — admin-only, lives as a tab in this page.
+  const [secretsList, { refetch: refetchSecrets, mutate: mutateSecrets }] = createResource(
+    () => true,
+    () => api.secrets.list(),
+  );
+  const secretsReady = useOnceReady(secretsList);
+  const activeSecrets = () => (secretsList() ?? []).filter((s) => !s.revoked_at);
+  const [showSecretEditor, setShowSecretEditor] = createSignal(false);
+  const [editingSecret, setEditingSecret] = createSignal<SecretMeta | null>(null);
+  const [revealSecret, setRevealSecret] = createSignal<SecretMeta | null>(null);
+  const [confirmDeleteSecret, setConfirmDeleteSecret] = createSignal<SecretMeta | null>(null);
+  const [deletingSecret, setDeletingSecret] = createSignal(false);
+
+  const openCreateSecret = () => { setEditingSecret(null); setShowSecretEditor(true); };
+  const openEditSecret = (s: SecretMeta) => { setEditingSecret(s); setShowSecretEditor(true); };
+  const closeSecretEditor = () => { setShowSecretEditor(false); setEditingSecret(null); };
+  const handleSecretSaved = () => { closeSecretEditor(); void refetchSecrets(); };
+  const secretProjectName = (id: string | null) => (id ? data.getProjectById(id)?.name ?? 'Proyecto' : null);
+
+  const handleDeleteSecret = async () => {
+    const s = confirmDeleteSecret();
+    if (!s || deletingSecret()) return;
+    setDeletingSecret(true);
+    try {
+      await api.secrets.remove(s.id);
+      mutateSecrets((prev) => (prev ?? []).filter((x) => x.id !== s.id));
+      setConfirmDeleteSecret(null);
+    } catch { /* keep the dialog open on failure */ }
+    finally { setDeletingSecret(false); }
+  };
 
   // Latches: only show "vacío" copy after each list has loaded once. Without
   // this the empty-state messages flicker during realtime refetches.
@@ -128,6 +190,7 @@ const AdminPage: Component = () => {
     { key: 'projects' as const, label: 'Proyectos', icon: FolderKanban, count: data.projects().length },
     { key: 'assignments' as const, label: 'Encomiendas', icon: Send, count: openAssignments().length },
     { key: 'recurring' as const, label: 'Recurrentes', icon: RefreshCw, count: activeRecurring().length },
+    { key: 'secrets' as const, label: 'Secretos', icon: Lock, count: activeSecrets().length },
   ];
 
   const sectionMeta = () => {
@@ -152,6 +215,13 @@ const AdminPage: Component = () => {
           description: `${activeRecurring().length} activas · ${inactiveRecurring().length} inactivas`,
           actionLabel: 'Nueva recurrente',
           action: openCreateRecurring,
+        };
+      case 'secrets':
+        return {
+          title: 'Secretos',
+          description: `${activeSecrets().length} ${activeSecrets().length === 1 ? 'secreto' : 'secretos'}`,
+          actionLabel: 'Nuevo secreto',
+          action: openCreateSecret,
         };
       default:
         return {
@@ -644,6 +714,92 @@ const AdminPage: Component = () => {
             </Show>
           </div>
         </Show>
+
+        {/* ─── Secrets Section ─── */}
+        <Show when={activeTab() === 'secrets'}>
+          <div class="space-y-3 stagger-in">
+            <div class="overflow-hidden rounded-[18px] border border-base-content/[0.06] bg-base-100/55 divide-y divide-base-content/[0.055]">
+              <Show when={activeSecrets().length === 0 && secretsReady()}>
+                <div class="px-4 py-10 text-center">
+                  <div class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-ios-blue-500/10 text-ios-blue-500">
+                    <Lock size={18} />
+                  </div>
+                  <p class="text-sm font-semibold">Aún no hay secretos</p>
+                  <p class="mx-auto mt-1 max-w-xs text-xs text-base-content/40">
+                    Guarda claves y credenciales del equipo y revélalas solo cuando las necesites.
+                  </p>
+                </div>
+              </Show>
+              <For each={activeSecrets()}>
+                {(secret) => {
+                  const proj = () => secretProjectName(secret.project_id);
+                  return (
+                    <div class={rowClass} onClick={() => openEditSecret(secret)}>
+                      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ios-blue-500/10 text-ios-blue-500">
+                        <Lock size={15} />
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                          <p class="truncate text-sm font-medium">{secret.name}</p>
+                          <Show when={secret.environment}>
+                            <span class="shrink-0 rounded-md bg-ios-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-ios-blue-500">
+                              {secret.environment}
+                            </span>
+                          </Show>
+                        </div>
+                        <div class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-base-content/40">
+                          <code class="max-w-[45%] truncate font-mono text-[10.5px] text-base-content/55">{secret.key}</code>
+                          <Show when={proj()} fallback={<span class="shrink-0">· Global/Equipo</span>}>
+                            <span class="shrink-0 truncate">· {proj()}</span>
+                          </Show>
+                          <Show when={secret.last_event}>
+                            {(ev) => (
+                              <span class="shrink-0 truncate">· {secretEventLabel(ev().event_type)} {formatRelative(ev().created_at)}</span>
+                            )}
+                          </Show>
+                        </div>
+                        <Show when={secret.tags.length > 0}>
+                          <div class="mt-1.5 flex flex-wrap gap-1">
+                            <For each={secret.tags.slice(0, 4)}>
+                              {(t) => (
+                                <span class="rounded-md bg-base-content/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-base-content/50">{t}</span>
+                              )}
+                            </For>
+                            <Show when={secret.tags.length > 4}>
+                              <span class="rounded-md bg-base-content/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-base-content/40">+{secret.tags.length - 4}</span>
+                            </Show>
+                          </div>
+                        </Show>
+                      </div>
+                      <div class="flex shrink-0 items-center gap-0.5">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setRevealSecret(secret); }}
+                          title="Revelar valor"
+                          aria-label={`Revelar ${secret.name}`}
+                          class="rounded-lg p-2 text-base-content/35 transition-colors hover:bg-ios-blue-500/10 hover:text-ios-blue-500"
+                        >
+                          <Eye size={15} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteSecret(secret); }}
+                          title="Eliminar secreto"
+                          aria-label={`Eliminar ${secret.name}`}
+                          class="rounded-lg p-2 text-base-content/35 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                        <Pencil size={14} class="text-base-content/15 opacity-0 transition-opacity group-hover:opacity-100" />
+                      </div>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+            <p class="px-1 text-[11px] leading-relaxed text-base-content/35">
+              Vault interno cifrado (AES-256-GCM). Las listas nunca exponen el valor; cada revelación queda auditada.
+            </p>
+          </div>
+        </Show>
       </div>
 
       {/* Modals */}
@@ -677,6 +833,72 @@ const AdminPage: Component = () => {
           onClose={() => setShowRecurringModal(false)}
           onSaved={refetchRecurring}
         />
+      </Show>
+
+      {/* Secret editor — full screen */}
+      <Show when={showSecretEditor()}>
+        <SecretEditor
+          secret={editingSecret() ?? undefined}
+          onClose={closeSecretEditor}
+          onSaved={handleSecretSaved}
+        />
+      </Show>
+
+      {/* Secret reveal — compact sheet, plaintext wiped on close */}
+      <Show when={revealSecret()}>
+        {(s) => (
+          <SecretRevealSheet
+            secret={s()}
+            onClose={() => setRevealSecret(null)}
+            onRevealed={refetchSecrets}
+          />
+        )}
+      </Show>
+
+      {/* Secret delete confirm */}
+      <Show when={confirmDeleteSecret()}>
+        {(s) => (
+          <div
+            class="fixed inset-0 z-[130] flex items-end justify-center bg-black/60 p-0 backdrop-blur-md sm:items-center sm:p-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => { if (e.target === e.currentTarget && !deletingSecret()) setConfirmDeleteSecret(null); }}
+          >
+            <div class="w-full overflow-hidden rounded-t-[24px] bg-base-100 shadow-2xl sm:max-w-md sm:rounded-[24px]">
+              <div class="flex items-start gap-3 border-b border-base-content/[0.06] px-5 py-4">
+                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                  <AlertCircle size={18} />
+                </div>
+                <div class="min-w-0">
+                  <h2 class="text-[15px] font-semibold">Eliminar secreto</h2>
+                  <p class="mt-0.5 truncate text-xs text-base-content/40">{s().name}</p>
+                </div>
+              </div>
+              <div class="px-5 py-4">
+                <p class="text-sm leading-relaxed text-base-content/70">
+                  Se marcará como eliminado y dejará de estar disponible para agentes e integraciones. La auditoría se conserva.
+                </p>
+              </div>
+              <div class="flex justify-end gap-2 border-t border-base-content/[0.06] px-5 py-3.5">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteSecret(null)}
+                  class="rounded-xl px-4 py-2 text-sm font-medium text-base-content/60 transition-colors hover:bg-base-content/5"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteSecret}
+                  disabled={deletingSecret()}
+                  class="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-40"
+                >
+                  {deletingSecret() ? 'Eliminando…' : 'Eliminar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Show>
     </>
   );
