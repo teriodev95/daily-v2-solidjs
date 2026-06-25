@@ -3,7 +3,7 @@ import {
 } from 'solid-js';
 import { marked } from 'marked';
 import {
-  Plus, Trash2, Lock, LockOpen, ChevronUp, ChevronDown, Loader2, AlertCircle,
+  Plus, Trash2, Lock, LockOpen, ChevronUp, ChevronDown, Loader2, AlertCircle, X,
 } from 'lucide-solid';
 import AlmaContentEditor from './AlmaContentEditor';
 import { processAlmaContent } from '../../lib/almaLinks';
@@ -46,6 +46,8 @@ const AlmaBlockList: Component<Props> = (props) => {
 
   const [expandedId, setExpandedId] = createSignal<string | null>(null);
   const [busyAdd, setBusyAdd] = createSignal(false);
+  const [confirmDelete, setConfirmDelete] = createSignal<AlmaBlock | null>(null);
+  const [deleting, setDeleting] = createSignal(false);
 
   const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -109,8 +111,11 @@ const AlmaBlockList: Component<Props> = (props) => {
     }
   };
 
-  const removeBlock = async (block: AlmaBlock) => {
-    if (block.locked) return;
+  // Deletion is confirmed through a native modal (never a generic browser confirm).
+  const handleConfirmDelete = async () => {
+    const block = confirmDelete();
+    if (!block || block.locked || deleting()) return;
+    setDeleting(true);
     const before = blocks();
     mutate((prev) => (prev ?? []).filter((b) => b.id !== block.id));
     if (expandedId() === block.id) setExpandedId(null);
@@ -122,6 +127,9 @@ const AlmaBlockList: Component<Props> = (props) => {
     } catch {
       mutate(before);
       report('error');
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(null);
     }
   };
 
@@ -241,7 +249,7 @@ const AlmaBlockList: Component<Props> = (props) => {
                         <Show when={!block.locked}>
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); removeBlock(block); }}
+                            onClick={(e) => { e.stopPropagation(); setConfirmDelete(block); }}
                             class="p-1 rounded-md text-base-content/25 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 transition-all shrink-0"
                             aria-label="Borrar párrafo"
                             title="Borrar párrafo"
@@ -336,6 +344,62 @@ const AlmaBlockList: Component<Props> = (props) => {
             </div>
           </div>
         </Show>
+      </Show>
+
+      {/* Native delete confirmation — short, focused, matches the app's sheet style */}
+      <Show when={confirmDelete()}>
+        {(block) => (
+          <div
+            class="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-md"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => { if (e.target === e.currentTarget && !deleting()) setConfirmDelete(null); }}
+          >
+            <div class="bg-base-100 w-full sm:max-w-md sm:rounded-[24px] rounded-t-[24px] shadow-2xl">
+              <div class="flex items-start justify-between px-5 py-4 border-b border-base-content/[0.06]">
+                <div class="flex items-start gap-3 min-w-0">
+                  <div class="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center text-red-500 shrink-0">
+                    <Trash2 size={17} />
+                  </div>
+                  <div class="min-w-0">
+                    <h2 class="text-base font-semibold">Quitar párrafo</h2>
+                    <p class="text-xs text-base-content/40 mt-0.5 line-clamp-1">
+                      {previewText(block().text) || 'Párrafo vacío'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { if (!deleting()) setConfirmDelete(null); }}
+                  aria-label="Cerrar"
+                  class="p-1.5 rounded-lg hover:bg-base-content/5 text-base-content/40 transition-colors shrink-0"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div class="px-5 py-4">
+                <p class="text-sm text-base-content/70 leading-relaxed">
+                  Este párrafo se eliminará de tu Alma. La acción es inmediata.
+                </p>
+              </div>
+              <div class="px-5 py-3.5 border-t border-base-content/[0.06] flex justify-end gap-2">
+                <button
+                  onClick={() => setConfirmDelete(null)}
+                  disabled={deleting()}
+                  class="px-4 py-2 rounded-xl text-sm font-medium text-base-content/60 hover:bg-base-content/5 transition-colors disabled:opacity-40"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={deleting()}
+                  class="px-4 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-40"
+                >
+                  {deleting() ? 'Quitando...' : 'Quitar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Show>
     </div>
   );
