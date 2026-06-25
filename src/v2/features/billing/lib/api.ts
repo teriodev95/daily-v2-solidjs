@@ -2,7 +2,7 @@
 // wrappers from src/v2/lib/api.ts (sends credentials, X-Client-Id, JSON headers).
 import { request, uploadFile, API_BASE } from '../../../lib/api';
 import type {
-  Client, Schedule, Invoice, InvoiceFile,
+  Client, Schedule, Invoice,
   ClientStatement, ShareToken, ShareTokenMeta,
   ClientInput, ScheduleInput, InvoiceInput,
 } from '../types';
@@ -60,8 +60,9 @@ export const billingApi = {
       request<Invoice>(`/api/billing/invoices/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     remove: (id: string) =>
       request<{ ok: boolean }>(`/api/billing/invoices/${id}`, { method: 'DELETE' }),
+    // Returns the updated invoice (with its files), not the single file.
     uploadFile: (invoiceId: string, file: File) =>
-      uploadFile<InvoiceFile>(`/api/billing/invoices/${invoiceId}/files`, file),
+      uploadFile<Invoice>(`/api/billing/invoices/${invoiceId}/files`, file),
     deleteFile: (fileId: string) =>
       request<{ ok: boolean }>(`/api/billing/files/${fileId}`, { method: 'DELETE' }),
     fileUrl: (fileId: string) => `${API_BASE}/api/billing/files/${fileId}`,

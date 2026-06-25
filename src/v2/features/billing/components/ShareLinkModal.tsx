@@ -9,7 +9,8 @@ interface Props {
 }
 
 // Build the absolute portal URL from a relative url_path returned by the backend.
-const absoluteUrl = (urlPath: string): string => {
+const absoluteUrl = (urlPath?: string | null): string => {
+  if (!urlPath) return '';
   if (/^https?:\/\//i.test(urlPath)) return urlPath;
   const path = urlPath.startsWith('/') ? urlPath : `/${urlPath}`;
   return `${window.location.origin}${path}`;
@@ -38,11 +39,11 @@ const ShareLinkModal: Component<Props> = (props) => {
   // Full URL only available right after creation. For an existing token we only
   // know the path (no secret), so we can rebuild the URL but the secret is the
   // one shown at creation — backend returns url_path with the token embedded.
+  // The full URL (with the secret) only exists right after creation; an existing
+  // token exposes only its prefix, never the recoverable URL.
   const fullUrl = () => {
     const c = created();
-    if (c) return absoluteUrl(c.url_path);
-    const m = meta();
-    return m ? absoluteUrl(m.url_path) : '';
+    return c ? absoluteUrl(c.url_path) : '';
   };
 
   const handleCreate = async () => {
@@ -133,19 +134,28 @@ const ShareLinkModal: Component<Props> = (props) => {
               }
             >
               <div class="space-y-3">
-                <div class="flex items-center gap-2 rounded-xl border border-base-content/[0.08] bg-base-content/[0.03] px-3 py-2">
-                  <code class="flex-1 truncate font-mono text-[11px] text-base-content/70">{fullUrl()}</code>
-                  <button
-                    onClick={handleCopy}
-                    class={`shrink-0 p-1.5 rounded-lg transition-all ${copied() ? 'bg-ios-green-500/15 text-ios-green-500' : 'text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5'}`}
-                    title="Copiar enlace"
-                    aria-label={copied() ? 'Enlace copiado' : 'Copiar enlace'}
-                  >
-                    <Show when={copied()} fallback={<Copy size={14} />}><Check size={14} /></Show>
-                  </button>
-                </div>
-
-                <Show when={created()}>
+                <Show
+                  when={created()}
+                  fallback={
+                    <div class="flex items-start gap-2 rounded-xl border border-base-content/[0.08] bg-base-content/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-base-content/55">
+                      <Link2 size={13} class="mt-px shrink-0 text-base-content/40" />
+                      <span>
+                        Hay un enlace activo (<code class="font-mono">{meta()?.prefix}…</code>). Por seguridad la URL completa no puede mostrarse de nuevo; <b>regenérala</b> para obtener un enlace nuevo y copiarlo.
+                      </span>
+                    </div>
+                  }
+                >
+                  <div class="flex items-center gap-2 rounded-xl border border-base-content/[0.08] bg-base-content/[0.03] px-3 py-2">
+                    <code class="flex-1 truncate font-mono text-[11px] text-base-content/70">{fullUrl()}</code>
+                    <button
+                      onClick={handleCopy}
+                      class={`shrink-0 p-1.5 rounded-lg transition-all ${copied() ? 'bg-ios-green-500/15 text-ios-green-500' : 'text-base-content/40 hover:text-base-content/70 hover:bg-base-content/5'}`}
+                      title="Copiar enlace"
+                      aria-label={copied() ? 'Enlace copiado' : 'Copiar enlace'}
+                    >
+                      <Show when={copied()} fallback={<Copy size={14} />}><Check size={14} /></Show>
+                    </button>
+                  </div>
                   <p class="flex items-start gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
                     <AlertCircle size={13} class="mt-px shrink-0" />
                     Copia el enlace ahora: por seguridad no se mostrará completo de nuevo.

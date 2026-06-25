@@ -20,7 +20,7 @@ const MAX_FILE = 10 * 1024 * 1024; // 10MB
 const InvoiceModal: Component<Props> = (props) => {
   const isEdit = () => !!props.invoice;
 
-  const [period, setPeriod] = createSignal(props.invoice?.period ?? '');
+  const [period, setPeriod] = createSignal(props.invoice?.period ?? new Date().toISOString().slice(0, 7));
   const [issueDate, setIssueDate] = createSignal(props.invoice?.issue_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
   const [description, setDescription] = createSignal(props.invoice?.description ?? '');
   const [subtotal, setSubtotal] = createSignal(String(props.invoice?.subtotal ?? ''));
@@ -86,8 +86,8 @@ const InvoiceModal: Component<Props> = (props) => {
     setUploading(true);
     setError('');
     try {
-      const uploaded = await billingApi.invoices.uploadFile(props.invoice.id, file);
-      setFiles((prev) => [...prev, uploaded]);
+      const updated = await billingApi.invoices.uploadFile(props.invoice.id, file);
+      setFiles(updated.files ?? []);
     } catch (e: any) {
       setError(e?.message ?? 'Error al subir el archivo');
     } finally {
@@ -127,8 +127,8 @@ const InvoiceModal: Component<Props> = (props) => {
         <div class="px-5 py-4 space-y-4">
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1.5">
-              <label class={labelClass}>Periodo</label>
-              <input type="text" value={period()} onInput={(e) => setPeriod(e.currentTarget.value)} placeholder="2026-06" class={inputClass} />
+              <label class={labelClass}>Periodo (mes)</label>
+              <input type="month" value={period()} onInput={(e) => setPeriod(e.currentTarget.value)} class={inputClass} />
             </div>
             <div class="space-y-1.5">
               <label class={labelClass}>Fecha de emisión</label>
