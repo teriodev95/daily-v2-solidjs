@@ -1,10 +1,11 @@
 import { createSignal, createResource, For, Show, type Component } from 'solid-js';
 import {
   Building2, Plus, Pencil, ChevronRight, ArrowLeft, Link2, FileText,
-  CalendarClock, Trash2, AlertCircle, Receipt, Check, ToggleLeft, ToggleRight,
+  CalendarClock, Trash2, AlertCircle, Receipt, Check, ToggleLeft, ToggleRight, FileDown, Loader2,
 } from 'lucide-solid';
 import { billingApi } from './lib/api';
-import { formatMoney, formatDate } from './lib/format';
+import { formatMoney, formatDate, formatPeriod } from './lib/format';
+import { exportStatementPdf } from './lib/pdf';
 import type { Client, Invoice, Schedule, InvoiceStatus } from './types';
 import ClientModal from './components/ClientModal';
 import ScheduleModal from './components/ScheduleModal';
@@ -133,6 +134,30 @@ const ClientDetail: Component<{
   const [confirmDelete, setConfirmDelete] = createSignal<{ kind: 'invoice' | 'schedule'; id: string; label: string } | null>(null);
   const [deleting, setDeleting] = createSignal(false);
   const [togglingId, setTogglingId] = createSignal<string | null>(null);
+  const [exporting, setExporting] = createSignal(false);
+
+  const exportPdf = async () => {
+    if (exporting()) return;
+    const c = client();
+    if (!c) return;
+    setExporting(true);
+    try {
+      // Mint a fresh portal link so the PDF carries a working validation URL.
+      let portalUrl: string | undefined;
+      try {
+        const tok = await billingApi.shareToken.create(props.clientId);
+        portalUrl = `${window.location.origin}/?s=${encodeURIComponent(tok.token)}`;
+      } catch { /* export without the online-validation link */ }
+      exportStatementPdf({
+        client: c,
+        invoices: invoices(),
+        totalPending: statement()?.total_pending ?? 0,
+        portalUrl,
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const client = () => statement()?.client ?? props.client;
   const invoices = () => statement()?.invoices ?? [];
@@ -184,6 +209,15 @@ const ClientDetail: Component<{
           <Pencil size={13} /> Editar
         </button>
         <button
+          onClick={exportPdf}
+          disabled={exporting()}
+          title="Exportar estado de cuenta (PDF) con enlace de validación"
+          class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-base-content/[0.05] px-3 text-xs font-medium text-base-content/60 hover:bg-base-content/[0.09] disabled:opacity-50 transition-colors"
+        >
+          <Show when={exporting()} fallback={<FileDown size={14} />}><Loader2 size={14} class="animate-spin" /></Show>
+          PDF
+        </button>
+        <button
           onClick={() => setShowShare(true)}
           class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-ios-blue-500 px-3 text-xs font-semibold text-white hover:bg-ios-blue-600 transition-colors"
         >
@@ -230,7 +264,7 @@ const ClientDetail: Component<{
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2">
                     <StatusBadge status={inv.status} />
-                    <span class="text-[11px] font-medium text-base-content/55">{inv.period}</span>
+                    <span class="text-[11px] font-medium text-base-content/55">{formatPeriod(inv.period)}</span>
                     <Show when={inv.is_estimated}>
                       <span class="rounded bg-amber-500/12 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400">Estimada</span>
                     </Show>
@@ -254,7 +288,7 @@ const ClientDetail: Component<{
                     <Show when={inv.status === 'paid'} fallback={<ToggleLeft size={16} />}><ToggleRight size={16} /></Show>
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); setConfirmDelete({ kind: 'invoice', id: inv.id, label: `Factura ${inv.period}` }); }}
+                    onClick={(e) => { e.stopPropagation(); setConfirmDelete({ kind: 'invoice', id: inv.id, label: `Factura ${formatPeriod(inv.period)}` }); }}
                     title="Eliminar factura"
                     aria-label="Eliminar factura"
                     class="rounded-lg p-1.5 text-base-content/35 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"

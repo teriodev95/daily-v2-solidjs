@@ -1,7 +1,7 @@
 import { createSignal, For, Show, type Component } from 'solid-js';
 import { X, Loader2, FileText, Upload, Trash2, Download, FileCode2 } from 'lucide-solid';
 import { billingApi } from '../lib/api';
-import { formatFileSize } from '../lib/format';
+import { formatFileSize, formatPeriod } from '../lib/format';
 import type { Invoice, InvoiceFile, InvoiceStatus } from '../types';
 
 interface Props {
@@ -129,6 +129,7 @@ const InvoiceModal: Component<Props> = (props) => {
             <div class="space-y-1.5">
               <label class={labelClass}>Periodo (mes)</label>
               <input type="month" value={period()} onInput={(e) => setPeriod(e.currentTarget.value)} class={inputClass} />
+              <p class="text-[10px] text-base-content/35 capitalize">{formatPeriod(period())}</p>
             </div>
             <div class="space-y-1.5">
               <label class={labelClass}>Fecha de emisión</label>

@@ -413,15 +413,15 @@ const AppShell: Component = () => {
   );
 };
 
-// Public billing portal: served at /estado-cuenta?s=<token>. Read once at boot
-// (a share link is a fresh page load, no client-side routing). Bypasses
-// AuthProvider entirely so the public surface never touches the session.
+// Public billing portal: served at /?s=<token>. Read once at boot (a share link
+// is a fresh page load, no client-side routing). Bypasses AuthProvider entirely
+// so the public surface never touches the session. We match the `st_` token on
+// ANY path because the Pages SPA fallback only reliably serves the app from the
+// root, so the shared link uses `/?s=st_…`.
 const readPortalToken = (): string | null => {
   try {
-    const { pathname, search } = window.location;
-    if (!pathname.startsWith('/estado-cuenta')) return null;
-    const token = new URLSearchParams(search).get('s');
-    return token && token.trim() ? token.trim() : null;
+    const token = new URLSearchParams(window.location.search).get('s');
+    return token && token.startsWith('st_') ? token.trim() : null;
   } catch {
     return null;
   }

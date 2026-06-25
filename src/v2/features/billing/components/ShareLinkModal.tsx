@@ -39,11 +39,13 @@ const ShareLinkModal: Component<Props> = (props) => {
   // Full URL only available right after creation. For an existing token we only
   // know the path (no secret), so we can rebuild the URL but the secret is the
   // one shown at creation — backend returns url_path with the token embedded.
-  // The full URL (with the secret) only exists right after creation; an existing
-  // token exposes only its prefix, never the recoverable URL.
+  // Build the shareable URL from the raw token on the app ROOT — the SPA serves
+  // reliably from `/` (Pages' fallback doesn't cover sub-paths) and the
+  // PortalGate detects the `st_` token there. The full URL (with the secret)
+  // only exists right after creation; an existing token exposes only its prefix.
   const fullUrl = () => {
     const c = created();
-    return c ? absoluteUrl(c.url_path) : '';
+    return c ? `${window.location.origin}/?s=${encodeURIComponent(c.token)}` : '';
   };
 
   const handleCreate = async () => {
