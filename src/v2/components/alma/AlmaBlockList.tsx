@@ -223,6 +223,14 @@ const AlmaBlockList: Component<Props> = (props) => {
                           {preview() || 'Párrafo vacío'}
                         </span>
 
+                        {/* Char count — subtle, uniform across every alma */}
+                        <span
+                          class="shrink-0 text-[10px] font-mono tabular-nums text-base-content/25"
+                          title={`${block.text.length} caracteres`}
+                        >
+                          {block.text.length}
+                        </span>
+
                         {/* Reorder — visible on row hover */}
                         <div class="hidden sm:flex items-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                           <button
