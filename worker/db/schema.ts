@@ -253,6 +253,25 @@ export const secretAuditEvents = sqliteTable('secret_audit_events', {
   created_at: text('created_at').notNull(),
 });
 
+// Alma: per-user layered technical memory. Three tiers: 0 = always-loaded core
+// ("alma"), 1 = domains, 2 = deep reference. Written by an agent (via a PAT with
+// `alma:write`) and curated by the human. Strictly scoped per user — every query
+// filters by user_id, so a user (or their PAT) never reaches another's alma.
+export const almaDocuments = sqliteTable('alma_documents', {
+  id: text('id').primaryKey(),
+  user_id: text('user_id').notNull().references(() => users.id),
+  team_id: text('team_id').notNull().references(() => teams.id),
+  tier: integer('tier').notNull(),
+  kind: text('kind').notNull(),
+  title: text('title').notNull(),
+  content: text('content').notNull().default(''),
+  tags: text('tags').notNull().default('[]'),
+  source: text('source'), // 'agent' | 'human' (server-set), nullable
+  sort: integer('sort').notNull().default(0),
+  created_at: text('created_at').notNull(),
+  updated_at: text('updated_at').notNull(),
+});
+
 // Re-export wiki share tokens table from its feature folder so Drizzle's
 // schema introspection (drizzle-kit + the typed `AppDb`) picks it up.
 // The feature module imports `projects` and `users` from this file — that's

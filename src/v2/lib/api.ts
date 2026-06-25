@@ -166,6 +166,23 @@ export interface ShareTokenResponse {
   previous_revoked: boolean;
 }
 
+// ─── Alma (per-user layered technical memory) ─────
+
+export interface AlmaDoc {
+  id: string;
+  user_id: string;
+  team_id: string;
+  tier: 0 | 1 | 2;
+  kind: string;
+  title: string;
+  content: string;
+  tags: string[];
+  source: 'agent' | 'human' | null;
+  sort: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── API Client ──────────────────────────────────
 
 export const api = {
@@ -376,6 +393,17 @@ export const api = {
       request<WikiArticle>(`/api/wiki/${id}/dismiss-suggestion`, { method: 'POST', body: JSON.stringify(data) }),
     createShareToken: (articleId: string) =>
       request<ShareTokenResponse>(`/api/wiki/${articleId}/share-token`, { method: 'POST' }),
+  },
+
+  alma: {
+    list: () => request<AlmaDoc[]>('/api/alma'),
+    create: (data: { tier: 0 | 1 | 2; kind: string; title: string; content?: string; tags?: string[] }) =>
+      request<AlmaDoc>('/api/alma', { method: 'POST', body: JSON.stringify(data) }),
+    get: (id: string) => request<AlmaDoc>(`/api/alma/${id}`),
+    update: (id: string, data: Partial<{ kind: string; title: string; content: string; tags: string[]; sort: number; tier: 0 | 1 | 2 }>) =>
+      request<AlmaDoc>(`/api/alma/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    remove: (id: string) =>
+      request<{ ok: boolean }>(`/api/alma/${id}`, { method: 'DELETE' }),
   },
 
   admin: {

@@ -29,6 +29,7 @@ const VALID_MODULES = [
   'learnings',
   'goals',
   'secrets',
+  'alma',
 ] as const;
 
 type ModuleName = (typeof VALID_MODULES)[number];

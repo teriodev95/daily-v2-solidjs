@@ -2,6 +2,7 @@ import { For, type Component } from 'solid-js';
 import type { TokenScope } from '../../lib/api';
 
 export const MODULES: { key: string; label: string }[] = [
+  { key: 'alma', label: 'Alma' },
   { key: 'wiki', label: 'Wiki' },
   { key: 'reports', label: 'Reportes' },
   { key: 'stories', label: 'Historias' },

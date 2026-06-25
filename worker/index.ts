@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context, Next } from 'hono';
 import { cors } from 'hono/cors';
 import { drizzle } from 'drizzle-orm/d1';
+import { eq } from 'drizzle-orm';
 import type { Env, Variables } from './types';
 import * as dbSchema from './db/schema';
 import { authMiddleware, requireAdmin } from './middleware/auth';
@@ -21,6 +22,7 @@ import learningsRoutes from './routes/learnings';
 import wikiRoutes from './routes/wiki';
 import tokensRoutes from './routes/tokens';
 import secretsRoutes from './routes/secrets';
+import almaRoutes from './routes/alma';
 import presenceRoutes from './routes/presence';
 import { wikiAgentRoutes } from './features/wikiShare';
 import seedRoutes from './db/seed';
@@ -173,6 +175,13 @@ app.use('/api/secrets/*', authMiddleware);
 app.use('/api/secrets/*', requireAdmin);
 app.use('/api/secrets/*', enforceScope('secrets'));
 
+// Alma: per-user layered technical memory. NOT admin-only — every user has
+// their own. Each query inside the router is scoped to the caller's user_id,
+// so a user (or their PAT) only ever touches their own alma.
+app.use('/api/alma/*', tokenAuthMiddleware);
+app.use('/api/alma/*', authMiddleware);
+app.use('/api/alma/*', enforceScope('alma'));
+
 // Token management itself: only accessible via session auth — this is
 // a user-level operation (and MUST prevent PATs from minting more PATs,
 // revealing other PATs, or revoking them). We explicitly do NOT wire
@@ -216,6 +225,35 @@ app.get('/api/meta', async (c) => {
     };
   }
 
+  // Alma capability — progressive disclosure of the caller's own memory.
+  // Exposed only to PATs holding an `alma` read/write scope (agents): the Tier 0
+  // core inline + an index of the layers so the agent can decide what to fetch
+  // next. Session users (the app) read their Alma via /api/alma, so we skip this
+  // extra DB read on that path and keep /api/meta cheap.
+  const user = c.get('user');
+  const tokenId = c.get('tokenId');
+  const almaScope = scopes['alma'];
+  if (user && tokenId && (almaScope === 'read' || almaScope === 'write')) {
+    const db = c.get('db');
+    const docs = await db
+      .select()
+      .from(dbSchema.almaDocuments)
+      .where(eq(dbSchema.almaDocuments.user_id, user.userId));
+    docs.sort(
+      (a, b) =>
+        a.tier - b.tier ||
+        a.sort - b.sort ||
+        a.created_at.localeCompare(b.created_at),
+    );
+    const coreRow = docs.find((d) => d.tier === 0 && d.kind === 'alma');
+    capabilities.alma = {
+      granted: almaScope,
+      core: coreRow ? { title: coreRow.title, content: coreRow.content } : null,
+      index: docs.map((d) => ({ id: d.id, tier: d.tier, kind: d.kind, title: d.title })),
+      get: 'GET /api/alma/:id',
+    };
+  }
+
   return c.json({
     priorities: ['low', 'medium', 'high', 'critical'],
     statuses: ['backlog', 'todo', 'in_progress', 'done'],
@@ -229,6 +267,7 @@ app.get('/api/meta', async (c) => {
       learnings: { list: 'GET /api/learnings', create: 'POST /api/learnings', get: 'GET /api/learnings/:id', update: 'PATCH /api/learnings/:id', delete: 'DELETE /api/learnings/:id' },
       wiki: { list: 'GET /api/wiki?project_id=X', search: 'GET /api/wiki/search?q=X', graph: 'GET /api/wiki/graph?project_id=X', create: 'POST /api/wiki', get: 'GET /api/wiki/:id', update: 'PATCH /api/wiki/:id', delete: 'DELETE /api/wiki/:id' },
       secrets: { list: 'GET /api/secrets', create: 'POST /api/secrets', get: 'GET /api/secrets/:id', update: 'PATCH /api/secrets/:id', delete: 'DELETE /api/secrets/:id', reveal: 'POST /api/secrets/:id/reveal', audit: 'GET /api/secrets/:id/audit' },
+      alma: { list: 'GET /api/alma', create: 'POST /api/alma', get: 'GET /api/alma/:id', update: 'PATCH /api/alma/:id', delete: 'DELETE /api/alma/:id' },
       agent: {
         manifest: 'GET /agent/story/:id',
         description: 'GET /agent/story/:id/description',
@@ -268,6 +307,7 @@ app.route('/api/learnings', learningsRoutes);
 app.route('/api/wiki', wikiRoutes);
 app.route('/api/tokens', tokensRoutes);
 app.route('/api/secrets', secretsRoutes);
+app.route('/api/alma', almaRoutes);
 app.route('/api/presence', presenceRoutes);
 
 // ---------- Agent API ----------

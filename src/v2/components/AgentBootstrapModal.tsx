@@ -53,6 +53,11 @@ const AgentBootstrapModal: Component<Props> = (props) => {
     () => chosenToken()?.scopes?.secrets ?? 'none',
   );
 
+  // Whether the selected token can reach the user's Alma (layered memory).
+  const almaScope = createMemo<'none' | 'read' | 'write'>(
+    () => chosenToken()?.scopes?.alma ?? 'none',
+  );
+
   const [rawToken] = createResource(chosenToken, async (t) => {
     if (!t) return null;
     const res = await api.tokens.reveal(t.id);
@@ -255,6 +260,9 @@ const AgentBootstrapModal: Component<Props> = (props) => {
 
               <p class="text-[11px] text-base-content/50 leading-relaxed">
                 Pégalo como mensaje inicial a tu agente (Claude, Cursor, Codex…). Descubrirá el resto vía <code class="font-mono text-[10px] bg-base-content/[0.06] px-1 py-px rounded">/api/meta</code>.
+                <Show when={almaScope() !== 'none'}>
+                  {' '}Con el scope <code class="font-mono text-[10px] bg-base-content/[0.06] px-1 py-px rounded">alma</code>, el agente recibe el núcleo (Tier 0) y el índice de tu Alma.
+                </Show>
               </p>
 
               {/* Warning */}

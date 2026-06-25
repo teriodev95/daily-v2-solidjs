@@ -14,6 +14,7 @@ import AdminPage from './pages/AdminPage';
 import TasksPage from './pages/TasksPage';
 import WikiPage from './pages/WikiPage';
 import TokensPage from './pages/TokensPage';
+import AlmaPage from './pages/AlmaPage';
 import CreateStoryModal from './components/CreateStoryModal';
 import SearchModal from './components/SearchModal';
 import CalendarPage from './pages/CalendarPage';
@@ -29,7 +30,7 @@ import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
 import { interactionMotion } from './lib/interactionMotion';
 
-type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar' | 'tokens';
+type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar' | 'tokens' | 'alma';
 
 const AppShell: Component = () => {
   const auth = useAuth();
@@ -167,12 +168,14 @@ const AppShell: Component = () => {
     const onOpenShare = () => triggerShare();
     const onOpenHidden = () => triggerHiddenStories();
     const onOpenTokens = () => switchTab('tokens');
+    const onOpenAlma = () => switchTab('alma');
     const onOpenAgentBootstrap = () => setShowAgentBootstrap(true);
 
     window.addEventListener('open-search', onOpenSearch);
     window.addEventListener('open-share', onOpenShare);
     window.addEventListener('open-hidden', onOpenHidden);
     window.addEventListener('open-tokens', onOpenTokens);
+    window.addEventListener('open-alma', onOpenAlma);
     window.addEventListener('open-agent-bootstrap', onOpenAgentBootstrap);
 
     onCleanup(() => {
@@ -181,6 +184,7 @@ const AppShell: Component = () => {
       window.removeEventListener('open-share', onOpenShare);
       window.removeEventListener('open-hidden', onOpenHidden);
       window.removeEventListener('open-tokens', onOpenTokens);
+      window.removeEventListener('open-alma', onOpenAlma);
       window.removeEventListener('open-agent-bootstrap', onOpenAgentBootstrap);
     });
   });
@@ -224,6 +228,9 @@ const AppShell: Component = () => {
         </div>
         <div class={activeTab() === 'tokens' ? 'stagger-in' : ''} style={{ display: activeTab() === 'tokens' ? undefined : 'none' }}>
           <TokensPage />
+        </div>
+        <div class={activeTab() === 'alma' ? 'stagger-in' : ''} style={{ display: activeTab() === 'alma' ? undefined : 'none' }}>
+          <AlmaPage />
         </div>
       </main>
 

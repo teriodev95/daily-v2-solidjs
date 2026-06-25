@@ -1,6 +1,6 @@
 import { Show, For, createSignal, onCleanup, onMount, type Component, type JSX } from 'solid-js';
 import { useAuth } from '../lib/auth';
-import { Search, Moon, Sun, LogOut, ChevronRight, User as UserIcon, Key, Sparkles } from 'lucide-solid';
+import { Search, Moon, Sun, LogOut, ChevronRight, Key, Sparkles, BrainCircuit } from 'lucide-solid';
 import { isDark, toggleTheme } from '../lib/theme';
 import dailyIcon from '../../assets/daily-icon.png';
 
@@ -56,6 +56,12 @@ const TopNavigation: Component<Props> = (props) => {
     setMenuOpen(false);
     setMobileMenuOpen(false);
     window.dispatchEvent(new Event('open-tokens'));
+  };
+
+  const openAlma = () => {
+    setMenuOpen(false);
+    setMobileMenuOpen(false);
+    window.dispatchEvent(new Event('open-alma'));
   };
 
   const openAgentBootstrap = () => {
@@ -151,13 +157,11 @@ const TopNavigation: Component<Props> = (props) => {
                     <button
                       type="button"
                       role="menuitem"
-                      disabled
-                      title="Próximamente"
-                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/40 cursor-not-allowed"
+                      onClick={openAlma}
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/70 hover:bg-base-content/5 transition-colors"
                     >
-                      <UserIcon size={14} class="text-base-content/30" />
-                      <span class="flex-1 text-left">Mi cuenta</span>
-                      <span class="text-[9px] uppercase tracking-wider text-base-content/30">Pronto</span>
+                      <BrainCircuit size={14} class="text-base-content/50" />
+                      Alma
                     </button>
                     <button
                       type="button"
@@ -250,13 +254,11 @@ const TopNavigation: Component<Props> = (props) => {
                     <button
                       type="button"
                       role="menuitem"
-                      disabled
-                      title="Próximamente"
-                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/40 cursor-not-allowed"
+                      onClick={openAlma}
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/70 hover:bg-base-content/5 transition-colors"
                     >
-                      <UserIcon size={14} class="text-base-content/30" />
-                      <span class="flex-1 text-left">Mi cuenta</span>
-                      <span class="text-[9px] uppercase tracking-wider text-base-content/30">Pronto</span>
+                      <BrainCircuit size={14} class="text-base-content/50" />
+                      Alma
                     </button>
                     <button
                       type="button"
