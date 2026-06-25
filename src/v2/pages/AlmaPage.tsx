@@ -169,7 +169,7 @@ const AlmaPage: Component = () => {
         }
       />
 
-      <div class="space-y-5 max-w-3xl mx-auto">
+      <div class="space-y-5">
         {/* Page header */}
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0">
