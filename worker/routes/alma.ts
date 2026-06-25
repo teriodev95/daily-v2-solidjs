@@ -338,17 +338,21 @@ alma.get('/:id/blocks', async (c) => {
       .split(/\n{2,}/)
       .filter((s) => s.trim().length > 0);
     if (segments.length > 0) {
-      await db.insert(schema.almaBlocks).values(
-        segments.map((text, i) => ({
-          id: crypto.randomUUID(),
-          alma_id: id,
-          sort: i,
-          text,
-          locked: false,
-          created_at: now,
-          updated_at: now,
-        })),
-      );
+      const rows = segments.map((text, i) => ({
+        id: crypto.randomUUID(),
+        alma_id: id,
+        sort: i,
+        text,
+        locked: false,
+        created_at: now,
+        updated_at: now,
+      }));
+      // D1 caps bound parameters per statement (~100). Each row binds 7 columns,
+      // so insert in chunks to stay well under the cap for long entries.
+      const CHUNK = 12;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        await db.insert(schema.almaBlocks).values(rows.slice(i, i + CHUNK));
+      }
       blocks = await listBlocks(db, id);
     }
   }
