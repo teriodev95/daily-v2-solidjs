@@ -136,7 +136,7 @@ export interface SecretMeta {
   project_id: string | null;
   name: string;
   key: string;
-  environment: string | null;
+  environments: string[];
   tags: string[];
   created_by: string;
   updated_by: string | null;
@@ -402,10 +402,10 @@ export const api = {
       const s = qs.toString();
       return request<SecretMeta[]>(`/api/secrets${s ? `?${s}` : ''}`);
     },
-    create: (data: { name: string; key: string; value: string; project_id?: string | null; environment?: string | null; tags?: string[] }) =>
+    create: (data: { name: string; key: string; value: string; project_id?: string | null; environments?: string[]; tags?: string[] }) =>
       request<SecretMeta>('/api/secrets', { method: 'POST', body: JSON.stringify(data) }),
     get: (id: string) => request<SecretMeta>(`/api/secrets/${id}`),
-    update: (id: string, data: Partial<{ name: string; key: string; value: string; project_id: string | null; environment: string | null; tags: string[] }>) =>
+    update: (id: string, data: Partial<{ name: string; key: string; value: string; project_id: string | null; environments: string[]; tags: string[] }>) =>
       request<SecretMeta>(`/api/secrets/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     remove: (id: string) =>
       request<{ ok: boolean }>(`/api/secrets/${id}`, { method: 'DELETE' }),

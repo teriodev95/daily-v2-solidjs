@@ -741,11 +741,13 @@ const AdminPage: Component = () => {
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
                           <p class="truncate text-sm font-medium">{secret.name}</p>
-                          <Show when={secret.environment}>
-                            <span class="shrink-0 rounded-md bg-ios-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-ios-blue-500">
-                              {secret.environment}
-                            </span>
-                          </Show>
+                          <For each={secret.environments}>
+                            {(env) => (
+                              <span class="shrink-0 rounded-md bg-ios-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-ios-blue-500">
+                                {env}
+                              </span>
+                            )}
+                          </For>
                         </div>
                         <div class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-base-content/40">
                           <code class="max-w-[45%] truncate font-mono text-[10.5px] text-base-content/55">{secret.key}</code>

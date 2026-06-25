@@ -45,22 +45,56 @@ function validateTags(raw: unknown): { ok: true; tags: string[] } | { ok: false;
   return { ok: true, tags: out };
 }
 
-// Validates an environment value (known label or a simple slug).
-function validateEnvironment(raw: unknown): { ok: true; value: string } | { ok: false; error: string } {
-  if (typeof raw !== 'string') {
-    return { ok: false, error: 'environment must be a string' };
+// A secret can apply to several environments at once (e.g. an API key valid in
+// dev + prod). They're stored JSON-encoded in the `environment` column; reads
+// stay tolerant of legacy single-string values written before multi-env.
+function parseEnvironments(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter((e): e is string => typeof e === 'string');
+  } catch {
+    // Legacy single-string value (e.g. "prod").
   }
-  const value = raw.trim();
-  if (KNOWN_ENVIRONMENTS.includes(value as (typeof KNOWN_ENVIRONMENTS)[number])) {
-    return { ok: true, value };
+  const trimmed = raw.trim();
+  return trimmed ? [trimmed] : [];
+}
+
+function isValidEnv(value: string): boolean {
+  return (
+    KNOWN_ENVIRONMENTS.includes(value as (typeof KNOWN_ENVIRONMENTS)[number]) ||
+    ENV_SLUG_RE.test(value)
+  );
+}
+
+// Validates an `environments` array: each entry a known label or a simple slug.
+function validateEnvironments(
+  raw: unknown,
+): { ok: true; environments: string[] } | { ok: false; error: string } {
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: 'environments must be an array of strings' };
   }
-  if (ENV_SLUG_RE.test(value)) {
-    return { ok: true, value };
+  const out: string[] = [];
+  for (const e of raw) {
+    if (typeof e !== 'string') {
+      return { ok: false, error: 'environments must be an array of strings' };
+    }
+    const value = e.trim();
+    if (value === '') continue;
+    if (!isValidEnv(value)) {
+      return {
+        ok: false,
+        error: "each environment must be 'dev'|'staging'|'prod'|'local' or a slug ^[a-z0-9_-]{1,20}$",
+      };
+    }
+    if (!out.includes(value)) out.push(value);
   }
-  return {
-    ok: false,
-    error: "environment must be 'dev'|'staging'|'prod'|'local' or a slug matching ^[a-z0-9_-]{1,20}$",
-  };
+  return { ok: true, environments: out };
+}
+
+// Serialize an environments array for storage (null when empty).
+function serializeEnvironments(envs: string[]): string | null {
+  return envs.length ? JSON.stringify(envs) : null;
 }
 
 // Verifies a project belongs to the caller's team. Returns null if it does,
@@ -91,7 +125,7 @@ function toPublicSecret(
     project_id: row.project_id,
     name: row.name,
     key: row.key,
-    environment: row.environment,
+    environments: parseEnvironments(row.environment),
     tags: parseTags(row.tags),
     created_by: row.created_by,
     updated_by: row.updated_by,
@@ -151,7 +185,7 @@ secrets.get('/', async (c) => {
     .where(and(eq(schema.secrets.team_id, user.teamId), isNull(schema.secrets.revoked_at)));
 
   if (projectId) rows = rows.filter((r) => r.project_id === projectId);
-  if (environment) rows = rows.filter((r) => r.environment === environment);
+  if (environment) rows = rows.filter((r) => parseEnvironments(r.environment).includes(environment));
   if (tag) rows = rows.filter((r) => parseTags(r.tags).includes(tag));
   if (q) {
     const needle = q.toLowerCase();
@@ -192,7 +226,7 @@ secrets.post('/', async (c) => {
     key?: unknown;
     value?: unknown;
     project_id?: unknown;
-    environment?: unknown;
+    environments?: unknown;
     tags?: unknown;
   };
   try {
@@ -237,14 +271,14 @@ secrets.post('/', async (c) => {
     projectId = body.project_id;
   }
 
-  // environment (optional)
-  let environment: string | null = null;
-  if (body.environment !== undefined && body.environment !== null) {
-    const envResult = validateEnvironment(body.environment);
+  // environments (optional; a secret can apply to several at once)
+  let environments: string[] = [];
+  if (body.environments !== undefined && body.environments !== null) {
+    const envResult = validateEnvironments(body.environments);
     if (!envResult.ok) {
-      return c.json({ error: envResult.error, field: 'environment' }, 400);
+      return c.json({ error: envResult.error, field: 'environments' }, 400);
     }
-    environment = envResult.value;
+    environments = envResult.environments;
   }
 
   // tags (optional)
@@ -281,7 +315,7 @@ secrets.post('/', async (c) => {
     name,
     key,
     encrypted_value: encryptedValue,
-    environment,
+    environment: serializeEnvironments(environments),
     tags: JSON.stringify(tags),
     created_by: user.userId,
     updated_by: null,
@@ -412,16 +446,16 @@ secrets.patch('/:id', async (c) => {
     }
   }
 
-  // environment (nullable)
-  if (body.environment !== undefined) {
-    if (body.environment === null) {
+  // environments (nullable; replaces the whole set when provided)
+  if (body.environments !== undefined) {
+    if (body.environments === null) {
       updates.environment = null;
     } else {
-      const envResult = validateEnvironment(body.environment);
+      const envResult = validateEnvironments(body.environments);
       if (!envResult.ok) {
-        return c.json({ error: envResult.error, field: 'environment' }, 400);
+        return c.json({ error: envResult.error, field: 'environments' }, 400);
       }
-      updates.environment = envResult.value;
+      updates.environment = serializeEnvironments(envResult.environments);
     }
   }
 
