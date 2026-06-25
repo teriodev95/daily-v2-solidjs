@@ -290,7 +290,7 @@ app.get('/api/meta', async (c) => {
       learnings: { list: 'GET /api/learnings', create: 'POST /api/learnings', get: 'GET /api/learnings/:id', update: 'PATCH /api/learnings/:id', delete: 'DELETE /api/learnings/:id' },
       wiki: { list: 'GET /api/wiki?project_id=X', search: 'GET /api/wiki/search?q=X', graph: 'GET /api/wiki/graph?project_id=X', create: 'POST /api/wiki', get: 'GET /api/wiki/:id', update: 'PATCH /api/wiki/:id', delete: 'DELETE /api/wiki/:id' },
       secrets: { list: 'GET /api/secrets', create: 'POST /api/secrets', get: 'GET /api/secrets/:id', update: 'PATCH /api/secrets/:id', delete: 'DELETE /api/secrets/:id', reveal: 'POST /api/secrets/:id/reveal', audit: 'GET /api/secrets/:id/audit' },
-      alma: { list: 'GET /api/alma', create: 'POST /api/alma', get: 'GET /api/alma/:id', update: 'PATCH /api/alma/:id', delete: 'DELETE /api/alma/:id' },
+      alma: { list: 'GET /api/alma', create: 'POST /api/alma', get: 'GET /api/alma/:id', update: 'PATCH /api/alma/:id', delete: 'DELETE /api/alma/:id', blocks: 'GET /api/alma/:id/blocks', create_block: 'POST /api/alma/:id/blocks', update_block: 'PATCH /api/alma/:id/blocks/:bid', delete_block: 'DELETE /api/alma/:id/blocks/:bid', reorder_blocks: 'POST /api/alma/:id/blocks/reorder', lock_block: 'PATCH /api/alma/:id/blocks/:bid/lock' },
       billing: {
         clients: 'GET /api/billing/clients',
         create_client: 'POST /api/billing/clients',

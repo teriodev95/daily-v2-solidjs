@@ -275,6 +275,21 @@ export const almaDocuments = sqliteTable('alma_documents', {
   updated_at: text('updated_at').notNull(),
 });
 
+// Alma blocks: a paragraph is the atomic unit of an Alma entry. The source of
+// truth for an entry's body — `alma_documents.content` becomes a derived cache
+// (block texts joined by "\n\n" in `sort` order). `locked` blocks can only be
+// edited/unlocked by a human session, never by an agent (PAT). `sort` is a dense
+// 0..n-1 index, renumbered on every structural change.
+export const almaBlocks = sqliteTable('alma_blocks', {
+  id: text('id').primaryKey(),
+  alma_id: text('alma_id').notNull().references(() => almaDocuments.id, { onDelete: 'cascade' }),
+  sort: integer('sort').notNull().default(0),
+  text: text('text').notNull().default(''),
+  locked: integer('locked', { mode: 'boolean' }).notNull().default(false),
+  created_at: text('created_at').notNull(),
+  updated_at: text('updated_at').notNull(),
+});
+
 // Re-export wiki share tokens table from its feature folder so Drizzle's
 // schema introspection (drizzle-kit + the typed `AppDb`) picks it up.
 // The feature module imports `projects` and `users` from this file — that's

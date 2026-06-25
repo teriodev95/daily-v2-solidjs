@@ -183,6 +183,18 @@ export interface AlmaDoc {
   updated_at: string;
 }
 
+// A single editable paragraph of an Alma doc. The doc `content` is derived
+// from its ordered blocks on the server; the UI edits blocks, not raw content.
+export interface AlmaBlock {
+  id: string;
+  alma_id: string;
+  text: string;
+  locked: boolean;
+  sort: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── API Client ──────────────────────────────────
 
 export const api = {
@@ -404,6 +416,23 @@ export const api = {
       request<AlmaDoc>(`/api/alma/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     remove: (id: string) =>
       request<{ ok: boolean }>(`/api/alma/${id}`, { method: 'DELETE' }),
+
+    // Paragraph-level editing. The server keeps blocks ordered and lazily
+    // backfills them from `content` the first time they're requested.
+    blocks: {
+      list: (almaId: string) =>
+        request<{ blocks: AlmaBlock[] }>(`/api/alma/${almaId}/blocks`).then((r) => r.blocks),
+      create: (almaId: string, data: { text?: string; after?: string | null }) =>
+        request<{ block: AlmaBlock; blocks: AlmaBlock[] }>(`/api/alma/${almaId}/blocks`, { method: 'POST', body: JSON.stringify(data) }),
+      update: (almaId: string, blockId: string, text: string) =>
+        request<{ block: AlmaBlock; blocks: AlmaBlock[] }>(`/api/alma/${almaId}/blocks/${blockId}`, { method: 'PATCH', body: JSON.stringify({ text }) }),
+      remove: (almaId: string, blockId: string) =>
+        request<{ ok: true; blocks: AlmaBlock[] }>(`/api/alma/${almaId}/blocks/${blockId}`, { method: 'DELETE' }),
+      reorder: (almaId: string, ids: string[]) =>
+        request<{ blocks: AlmaBlock[] }>(`/api/alma/${almaId}/blocks/reorder`, { method: 'POST', body: JSON.stringify({ ids }) }),
+      setLock: (almaId: string, blockId: string, locked: boolean) =>
+        request<{ block: AlmaBlock }>(`/api/alma/${almaId}/blocks/${blockId}/lock`, { method: 'PATCH', body: JSON.stringify({ locked }) }),
+    },
   },
 
   admin: {

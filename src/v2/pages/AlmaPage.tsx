@@ -7,13 +7,13 @@ import {
 } from 'lucide-solid';
 import TopNavigation from '../components/TopNavigation';
 import WikiArticleDetail from '../components/WikiArticleDetail';
-import AlmaContentEditor from '../components/alma/AlmaContentEditor';
+import AlmaBlockList from '../components/alma/AlmaBlockList';
 import { api, type AlmaDoc } from '../lib/api';
 import type { WikiArticle } from '../types';
 import { useOnceReady } from '../lib/onceReady';
 
 // Rough token estimate shared with the live budget meter on Tier 0.
-const estimateTokens = (text: string): number => Math.ceil((text?.length ?? 0) / 4);
+const estimateTokens = (chars: number): number => Math.ceil(chars / 4);
 const TIER0_BUDGET = 1500;
 
 // Font-size presets for the content — handy when a note grows long.
@@ -44,6 +44,8 @@ const AlmaPage: Component = () => {
   const [wikiArticle, setWikiArticle] = createSignal<WikiArticle | null>(null);
   const [creatingTier, setCreatingTier] = createSignal<1 | 2 | null>(null);
   const [fontPx, setFontPx] = createSignal<number>(readFontPx());
+  // Live char total of the Núcleo's blocks; falls back to content length while loading.
+  const [coreChars, setCoreChars] = createSignal<number | null>(null);
   const [secretInfo, setSecretInfo] = createSignal<string | null>(null);
   let secretInfoTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -225,7 +227,7 @@ const AlmaPage: Component = () => {
             {/* ── Tier 0: núcleo ── */}
             <Show when={tier0()}>
               {(doc) => {
-                const tokens = () => estimateTokens(doc().content);
+                const tokens = () => estimateTokens(coreChars() ?? (doc().content?.length ?? 0));
                 const ratio = () => tokens() / TIER0_BUDGET;
                 const meterColor = () =>
                   tokens() > TIER0_BUDGET ? 'bg-red-500'
@@ -257,13 +259,13 @@ const AlmaPage: Component = () => {
                         </span>
                       </div>
                     </div>
-                    <AlmaContentEditor
-                      content={doc().content}
+                    <AlmaBlockList
+                      almaId={doc().id}
                       fontSize={fontPx()}
-                      placeholder="El núcleo de tu Alma: stack, convenciones, lo que el agente debe saber siempre. @ enlaza la wiki · $ referencia un secreto."
-                      onChange={(md) => scheduleSave(doc().id, { content: md })}
                       onOpenWiki={openWikiByTitle}
                       onOpenSecret={openSecretRef}
+                      onSaveStatus={(s) => setSaveStatus(s)}
+                      onTotalChars={(n) => setCoreChars(n)}
                     />
                   </section>
                 );
@@ -284,6 +286,7 @@ const AlmaPage: Component = () => {
               onDelete={setConfirmDelete}
               onOpenWiki={openWikiByTitle}
               onOpenSecret={openSecretRef}
+              onSaveStatus={(s) => setSaveStatus(s)}
               fontSize={fontPx()}
             />
 
@@ -301,6 +304,7 @@ const AlmaPage: Component = () => {
               onDelete={setConfirmDelete}
               onOpenWiki={openWikiByTitle}
               onOpenSecret={openSecretRef}
+              onSaveStatus={(s) => setSaveStatus(s)}
               fontSize={fontPx()}
             />
           </Show>
@@ -388,6 +392,7 @@ interface TierSectionProps {
   onDelete: (doc: AlmaDoc) => void;
   onOpenWiki: (title: string) => void;
   onOpenSecret: (key: string) => void;
+  onSaveStatus: (status: SaveStatus) => void;
   fontSize: number;
 }
 
@@ -476,13 +481,12 @@ const TierSection: Component<TierSectionProps> = (props) => {
                         tags={doc.tags ?? []}
                         onChange={(tags) => props.onField(doc.id, { tags })}
                       />
-                      <AlmaContentEditor
-                        content={doc.content}
+                      <AlmaBlockList
+                        almaId={doc.id}
                         fontSize={props.fontSize}
-                        placeholder="Contenido. Markdown y tablas. @ enlaza la wiki · $ referencia un secreto."
-                        onChange={(md) => props.onField(doc.id, { content: md })}
                         onOpenWiki={props.onOpenWiki}
                         onOpenSecret={props.onOpenSecret}
+                        onSaveStatus={props.onSaveStatus}
                       />
                     </div>
                   </Show>
