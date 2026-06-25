@@ -1,11 +1,15 @@
 import { createSignal, createMemo, onCleanup, onMount, Show, For, type Component } from 'solid-js';
 import { X, Key, Eye, PenLine, Sparkles, BookOpen, AlertCircle } from 'lucide-solid';
-import { api, type CreatedToken, type TokenScope } from '../../lib/api';
+import { api, type CreatedToken, type Token, type TokenScope } from '../../lib/api';
 import PermissionMatrix, { MODULES, emptyScopes } from './PermissionMatrix';
 
 interface Props {
+  // When `editing` is provided the modal edits that token's name + scopes;
+  // otherwise it creates a new one.
+  editing?: Token;
   onClose: () => void;
-  onCreated: (token: CreatedToken) => void;
+  onCreated?: (token: CreatedToken) => void;
+  onSaved?: () => void;
 }
 
 type PresetId = 'read' | 'wiki' | 'full' | 'custom';
@@ -46,12 +50,18 @@ const scopesMatchPreset = (
 };
 
 const CreateTokenModal: Component<Props> = (props) => {
-  const [name, setName] = createSignal('');
+  const isEdit = () => !!props.editing;
+  const initialScopes: Record<string, TokenScope> = props.editing?.scopes
+    ? { ...emptyScopes(), ...props.editing.scopes }
+    : applyPreset('read');
+  const initialPreset: PresetId = props.editing
+    ? ((['read', 'wiki', 'full'] as PresetId[]).find((p) => scopesMatchPreset(initialScopes, p)) ?? 'custom')
+    : 'read';
+
+  const [name, setName] = createSignal(props.editing?.name ?? '');
   const [expirationDays, setExpirationDays] = createSignal<number | null>(90);
-  const [scopes, setScopes] = createSignal<Record<string, TokenScope>>(
-    applyPreset('read'),
-  );
-  const [preset, setPreset] = createSignal<PresetId>('read');
+  const [scopes, setScopes] = createSignal<Record<string, TokenScope>>(initialScopes);
+  const [preset, setPreset] = createSignal<PresetId>(initialPreset);
   const [submitting, setSubmitting] = createSignal(false);
   const [error, setError] = createSignal('');
 
@@ -114,14 +124,19 @@ const CreateTokenModal: Component<Props> = (props) => {
     setSubmitting(true);
     setError('');
     try {
-      const created = await api.tokens.create({
-        name: name().trim(),
-        scopes: scopes(),
-        expires_in_days: expirationDays(),
-      });
-      props.onCreated(created);
+      if (isEdit()) {
+        await api.tokens.update(props.editing!.id, { name: name().trim(), scopes: scopes() });
+        props.onSaved?.();
+      } else {
+        const created = await api.tokens.create({
+          name: name().trim(),
+          scopes: scopes(),
+          expires_in_days: expirationDays(),
+        });
+        props.onCreated?.(created);
+      }
     } catch (e: any) {
-      setError(e?.message ?? 'Error al crear el token');
+      setError(e?.message ?? (isEdit() ? 'Error al guardar el token' : 'Error al crear el token'));
     } finally {
       setSubmitting(false);
     }
@@ -144,7 +159,7 @@ const CreateTokenModal: Component<Props> = (props) => {
             <div class="w-8 h-8 rounded-lg bg-ios-blue-500/10 flex items-center justify-center text-ios-blue-500">
               <Key size={15} />
             </div>
-            <h2 id="create-token-title" class="text-base font-semibold">Nuevo token</h2>
+            <h2 id="create-token-title" class="text-base font-semibold">{isEdit() ? 'Editar token' : 'Nuevo token'}</h2>
           </div>
           <button
             onClick={props.onClose}
@@ -183,31 +198,33 @@ const CreateTokenModal: Component<Props> = (props) => {
               </div>
             </div>
 
-            <div class="space-y-1.5">
-              <label class="text-[10px] font-semibold uppercase text-base-content/30 tracking-wider">
-                Expiración
-              </label>
-              <div class="flex flex-wrap gap-1.5">
-                <For each={EXPIRATION_OPTIONS}>
-                  {(opt) => {
-                    const active = () => expirationDays() === opt.days;
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => setExpirationDays(opt.days)}
-                        class={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border ${
-                          active()
-                            ? 'bg-ios-blue-500/10 text-ios-blue-500 border-ios-blue-500/30'
-                            : 'bg-base-content/[0.03] text-base-content/50 border-base-content/[0.06] hover:text-base-content/80'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  }}
-                </For>
+            <Show when={!isEdit()}>
+              <div class="space-y-1.5">
+                <label class="text-[10px] font-semibold uppercase text-base-content/30 tracking-wider">
+                  Expiración
+                </label>
+                <div class="flex flex-wrap gap-1.5">
+                  <For each={EXPIRATION_OPTIONS}>
+                    {(opt) => {
+                      const active = () => expirationDays() === opt.days;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setExpirationDays(opt.days)}
+                          class={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                            active()
+                              ? 'bg-ios-blue-500/10 text-ios-blue-500 border-ios-blue-500/30'
+                              : 'bg-base-content/[0.03] text-base-content/50 border-base-content/[0.06] hover:text-base-content/80'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    }}
+                  </For>
+                </div>
               </div>
-            </div>
+            </Show>
           </section>
 
           {/* ─── Section 2: Permissions ─── */}
@@ -263,9 +280,11 @@ const CreateTokenModal: Component<Props> = (props) => {
               <span class="text-[11px] px-2.5 py-1 rounded-full bg-base-content/[0.06] text-base-content/50 font-medium">
                 {summary().none} sin acceso
               </span>
-              <span class="text-[11px] px-2.5 py-1 rounded-full bg-base-content/[0.06] text-base-content/50 font-medium">
-                {expirationLabel()}
-              </span>
+              <Show when={!isEdit()}>
+                <span class="text-[11px] px-2.5 py-1 rounded-full bg-base-content/[0.06] text-base-content/50 font-medium">
+                  {expirationLabel()}
+                </span>
+              </Show>
             </div>
 
             <Show when={error()}>
@@ -292,7 +311,7 @@ const CreateTokenModal: Component<Props> = (props) => {
             disabled={!canSubmit()}
             class="px-4 py-2 rounded-xl bg-ios-blue-500 text-white text-sm font-semibold hover:bg-ios-blue-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {submitting() ? 'Creando...' : 'Crear Token'}
+            {submitting() ? (isEdit() ? 'Guardando...' : 'Creando...') : (isEdit() ? 'Guardar cambios' : 'Crear Token')}
           </button>
         </div>
       </div>

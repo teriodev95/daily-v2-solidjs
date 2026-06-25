@@ -235,6 +235,67 @@ tokens.get('/:id/reveal', async (c) => {
   }
 });
 
+// PATCH /:id — edit an existing token's name and/or scopes (owner only).
+// The token value, hash and prefix never change; only metadata is updated.
+tokens.patch('/:id', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const id = c.req.param('id');
+
+  let body: { name?: unknown; scopes?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const [row] = await db
+    .select()
+    .from(schema.apiTokens)
+    .where(eq(schema.apiTokens.id, id))
+    .limit(1);
+
+  if (!row || row.user_id !== user.userId) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  if (row.revoked_at) {
+    return c.json({ error: 'Cannot edit a revoked token' }, 400);
+  }
+
+  const updates: { name?: string; scopes?: string } = {};
+
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string') {
+      return c.json({ error: 'name must be a string', field: 'name' }, 400);
+    }
+    const name = body.name.trim();
+    if (name.length < 1 || name.length > 50) {
+      return c.json({ error: 'name must be 1-50 chars', field: 'name' }, 400);
+    }
+    updates.name = name;
+  }
+
+  if (body.scopes !== undefined) {
+    const scopesResult = validateScopes(body.scopes);
+    if (!scopesResult.ok) {
+      return c.json({ error: scopesResult.error, field: 'scopes' }, 400);
+    }
+    updates.scopes = JSON.stringify(scopesResult.scopes);
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await db.update(schema.apiTokens).set(updates).where(eq(schema.apiTokens.id, id));
+  }
+
+  const [updated] = await db
+    .select()
+    .from(schema.apiTokens)
+    .where(eq(schema.apiTokens.id, id))
+    .limit(1);
+
+  return c.json(toPublicToken(updated));
+});
+
 // DELETE /:id — soft revoke
 tokens.delete('/:id', async (c) => {
   const user = c.get('user');

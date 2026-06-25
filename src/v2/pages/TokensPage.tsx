@@ -1,5 +1,5 @@
 import { createEffect, createSignal, createResource, onCleanup, For, Show, type Component } from 'solid-js';
-import { Key, Settings, Plus, Copy, Check, Trash2, AlertCircle, X, Clock } from 'lucide-solid';
+import { Key, Settings, Plus, Copy, Check, Trash2, AlertCircle, X, Clock, Pencil } from 'lucide-solid';
 import TopNavigation from '../components/TopNavigation';
 import CreateTokenModal from '../components/tokens/CreateTokenModal';
 import TokenRevealDialog from '../components/tokens/TokenRevealDialog';
@@ -54,6 +54,7 @@ const TokensPage: Component = () => {
   const [toast, setToast] = createSignal<{ type: 'ok' | 'error'; message: string } | null>(null);
   const [revealingId, setRevealingId] = createSignal<string | null>(null);
   const [revoking, setRevoking] = createSignal(false);
+  const [editingToken, setEditingToken] = createSignal<Token | null>(null);
 
   const showToast = (type: 'ok' | 'error', message: string) => {
     setToast({ type, message });
@@ -120,6 +121,12 @@ const TokensPage: Component = () => {
   const handleCreated = (created: CreatedToken) => {
     setShowCreate(false);
     setRevealed({ token: created.token, name: created.name });
+    refetch();
+  };
+
+  const handleEdited = () => {
+    setEditingToken(null);
+    showToast('ok', 'Permisos actualizados');
     refetch();
   };
 
@@ -275,7 +282,15 @@ const TokensPage: Component = () => {
                         </div>
 
                         {/* Actions */}
-                        <div class="flex justify-end mt-2 md:mt-0">
+                        <div class="flex justify-end gap-0.5 mt-2 md:mt-0">
+                          <button
+                            onClick={() => setEditingToken(token)}
+                            class="p-1.5 rounded-lg text-base-content/30 hover:text-base-content/70 hover:bg-base-content/5 transition-all"
+                            title="Editar permisos"
+                            aria-label={`Editar token ${token.name}`}
+                          >
+                            <Pencil size={14} />
+                          </button>
                           <button
                             onClick={() => setConfirmRevoke(token)}
                             class="p-1.5 rounded-lg text-base-content/30 hover:text-red-500 hover:bg-red-500/10 transition-all"
@@ -301,6 +316,16 @@ const TokensPage: Component = () => {
           onClose={() => setShowCreate(false)}
           onCreated={handleCreated}
         />
+      </Show>
+
+      <Show when={editingToken()}>
+        {(t) => (
+          <CreateTokenModal
+            editing={t()}
+            onClose={() => setEditingToken(null)}
+            onSaved={handleEdited}
+          />
+        )}
       </Show>
 
       <Show when={revealed()}>

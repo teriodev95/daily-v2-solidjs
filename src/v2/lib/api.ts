@@ -414,6 +414,8 @@ export const api = {
     list: () => request<Token[]>('/api/tokens'),
     create: (data: CreateTokenInput) =>
       request<CreatedToken>('/api/tokens', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { name?: string; scopes?: Record<string, TokenScope> }) =>
+      request<Token>(`/api/tokens/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     reveal: (id: string) => request<{ token: string }>(`/api/tokens/${id}/reveal`),
     revoke: (id: string) =>
       request<{ ok: boolean }>(`/api/tokens/${id}`, { method: 'DELETE' }),
