@@ -25,6 +25,7 @@ import secretsRoutes from './routes/secrets';
 import almaRoutes from './routes/alma';
 import presenceRoutes from './routes/presence';
 import { wikiAgentRoutes } from './features/wikiShare';
+import { billingRoutes, billingPortalRoutes, processBillingSchedules } from './features/billing';
 import seedRoutes from './db/seed';
 import { processLibrarianQueue } from './lib/librarian';
 
@@ -182,6 +183,14 @@ app.use('/api/alma/*', tokenAuthMiddleware);
 app.use('/api/alma/*', authMiddleware);
 app.use('/api/alma/*', enforceScope('alma'));
 
+// Billing: collection control + client portal. Admin-only + agentic via a
+// dedicated `billing` scope. The public portal lives under /api/public/billing
+// (mounted further down) and is intentionally left out of this auth chain.
+app.use('/api/billing/*', tokenAuthMiddleware);
+app.use('/api/billing/*', authMiddleware);
+app.use('/api/billing/*', requireAdmin);
+app.use('/api/billing/*', enforceScope('billing'));
+
 // Token management itself: only accessible via session auth — this is
 // a user-level operation (and MUST prevent PATs from minting more PATs,
 // revealing other PATs, or revoking them). We explicitly do NOT wire
@@ -222,6 +231,20 @@ app.get('/api/meta', async (c) => {
       metadata: 'GET /api/secrets',
       reveal: 'POST /api/secrets/:id/reveal',
       audit: 'GET /api/secrets/:id/audit',
+    };
+  }
+
+  // Billing capability — surfaced only to PATs holding a billing read/write
+  // scope (agentic collection control). Session users read it via /api/billing.
+  const billingScope = scopes['billing'];
+  if (billingScope === 'read' || billingScope === 'write') {
+    capabilities.billing = {
+      granted: billingScope,
+      clients: 'GET /api/billing/clients',
+      statement: 'GET /api/billing/clients/:id/statement',
+      schedules: 'GET /api/billing/schedules?client_id=',
+      invoices: 'GET /api/billing/invoices?client_id=&status=',
+      share_token: 'POST /api/billing/clients/:id/share-token',
     };
   }
 
@@ -268,6 +291,31 @@ app.get('/api/meta', async (c) => {
       wiki: { list: 'GET /api/wiki?project_id=X', search: 'GET /api/wiki/search?q=X', graph: 'GET /api/wiki/graph?project_id=X', create: 'POST /api/wiki', get: 'GET /api/wiki/:id', update: 'PATCH /api/wiki/:id', delete: 'DELETE /api/wiki/:id' },
       secrets: { list: 'GET /api/secrets', create: 'POST /api/secrets', get: 'GET /api/secrets/:id', update: 'PATCH /api/secrets/:id', delete: 'DELETE /api/secrets/:id', reveal: 'POST /api/secrets/:id/reveal', audit: 'GET /api/secrets/:id/audit' },
       alma: { list: 'GET /api/alma', create: 'POST /api/alma', get: 'GET /api/alma/:id', update: 'PATCH /api/alma/:id', delete: 'DELETE /api/alma/:id' },
+      billing: {
+        clients: 'GET /api/billing/clients',
+        create_client: 'POST /api/billing/clients',
+        get_client: 'GET /api/billing/clients/:id',
+        update_client: 'PATCH /api/billing/clients/:id',
+        delete_client: 'DELETE /api/billing/clients/:id',
+        statement: 'GET /api/billing/clients/:id/statement',
+        schedules: 'GET /api/billing/schedules?client_id=',
+        create_schedule: 'POST /api/billing/schedules',
+        update_schedule: 'PATCH /api/billing/schedules/:id',
+        delete_schedule: 'DELETE /api/billing/schedules/:id',
+        invoices: 'GET /api/billing/invoices?client_id=&status=',
+        create_invoice: 'POST /api/billing/invoices',
+        get_invoice: 'GET /api/billing/invoices/:id',
+        update_invoice: 'PATCH /api/billing/invoices/:id',
+        delete_invoice: 'DELETE /api/billing/invoices/:id',
+        upload_file: 'POST /api/billing/invoices/:id/files',
+        download_file: 'GET /api/billing/files/:fileId',
+        delete_file: 'DELETE /api/billing/files/:fileId',
+        share_token: 'POST /api/billing/clients/:id/share-token',
+        share_token_status: 'GET /api/billing/clients/:id/share-token',
+        revoke_share_token: 'DELETE /api/billing/clients/:id/share-token',
+        public_statement: 'GET /api/public/billing/statement?s=st_...',
+        public_file: 'GET /api/public/billing/files/:fileId?s=st_...',
+      },
       agent: {
         manifest: 'GET /agent/story/:id',
         description: 'GET /agent/story/:id/description',
@@ -309,6 +357,11 @@ app.route('/api/tokens', tokensRoutes);
 app.route('/api/secrets', secretsRoutes);
 app.route('/api/alma', almaRoutes);
 app.route('/api/presence', presenceRoutes);
+app.route('/api/billing', billingRoutes);
+
+// Public client portal (account statement). No auth: access is gated by a
+// per-client `?s=st_*` share token. Inherits CORS + DB injection from /api/*.
+app.route('/api/public/billing', billingPortalRoutes);
 
 // ---------- Agent API ----------
 // Accepts share tokens (?s=st_*), PATs (Authorization: Bearer dk_*) or session
@@ -338,5 +391,6 @@ export default {
   fetch: app.fetch.bind(app),
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(processLibrarianQueue(env));
+    ctx.waitUntil(processBillingSchedules(env));
   },
 };

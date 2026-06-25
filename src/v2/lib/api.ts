@@ -21,7 +21,7 @@ const readClientId = (): string | null => {
   try { return sessionStorage.getItem('dc-realtime-client-id'); } catch { return null; }
 };
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+export async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const cid = readClientId();
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -41,7 +41,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function uploadFile<T>(path: string, file: File): Promise<T> {
+export async function uploadFile<T>(path: string, file: File): Promise<T> {
   const formData = new FormData();
   formData.append('file', file);
 

@@ -13,6 +13,7 @@ export const MODULES: { key: string; label: string }[] = [
   { key: 'learnings', label: 'Aprendizajes' },
   { key: 'goals', label: 'Metas' },
   { key: 'secrets', label: 'Secretos' },
+  { key: 'billing', label: 'Facturación' },
 ];
 
 export const SCOPE_OPTIONS: { value: TokenScope; label: string }[] = [

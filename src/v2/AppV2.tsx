@@ -29,6 +29,7 @@ import MobileShell from './mobile/shell/MobileShell';
 import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
 import { interactionMotion } from './lib/interactionMotion';
+import BillingPortal from './features/billing/BillingPortal';
 
 type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar' | 'tokens' | 'alma';
 
@@ -412,7 +413,24 @@ const AppShell: Component = () => {
   );
 };
 
+// Public billing portal: served at /estado-cuenta?s=<token>. Read once at boot
+// (a share link is a fresh page load, no client-side routing). Bypasses
+// AuthProvider entirely so the public surface never touches the session.
+const readPortalToken = (): string | null => {
+  try {
+    const { pathname, search } = window.location;
+    if (!pathname.startsWith('/estado-cuenta')) return null;
+    const token = new URLSearchParams(search).get('s');
+    return token && token.trim() ? token.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
 const AppV2: Component = () => {
+  const portalToken = readPortalToken();
+  if (portalToken) return <BillingPortal token={portalToken} />;
+
   return (
     <AuthProvider>
       <AuthGate />

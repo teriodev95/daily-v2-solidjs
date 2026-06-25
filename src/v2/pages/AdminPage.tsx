@@ -9,19 +9,21 @@ import {
   Users, FolderKanban, Plus, Pencil, Shield,
   ChevronDown, ChevronRight, UserIcon, Archive, Send,
   Flag, CalendarDays, Copy, Check, RefreshCw,
-  Lock, Eye, Trash2, AlertCircle,
+  Lock, Eye, Trash2, AlertCircle, Receipt,
 } from 'lucide-solid';
+import BillingTab from '../features/billing/BillingTab';
 import MemberModal from '../components/MemberModal';
 import ProjectModal from '../components/ProjectModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal';
 import RecurringStoryModal from '../components/RecurringStoryModal';
 import SecretEditor from '../components/secrets/SecretEditor';
 import SecretRevealSheet from '../components/secrets/SecretRevealSheet';
+import { billingApi } from '../features/billing/lib/api';
 import TopNavigation from '../components/TopNavigation';
 import { frequencyLabel, isRecurring } from '../lib/recurrence';
 import type { User, Project, Assignment, Story } from '../types';
 
-type AdminTab = 'team' | 'projects' | 'assignments' | 'recurring' | 'secrets';
+type AdminTab = 'team' | 'projects' | 'assignments' | 'recurring' | 'secrets' | 'billing';
 
 const SECRET_EVENT_LABELS: Record<string, string> = {
   'secret.created': 'Creado',
@@ -100,6 +102,9 @@ const AdminPage: Component = () => {
     () => api.secrets.list(),
   );
   const secretsReady = useOnceReady(secretsList);
+
+  // Billing — client count for the tab badge. The tab itself fetches its own data.
+  const [billingClients] = createResource(() => billingApi.clients.list());
   const activeSecrets = () => (secretsList() ?? []).filter((s) => !s.revoked_at);
   const [showSecretEditor, setShowSecretEditor] = createSignal(false);
   const [editingSecret, setEditingSecret] = createSignal<SecretMeta | null>(null);
@@ -191,6 +196,7 @@ const AdminPage: Component = () => {
     { key: 'assignments' as const, label: 'Encomiendas', icon: Send, count: openAssignments().length },
     { key: 'recurring' as const, label: 'Recurrentes', icon: RefreshCw, count: activeRecurring().length },
     { key: 'secrets' as const, label: 'Secretos', icon: Lock, count: activeSecrets().length },
+    { key: 'billing' as const, label: 'Facturación', icon: Receipt, count: (billingClients() ?? []).length },
   ];
 
   const sectionMeta = () => {
@@ -223,6 +229,16 @@ const AdminPage: Component = () => {
           actionLabel: 'Nuevo secreto',
           action: openCreateSecret,
         };
+      case 'billing': {
+        const n = (billingClients() ?? []).length;
+        return {
+          title: 'Facturación',
+          description: `${n} ${n === 1 ? 'cliente' : 'clientes'}`,
+          // Billing manages its own create/back navigation in the tab.
+          actionLabel: null,
+          action: () => {},
+        };
+      }
       default:
         return {
           title: 'Equipo',
@@ -308,14 +324,16 @@ const AdminPage: Component = () => {
               <span class="text-[12px] font-medium text-base-content/38">{sectionMeta().description}</span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => sectionMeta().action()}
-            class="inline-flex h-10 items-center justify-center gap-2 rounded-[14px] bg-base-content px-3.5 text-xs font-semibold text-base-100 transition-colors hover:bg-base-content/82 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
-          >
-            <Plus size={15} strokeWidth={2.4} />
-            {sectionMeta().actionLabel}
-          </button>
+          <Show when={sectionMeta().actionLabel}>
+            <button
+              type="button"
+              onClick={() => sectionMeta().action()}
+              class="inline-flex h-10 items-center justify-center gap-2 rounded-[14px] bg-base-content px-3.5 text-xs font-semibold text-base-100 transition-colors hover:bg-base-content/82 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30"
+            >
+              <Plus size={15} strokeWidth={2.4} />
+              {sectionMeta().actionLabel}
+            </button>
+          </Show>
         </div>
 
         {/* ─── Team Section ─── */}
@@ -801,6 +819,11 @@ const AdminPage: Component = () => {
               Vault interno cifrado (AES-256-GCM). Las listas nunca exponen el valor; cada revelación queda auditada.
             </p>
           </div>
+        </Show>
+
+        {/* ─── Billing Section ─── */}
+        <Show when={activeTab() === 'billing'}>
+          <BillingTab />
         </Show>
       </div>
 

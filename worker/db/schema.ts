@@ -282,3 +282,13 @@ export const almaDocuments = sqliteTable('alma_documents', {
 // table definitions only read `projects.id` / `users.id` lazily inside the
 // `.references()` callback.
 export { wikiShareTokens } from '../features/wikiShare/schema';
+
+// Billing module tables (collection control + client portal). Same lazy
+// forward-reference pattern as wikiShareTokens above.
+export {
+  clients,
+  invoiceSchedules,
+  invoices,
+  invoiceFiles,
+  billingShareTokens,
+} from '../features/billing/schema';
