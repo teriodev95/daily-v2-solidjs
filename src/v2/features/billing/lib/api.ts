@@ -51,7 +51,7 @@ export const billingApi = {
   },
 
   invoices: {
-    list: (clientId: string, status?: string) =>
+    list: (clientId?: string, status?: string) =>
       request<Invoice[]>(`/api/billing/invoices${qs({ client_id: clientId, status })}`),
     get: (id: string) => request<Invoice>(`/api/billing/invoices/${id}`),
     create: (data: InvoiceInput) =>

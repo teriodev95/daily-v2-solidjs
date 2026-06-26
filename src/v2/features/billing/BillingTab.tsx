@@ -7,6 +7,7 @@ import { billingApi } from './lib/api';
 import { formatMoney, formatDate, formatPeriod } from './lib/format';
 import { exportStatementPdf } from './lib/pdf';
 import type { Client, Invoice, Schedule, InvoiceStatus } from './types';
+import BillingSummary from './components/BillingSummary';
 import ClientModal from './components/ClientModal';
 import ScheduleModal from './components/ScheduleModal';
 import InvoiceModal from './components/InvoiceModal';
@@ -63,6 +64,7 @@ const ClientList: Component<{
   onSaved: () => void;
 }> = (props) => (
   <div class="space-y-3 stagger-in">
+    <BillingSummary />
     <div class="flex items-center justify-between">
       <p class="text-xs font-medium text-base-content/40">{props.clients.length} {props.clients.length === 1 ? 'cliente' : 'clientes'}</p>
       <button
