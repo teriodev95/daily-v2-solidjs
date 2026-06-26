@@ -122,3 +122,43 @@ export function generateShareToken(): string {
 export function shareTokenPrefix(raw: string): string {
   return raw.slice(0, 11);
 }
+
+// ---------- Secret share tokens (HU "Compartir secretos por URL") ----------
+
+const SECRET_SHARE_TOKEN_PREFIX = 'ss_';
+const SECRET_SHARE_TOKEN_BODY_LEN = 32;
+
+/**
+ * Generates a raw secret-share token: "ss_<32 random alphanumeric chars>".
+ * Same rejection-sampling pattern as generateShareToken; only the prefix
+ * differs so the two link kinds never collide. Like story share tokens, only
+ * the SHA-256 hash is persisted — the raw is revealed once on creation.
+ */
+export function generateSecretShareToken(): string {
+  const alphabet = TOKEN_ALPHABET;
+  const alphabetLen = alphabet.length;
+  const maxAcceptable = Math.floor(256 / alphabetLen) * alphabetLen;
+
+  const out = new Array<string>(SECRET_SHARE_TOKEN_BODY_LEN);
+  let i = 0;
+  const chunk = new Uint8Array(64);
+  while (i < SECRET_SHARE_TOKEN_BODY_LEN) {
+    crypto.getRandomValues(chunk);
+    for (let j = 0; j < chunk.length && i < SECRET_SHARE_TOKEN_BODY_LEN; j++) {
+      const b = chunk[j];
+      if (b < maxAcceptable) {
+        out[i++] = alphabet[b % alphabetLen];
+      }
+    }
+  }
+  return SECRET_SHARE_TOKEN_PREFIX + out.join('');
+}
+
+/**
+ * Returns the first 11 chars of the raw secret-share token ("ss_" + first 8 of
+ * body), safe to display in UI for debugging. Never display the full token
+ * after the one-time reveal on generation.
+ */
+export function secretShareTokenPrefix(raw: string): string {
+  return raw.slice(0, 11);
+}

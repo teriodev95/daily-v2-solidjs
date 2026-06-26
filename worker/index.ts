@@ -22,6 +22,7 @@ import learningsRoutes from './routes/learnings';
 import wikiRoutes from './routes/wiki';
 import tokensRoutes from './routes/tokens';
 import secretsRoutes from './routes/secrets';
+import secretShareRoutes from './routes/secretShare';
 import almaRoutes from './routes/alma';
 import presenceRoutes from './routes/presence';
 import { wikiAgentRoutes } from './features/wikiShare';
@@ -176,6 +177,23 @@ app.use('/api/secrets/*', authMiddleware);
 app.use('/api/secrets/*', requireAdmin);
 app.use('/api/secrets/*', enforceScope('secrets'));
 
+// Secret share-link resolve: deliberately OUTSIDE the /api/secrets/* gate.
+// Authorization is "this URL token is bound to the PAT making the request"
+// (checked in the handler), NOT the `secrets` scope — least privilege. Same
+// global-API-key ban as secrets, then PAT/session resolution. NO requireAdmin,
+// NO enforceScope. A revoked/expired PAT can't authenticate here at all, so a
+// link "dies with its token" for free. Rate-limited per PAT (best-effort).
+app.use('/api/secret-share/*', async (c, next) => {
+  const authHeader = c.req.header('Authorization') ?? '';
+  if (authHeader.startsWith('Bearer ') && !authHeader.slice('Bearer '.length).startsWith('dk_')) {
+    return c.json({ error: 'global_api_key_forbidden_for_secrets' }, 403);
+  }
+  return next();
+});
+app.use('/api/secret-share/*', tokenAuthMiddleware);
+app.use('/api/secret-share/*', authMiddleware);
+app.use('/api/secret-share/*', agentRateLimitMiddleware);
+
 // Alma: per-user layered technical memory. NOT admin-only — every user has
 // their own. Each query inside the router is scoped to the caller's user_id,
 // so a user (or their PAT) only ever touches their own alma.
@@ -231,6 +249,9 @@ app.get('/api/meta', async (c) => {
       metadata: 'GET /api/secrets',
       reveal: 'POST /api/secrets/:id/reveal',
       audit: 'GET /api/secrets/:id/audit',
+      // Share-link resolve is NOT gated by this scope — it needs only the link's
+      // bound PAT — but surfacing it here aids discovery.
+      share_resolve: 'GET /api/secret-share/:ref',
     };
   }
 
@@ -289,7 +310,7 @@ app.get('/api/meta', async (c) => {
       attachments: { list: 'GET /api/attachments/story/:storyId', upload: 'POST /api/attachments/story/:storyId', download: 'GET /api/attachments/file/:id', delete: 'DELETE /api/attachments/:id' },
       learnings: { list: 'GET /api/learnings', create: 'POST /api/learnings', get: 'GET /api/learnings/:id', update: 'PATCH /api/learnings/:id', delete: 'DELETE /api/learnings/:id' },
       wiki: { list: 'GET /api/wiki?project_id=X', search: 'GET /api/wiki/search?q=X', graph: 'GET /api/wiki/graph?project_id=X', create: 'POST /api/wiki', get: 'GET /api/wiki/:id', update: 'PATCH /api/wiki/:id', delete: 'DELETE /api/wiki/:id' },
-      secrets: { list: 'GET /api/secrets', create: 'POST /api/secrets', get: 'GET /api/secrets/:id', update: 'PATCH /api/secrets/:id', delete: 'DELETE /api/secrets/:id', reveal: 'POST /api/secrets/:id/reveal', audit: 'GET /api/secrets/:id/audit' },
+      secrets: { list: 'GET /api/secrets', create: 'POST /api/secrets', get: 'GET /api/secrets/:id', update: 'PATCH /api/secrets/:id', delete: 'DELETE /api/secrets/:id', reveal: 'POST /api/secrets/:id/reveal', audit: 'GET /api/secrets/:id/audit', share_create: 'POST /api/secrets/:id/share', share_list: 'GET /api/secrets/:id/share', share_revoke: 'DELETE /api/secrets/:id/share/:linkId', share_resolve: 'GET /api/secret-share/:ref' },
       alma: { list: 'GET /api/alma', create: 'POST /api/alma', get: 'GET /api/alma/:id', update: 'PATCH /api/alma/:id', delete: 'DELETE /api/alma/:id', blocks: 'GET /api/alma/:id/blocks', create_block: 'POST /api/alma/:id/blocks', update_block: 'PATCH /api/alma/:id/blocks/:bid', delete_block: 'DELETE /api/alma/:id/blocks/:bid', reorder_blocks: 'POST /api/alma/:id/blocks/reorder', lock_block: 'PATCH /api/alma/:id/blocks/:bid/lock' },
       billing: {
         clients: 'GET /api/billing/clients',
@@ -355,6 +376,7 @@ app.route('/api/learnings', learningsRoutes);
 app.route('/api/wiki', wikiRoutes);
 app.route('/api/tokens', tokensRoutes);
 app.route('/api/secrets', secretsRoutes);
+app.route('/api/secret-share', secretShareRoutes);
 app.route('/api/alma', almaRoutes);
 app.route('/api/presence', presenceRoutes);
 app.route('/api/billing', billingRoutes);

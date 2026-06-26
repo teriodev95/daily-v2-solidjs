@@ -158,6 +158,28 @@ export interface SecretAuditEvent {
   created_at: string;
 }
 
+// A share link binds a secret to a PAT so an agent can resolve it by URL.
+// The list view only exposes the prefix; the raw url/token is returned once.
+export interface SecretShareLink {
+  id: string;
+  token_id: string;
+  token_name: string;
+  prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  active: boolean;
+}
+
+export interface SecretShareCreated {
+  id: string;
+  url: string;
+  token: string;
+  prefix: string;
+  token_id: string;
+  created_at: string;
+}
+
 // ─── Share Tokens (per-story URL share for agents) ───
 
 export interface ShareTokenResponse {
@@ -471,6 +493,14 @@ export const api = {
     reveal: (id: string) =>
       request<{ value: string }>(`/api/secrets/${id}/reveal`, { method: 'POST' }),
     audit: (id: string) => request<SecretAuditEvent[]>(`/api/secrets/${id}/audit`),
+    shares: {
+      list: (secretId: string) =>
+        request<{ links: SecretShareLink[] }>(`/api/secrets/${secretId}/share`).then((r) => r.links),
+      create: (secretId: string, tokenId: string) =>
+        request<SecretShareCreated>(`/api/secrets/${secretId}/share`, { method: 'POST', body: JSON.stringify({ token_id: tokenId }) }),
+      revoke: (secretId: string, linkId: string) =>
+        request<{ ok: boolean }>(`/api/secrets/${secretId}/share/${linkId}`, { method: 'DELETE' }),
+    },
   },
 
   presence: {

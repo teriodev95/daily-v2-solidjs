@@ -3,6 +3,11 @@ import { eq, and, isNull, desc } from 'drizzle-orm';
 import type { Env, Variables, AppDb } from '../types';
 import * as schema from '../db/schema';
 import { encryptString, decryptString } from '../lib/aesGcm';
+import {
+  hashToken,
+  generateSecretShareToken,
+  secretShareTokenPrefix,
+} from '../lib/tokenCrypto';
 
 const secrets = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -141,7 +146,7 @@ function toPublicSecret(
 // - actor_token_id: the PAT id when present, else null.
 // - actor_user_id: the resolved user id.
 // Best-effort metadata is JSON-serialized. NEVER include the secret value.
-async function recordSecretEvent(
+export async function recordSecretEvent(
   db: AppDb,
   c: { get: (k: 'user' | 'tokenKind' | 'tokenId') => any },
   args: {
@@ -591,6 +596,196 @@ secrets.get('/:id/audit', async (c) => {
     .orderBy(desc(schema.secretAuditEvents.created_at));
 
   return c.json(events);
+});
+
+// ----- Share links ---------------------------------------------------------
+
+type ApiTokenRow = typeof schema.apiTokens.$inferSelect;
+
+// A PAT is "active" (vigente) when it isn't revoked and hasn't expired. Shared
+// with the link `active` computation: a link is only usable while its bound
+// token is active.
+function isApiTokenActive(token: Pick<ApiTokenRow, 'revoked_at' | 'expires_at'>): boolean {
+  if (token.revoked_at) return false;
+  if (token.expires_at) {
+    const expiresMs = Date.parse(token.expires_at);
+    if (!Number.isNaN(expiresMs) && expiresMs <= Date.now()) return false;
+  }
+  return true;
+}
+
+// Loads a team-scoped secret by id. Returns null when missing or off-team.
+// `requireActive` additionally rejects soft-deleted (revoked) secrets.
+async function loadTeamSecret(
+  db: AppDb,
+  id: string,
+  teamId: string,
+  requireActive: boolean,
+): Promise<SecretRow | null> {
+  const [row] = await db
+    .select()
+    .from(schema.secrets)
+    .where(eq(schema.secrets.id, id))
+    .limit(1);
+  if (!row || row.team_id !== teamId) return null;
+  if (requireActive && row.revoked_at) return null;
+  return row;
+}
+
+// POST /:id/share — mint a revocable share link bound to one of the caller's
+// PATs. Returns the raw `ss_` token EXACTLY ONCE (never stored, only hashed).
+secrets.post('/:id/share', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const id = c.req.param('id');
+
+  const secret = await loadTeamSecret(db, id, user.teamId, true);
+  if (!secret) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  let body: { token_id?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  if (typeof body.token_id !== 'string' || body.token_id.trim().length === 0) {
+    return c.json({ error: 'token_id is required', field: 'token_id' }, 400);
+  }
+  const tokenId = body.token_id.trim();
+
+  // The bound PAT must belong to the caller (not just the team) and be active.
+  const [token] = await db
+    .select()
+    .from(schema.apiTokens)
+    .where(and(eq(schema.apiTokens.id, tokenId), eq(schema.apiTokens.user_id, user.userId)))
+    .limit(1);
+  if (!token) {
+    return c.json({ error: 'token_id not found', field: 'token_id' }, 400);
+  }
+  if (!isApiTokenActive(token)) {
+    return c.json({ error: 'token_id is revoked or expired', field: 'token_id' }, 400);
+  }
+
+  const raw = generateSecretShareToken();
+  const linkId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const prefix = secretShareTokenPrefix(raw);
+
+  await db.insert(schema.secretShareLinks).values({
+    id: linkId,
+    secret_id: secret.id,
+    token_id: tokenId,
+    token_hash: await hashToken(raw),
+    prefix,
+    created_at: now,
+    last_used_at: null,
+    revoked_at: null,
+  });
+
+  // Audit: metadata carries only ids — NEVER the raw token or the secret value.
+  await recordSecretEvent(db, c, {
+    secret,
+    event_type: 'secret.share_created',
+    metadata: { link_id: linkId, token_id: tokenId },
+  });
+
+  const url = `${new URL(c.req.url).origin}/api/secret-share/${raw}`;
+  return c.json(
+    { id: linkId, url, token: raw, prefix, token_id: tokenId, created_at: now },
+    201,
+  );
+});
+
+// GET /:id/share — list a secret's share links (metadata only). Joins the bound
+// token to surface its name + `active` state. Never the raw token or value.
+secrets.get('/:id/share', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const id = c.req.param('id');
+
+  const secret = await loadTeamSecret(db, id, user.teamId, false);
+  if (!secret) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const rows = await db
+    .select({
+      id: schema.secretShareLinks.id,
+      token_id: schema.secretShareLinks.token_id,
+      prefix: schema.secretShareLinks.prefix,
+      created_at: schema.secretShareLinks.created_at,
+      last_used_at: schema.secretShareLinks.last_used_at,
+      revoked_at: schema.secretShareLinks.revoked_at,
+      token_name: schema.apiTokens.name,
+      token_revoked_at: schema.apiTokens.revoked_at,
+      token_expires_at: schema.apiTokens.expires_at,
+    })
+    .from(schema.secretShareLinks)
+    .leftJoin(schema.apiTokens, eq(schema.secretShareLinks.token_id, schema.apiTokens.id))
+    .where(eq(schema.secretShareLinks.secret_id, secret.id))
+    .orderBy(desc(schema.secretShareLinks.created_at));
+
+  const links = rows.map((r) => {
+    // `token_name` is NOT NULL, so a null here means the leftJoin found no row
+    // (the bound token is gone). Cascade should prevent that, but treat a
+    // missing token as inactive defensively.
+    const tokenActive =
+      r.token_name !== null &&
+      isApiTokenActive({ revoked_at: r.token_revoked_at, expires_at: r.token_expires_at });
+    return {
+      id: r.id,
+      token_id: r.token_id,
+      token_name: r.token_name ?? null,
+      prefix: r.prefix,
+      created_at: r.created_at,
+      last_used_at: r.last_used_at,
+      revoked_at: r.revoked_at,
+      active: !r.revoked_at && tokenActive,
+    };
+  });
+
+  return c.json({ links });
+});
+
+// DELETE /:id/share/:linkId — soft-revoke a share link (keeps audit intact).
+secrets.delete('/:id/share/:linkId', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const id = c.req.param('id');
+  const linkId = c.req.param('linkId');
+
+  const secret = await loadTeamSecret(db, id, user.teamId, false);
+  if (!secret) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const [link] = await db
+    .select()
+    .from(schema.secretShareLinks)
+    .where(eq(schema.secretShareLinks.id, linkId))
+    .limit(1);
+
+  // The link must belong to this exact secret.
+  if (!link || link.secret_id !== secret.id) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  if (!link.revoked_at) {
+    await db
+      .update(schema.secretShareLinks)
+      .set({ revoked_at: new Date().toISOString() })
+      .where(eq(schema.secretShareLinks.id, linkId));
+    await recordSecretEvent(db, c, {
+      secret,
+      event_type: 'secret.share_revoked',
+      metadata: { link_id: linkId, token_id: link.token_id },
+    });
+  }
+
+  return c.json({ ok: true });
 });
 
 export default secrets;

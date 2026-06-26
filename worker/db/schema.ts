@@ -256,6 +256,24 @@ export const secretAuditEvents = sqliteTable('secret_audit_events', {
   created_at: text('created_at').notNull(),
 });
 
+// Revocable share links for a single secret, bound to a Personal Access Token.
+// A link resolves the secret's plaintext only when fetched WITH its bound PAT
+// (two factors: the unguessable URL token + the PAT). The link carries no TTL
+// of its own — it lives and dies with the bound token (both FKs ON DELETE
+// CASCADE, and a revoked/expired PAT can no longer authenticate). Only the
+// SHA-256 hash of the raw `ss_` token is stored; the raw is shown once on
+// creation and never again.
+export const secretShareLinks = sqliteTable('secret_share_links', {
+  id: text('id').primaryKey(),
+  secret_id: text('secret_id').notNull().references(() => secrets.id, { onDelete: 'cascade' }),
+  token_id: text('token_id').notNull().references(() => apiTokens.id, { onDelete: 'cascade' }),
+  token_hash: text('token_hash').notNull().unique(),
+  prefix: text('prefix').notNull(),
+  created_at: text('created_at').notNull(),
+  last_used_at: text('last_used_at'),
+  revoked_at: text('revoked_at'),
+});
+
 // Alma: per-user layered technical memory. Three tiers: 0 = always-loaded core
 // ("alma"), 1 = domains, 2 = deep reference. Written by an agent (via a PAT with
 // `alma:write`) and curated by the human. Strictly scoped per user — every query

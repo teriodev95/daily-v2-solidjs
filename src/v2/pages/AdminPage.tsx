@@ -9,7 +9,7 @@ import {
   Users, FolderKanban, Plus, Pencil, Shield,
   ChevronDown, ChevronRight, UserIcon, Archive, Send,
   Flag, CalendarDays, Copy, Check, RefreshCw,
-  Lock, Eye, Trash2, AlertCircle, Receipt,
+  Lock, Eye, Trash2, AlertCircle, Receipt, Link2,
 } from 'lucide-solid';
 import BillingTab from '../features/billing/BillingTab';
 import MemberModal from '../components/MemberModal';
@@ -18,6 +18,7 @@ import CreateAssignmentModal from '../components/CreateAssignmentModal';
 import RecurringStoryModal from '../components/RecurringStoryModal';
 import SecretEditor from '../components/secrets/SecretEditor';
 import SecretRevealSheet from '../components/secrets/SecretRevealSheet';
+import SecretShareModal from '../components/secrets/SecretShareModal';
 import { billingApi } from '../features/billing/lib/api';
 import TopNavigation from '../components/TopNavigation';
 import { frequencyLabel, isRecurring } from '../lib/recurrence';
@@ -109,6 +110,7 @@ const AdminPage: Component = () => {
   const [showSecretEditor, setShowSecretEditor] = createSignal(false);
   const [editingSecret, setEditingSecret] = createSignal<SecretMeta | null>(null);
   const [revealSecret, setRevealSecret] = createSignal<SecretMeta | null>(null);
+  const [shareSecret, setShareSecret] = createSignal<SecretMeta | null>(null);
   const [confirmDeleteSecret, setConfirmDeleteSecret] = createSignal<SecretMeta | null>(null);
   const [deletingSecret, setDeletingSecret] = createSignal(false);
 
@@ -801,6 +803,14 @@ const AdminPage: Component = () => {
                           <Eye size={15} />
                         </button>
                         <button
+                          onClick={(e) => { e.stopPropagation(); setShareSecret(secret); }}
+                          title="Compartir por URL"
+                          aria-label={`Compartir ${secret.name}`}
+                          class="rounded-lg p-2 text-base-content/35 transition-colors hover:bg-ios-blue-500/10 hover:text-ios-blue-500"
+                        >
+                          <Link2 size={15} />
+                        </button>
+                        <button
                           onClick={(e) => { e.stopPropagation(); setConfirmDeleteSecret(secret); }}
                           title="Eliminar secreto"
                           aria-label={`Eliminar ${secret.name}`}
@@ -876,6 +886,16 @@ const AdminPage: Component = () => {
             secret={s()}
             onClose={() => setRevealSecret(null)}
             onRevealed={refetchSecrets}
+          />
+        )}
+      </Show>
+
+      {/* Secret share — bind to a PAT, URL shown once */}
+      <Show when={shareSecret()}>
+        {(s) => (
+          <SecretShareModal
+            secret={s()}
+            onClose={() => setShareSecret(null)}
           />
         )}
       </Show>
