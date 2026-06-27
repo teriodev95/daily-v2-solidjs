@@ -7,6 +7,7 @@ import { billingApi } from './lib/api';
 import { formatMoney, formatDate, formatPeriod } from './lib/format';
 import { exportStatementPdf } from './lib/pdf';
 import type { Client, Invoice, Schedule, InvoiceStatus } from './types';
+import { useRefetchOnActive } from '../../lib/refetchOnActive';
 import BillingSummary from './components/BillingSummary';
 import ClientModal from './components/ClientModal';
 import ScheduleModal from './components/ScheduleModal';
@@ -19,6 +20,10 @@ const rowClass = 'group flex min-h-[64px] items-center gap-3 px-4 py-3 transitio
 const BillingTab: Component = () => {
   const [clients, { refetch: refetchClients }] = createResource(() => billingApi.clients.list());
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
+
+  // BillingTab lives inside the Admin keep-alive page. Refresh the client list
+  // when the window regains focus while Admin is active (mount already loads it).
+  useRefetchOnActive('admin', () => refetchClients());
 
   const [showClientModal, setShowClientModal] = createSignal(false);
   const [editingClient, setEditingClient] = createSignal<Client | undefined>();

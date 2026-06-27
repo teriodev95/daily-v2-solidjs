@@ -2,6 +2,7 @@ import { createSignal, createResource, onCleanup, onMount, For, Show, type Compo
 import { useOnceReady } from '../lib/onceReady';
 import { useRealtimeRefetch } from '../lib/realtime';
 import { activeTab as globalActiveTab } from '../lib/activeTab';
+import { useRefetchOnActive } from '../lib/refetchOnActive';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import { api, type SecretMeta } from '../lib/api';
@@ -148,6 +149,18 @@ const AdminPage: Component = () => {
     );
     onCleanup(unsub);
   });
+
+  // Keep-alive freshness: AdminPage stays mounted, and its lists use static
+  // resource sources, so without this they only ever load once. Refetch them
+  // when the user navigates back to Admin (the reported "creo un secreto en
+  // otra pestaña/sesión y no aparece" case) or returns to the window.
+  useRefetchOnActive('admin', [
+    () => refetchSecrets(),
+    () => refetchAssignments(),
+    () => refetchRecurring(),
+    () => data.refetchUsers(),
+    () => data.refetchProjects(),
+  ]);
 
   const openAssignments = () => (assignmentsList() ?? []).filter(a => a.status === 'open');
   const closedAssignments = () => (assignmentsList() ?? []).filter(a => a.status === 'closed');

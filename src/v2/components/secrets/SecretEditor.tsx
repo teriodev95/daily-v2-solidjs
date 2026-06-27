@@ -277,17 +277,29 @@ const SecretEditor: Component<Props> = (props) => {
             </Field>
           </div>
 
-          <Field label="Valor" hint="Se cifra (AES-256-GCM). Puede ser una sola línea o una nota con instrucciones.">
+          <Field
+            label="Valor"
+            hint="Se cifra (AES-256-GCM). Una variable por línea, o `CLAVE=VALOR`. Multi-línea permitido."
+          >
             <div class="relative">
               <textarea
                 value={value()}
-                onInput={(e) => setValue(e.currentTarget.value)}
-                placeholder={isEdit() ? 'Dejar vacío para no cambiar' : 'Pega el token, o una nota con instrucciones…'}
-                rows={3}
+                onInput={(e) => {
+                  setValue(e.currentTarget.value);
+                  // Auto-grow so multi-field secrets stay fully visible.
+                  e.currentTarget.style.height = 'auto';
+                  e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                }}
+                placeholder={
+                  isEdit()
+                    ? 'Dejar vacío para no cambiar'
+                    : 'sk-live-xxxxxxxxxxxx\n\n— o varios campos —\nUSUARIO=admin\nPASSWORD=••••••••\nURL=https://ejemplo.com'
+                }
+                rows={5}
                 spellcheck={false}
                 autocapitalize="none"
                 style={showValue() ? undefined : 'text-security: disc; -webkit-text-security: disc;'}
-                class="w-full resize-y rounded-xl border border-base-content/[0.07] bg-base-content/[0.04] px-3 py-2.5 pr-10 font-mono text-[13px] leading-relaxed focus:border-ios-blue-500/40 focus:outline-none focus:ring-2 focus:ring-ios-blue-500/30"
+                class="min-h-[7.5rem] w-full resize-y rounded-xl border border-base-content/[0.07] bg-base-content/[0.04] px-3 py-2.5 pr-10 font-mono text-[13px] leading-relaxed focus:border-ios-blue-500/40 focus:outline-none focus:ring-2 focus:ring-ios-blue-500/30"
               />
               <button
                 type="button"

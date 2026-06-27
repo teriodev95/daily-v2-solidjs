@@ -6,6 +6,7 @@ import TokenRevealDialog from '../components/tokens/TokenRevealDialog';
 import { MODULES } from '../components/tokens/PermissionMatrix';
 import { api, type Token, type CreatedToken, type TokenScope } from '../lib/api';
 import { useOnceReady } from '../lib/onceReady';
+import { useRefetchOnActive } from '../lib/refetchOnActive';
 
 const moduleLabel = (key: string): string =>
   MODULES.find((m) => m.key === key)?.label ?? key;
@@ -47,6 +48,10 @@ const visibleScopes = (scopes: Record<string, TokenScope>): ScopeBadge[] => {
 const TokensPage: Component = () => {
   const [tokens, { refetch, mutate }] = createResource(() => api.tokens.list());
   const ready = useOnceReady(tokens);
+
+  // Keep-alive freshness: the token list loads once on mount; refetch when the
+  // user navigates back to Tokens or returns to the window.
+  useRefetchOnActive('tokens', () => refetch());
   const [showCreate, setShowCreate] = createSignal(false);
   const [revealed, setRevealed] = createSignal<{ token: string; name: string } | null>(null);
   const [copiedId, setCopiedId] = createSignal<string | null>(null);

@@ -11,6 +11,7 @@ import AlmaBlockList from '../components/alma/AlmaBlockList';
 import { api, type AlmaDoc } from '../lib/api';
 import type { WikiArticle } from '../types';
 import { useOnceReady } from '../lib/onceReady';
+import { useRefetchOnActive } from '../lib/refetchOnActive';
 
 // Rough token estimate shared with the live budget meter on Tier 0.
 const estimateTokens = (chars: number): number => Math.ceil(chars / 4);
@@ -36,6 +37,10 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 const AlmaPage: Component = () => {
   const [docs, { mutate, refetch }] = createResource(() => api.alma.list());
   const ready = useOnceReady(docs);
+
+  // Keep-alive freshness: the doc list loads once on mount; refetch when the
+  // user navigates back to Alma or returns to the window.
+  useRefetchOnActive('alma', () => refetch());
 
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>('idle');
   const [openIds, setOpenIds] = createSignal<Set<string>>(new Set());

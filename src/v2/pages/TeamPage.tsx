@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, createResource, onCleanup, onMount, For, Show, type Component } from 'solid-js';
 import { useRealtimeRefetch } from '../lib/realtime';
 import { activeTab } from '../lib/activeTab';
+import { useRefetchOnActive } from '../lib/refetchOnActive';
 import type { Story, User } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -32,6 +33,10 @@ const TeamPage: Component = () => {
     );
     onCleanup(unsub);
   });
+
+  // Keep-alive freshness: static resource sources only load once, so refetch
+  // when the user navigates back to Equipo or returns to the window.
+  useRefetchOnActive('team', [() => refetchGoals(), () => refetchStories()]);
 
   const allSharedGoals = () => goalsList() ?? [];
   const allSharedStories = () => (storiesList() ?? []).filter(s =>
