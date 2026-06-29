@@ -71,8 +71,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     ({ uid }) => uid ? api.stories.list({ assignee_id: uid }) : Promise.resolve([]),
   );
 
-  const [goalsList, { mutate: mutateGoals, refetch: refetchGoals }] = createResource(userId, (uid) =>
-    api.goals.list({ user_id: uid })
+  const [goalsList, { mutate: mutateGoals, refetch: refetchGoals }] = createResource(
+    () => ({ uid: userId(), _r: props.refreshKey }),
+    ({ uid }) => uid ? api.goals.list({ user_id: uid }) : Promise.resolve([]),
   );
 
   const [assignmentsList] = createResource(
@@ -96,7 +97,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const [selectedLearning, setSelectedLearning] = createSignal<Learning | null>(null);
 
   const [reportCompletions, { mutate: mutateCompletions, refetch: refetchCompletions }] = createResource(
-    () => ({ uid: userId(), from: reportWindow.yesterdayStartKey, to: reportWindow.todayKey }),
+    () => ({ uid: userId(), from: reportWindow.yesterdayStartKey, to: reportWindow.todayKey, _r: props.refreshKey }),
     ({ uid, from, to }) => uid ? api.completions.list(from, to) : Promise.resolve([]),
   );
 
