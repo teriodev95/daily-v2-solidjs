@@ -106,7 +106,7 @@ const AdminPage: Component = () => {
   const secretsReady = useOnceReady(secretsList);
 
   // Billing — client count for the tab badge. The tab itself fetches its own data.
-  const [billingClients] = createResource(() => billingApi.clients.list());
+  const [billingClients, { refetch: refetchBillingClients }] = createResource(() => billingApi.clients.list());
   const activeSecrets = () => (secretsList() ?? []).filter((s) => !s.revoked_at);
   const [showSecretEditor, setShowSecretEditor] = createSignal(false);
   const [editingSecret, setEditingSecret] = createSignal<SecretMeta | null>(null);
@@ -160,6 +160,7 @@ const AdminPage: Component = () => {
     () => refetchRecurring(),
     () => data.refetchUsers(),
     () => data.refetchProjects(),
+    () => refetchBillingClients(),
   ]);
 
   const openAssignments = () => (assignmentsList() ?? []).filter(a => a.status === 'open');

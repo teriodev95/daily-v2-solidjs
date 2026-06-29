@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import { isRecurringOnDate, isRecurring, toLocalDateStr } from '../lib/recurrence';
-import { CalendarDays, ChevronLeft, ChevronRight, Plus, RefreshCw, CheckCircle2, Circle, X, Clock } from 'lucide-solid';
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, RefreshCw, CheckCircle2, Circle, X, Clock, EyeOff, ExternalLink, RotateCcw } from 'lucide-solid';
 import StoryDetail from '../components/StoryDetail';
 import TopNavigation from '../components/TopNavigation';
 
@@ -319,7 +319,7 @@ const CalendarPage: Component<Props> = (props) => {
   });
 
   const [completions, { mutate: mutateCompletions, refetch: refetchCompletions }] = createResource(
-    () => ({ uid: userId(), from: rangeStr().from, to: rangeStr().to }),
+    () => ({ uid: userId(), from: rangeStr().from, to: rangeStr().to, _r: props.refreshKey }),
     async ({ uid, from, to }) => {
       if (!uid) return [];
       return api.completions.list(from, to);
@@ -441,6 +441,50 @@ const CalendarPage: Component<Props> = (props) => {
     const t = new Date().toISOString();
     mutateStories(prev => (prev ?? []).map(s => s.id === storyId ? { ...s, status: 'done', completed_at: t } : s));
     api.stories.update(storyId, { status: 'done', completed_at: t }).catch(() => {});
+  };
+
+  const reopenStory = async (storyId: string) => {
+    mutateStories(prev => (prev ?? []).map(s => s.id === storyId ? { ...s, status: 'todo', completed_at: null } : s));
+    api.stories.update(storyId, { status: 'todo', completed_at: null }).catch(() => {});
+  };
+
+  const hideStory = async (storyId: string) => {
+    mutateStories(prev => (prev ?? []).filter(s => s.id !== storyId));
+    api.stories.update(storyId, { is_active: false }).catch(() => { void refetchStories(); });
+  };
+
+  // ── Context menu (right-click on a HU block) ──
+  // Single state for the entire calendar; the menu is rendered once at the
+  // root and positioned at the click coordinates.
+  type ContextMenuState = {
+    story: Story;
+    dateKey: string;
+    isRecurring: boolean;
+    isCompleted: boolean;
+    x: number;
+    y: number;
+  };
+  const [contextMenu, setContextMenu] = createSignal<ContextMenuState | null>(null);
+  // Inline two-step confirmation for the destructive "Ocultar" action — avoids
+  // a separate modal but still prevents accidental hides.
+  const [confirmingHide, setConfirmingHide] = createSignal(false);
+
+  const openContextMenu = (
+    e: MouseEvent,
+    story: Story,
+    dateKey: string,
+    isRecur: boolean,
+    isCompleted: boolean,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setConfirmingHide(false);
+    setContextMenu({ story, dateKey, isRecurring: isRecur, isCompleted, x: e.clientX, y: e.clientY });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+    setConfirmingHide(false);
   };
 
   const formatHeader = () => {
@@ -1083,6 +1127,7 @@ const CalendarPage: Component<Props> = (props) => {
                             onDragStart={(e) => handleDragStart(e, item.story, dateKey)}
                             onDragEnd={handleDragEnd}
                             onClick={(e) => { e.stopPropagation(); setSelectedStoryForDetail(item.story); }}
+                            onContextMenu={(e) => openContextMenu(e, item.story, dateKey, item.isRecurring, item.isCompleted)}
                             class={`w-full text-left px-1.5 py-1 rounded-md border text-[10px] font-medium leading-tight truncate transition-all group/item flex items-center gap-1 ${
                                item.isCompleted ? 'opacity-50 line-through bg-base-content/5 border-transparent text-base-content/40' : styleDesc
                             } ${
@@ -1267,6 +1312,7 @@ const CalendarPage: Component<Props> = (props) => {
                                   onDragStart={(e) => handleDragStart(e, item.story, key)}
                                   onDragEnd={handleDragEnd}
                                   onClick={(e) => { e.stopPropagation(); setSelectedStoryForDetail(item.story); }}
+                                  onContextMenu={(e) => openContextMenu(e, item.story, key, item.isRecurring, item.isCompleted)}
                                   class={`group/item flex items-center gap-1 w-full text-left px-1.5 py-1 rounded-md border text-[10px] font-semibold leading-tight truncate transition-all ${
                                     item.isCompleted ? 'opacity-50 line-through bg-base-content/5 border-transparent text-base-content/40' : styleDesc
                                   } ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${
@@ -1425,6 +1471,7 @@ const CalendarPage: Component<Props> = (props) => {
                                   onDragStart={(e) => handleDragStart(e, item.story, key)}
                                   onDragEnd={handleDragEnd}
                                   onClick={(e) => { e.stopPropagation(); if (!isResizingThis()) setSelectedStoryForDetail(item.story); }}
+                                  onContextMenu={(e) => openContextMenu(e, item.story, key, item.isRecurring, item.isCompleted)}
                                   class={`group/event absolute rounded-md border px-1.5 py-1 text-[11px] font-semibold leading-tight overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-[opacity,transform,box-shadow] ${
                                     item.isCompleted ? 'opacity-50 line-through bg-base-content/5 border-transparent text-base-content/40' : styleDesc
                                   } ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${
@@ -1558,8 +1605,9 @@ const CalendarPage: Component<Props> = (props) => {
                 </div>
               }>
                 {(item) => (
-                  <button 
+                  <button
                     onClick={() => { setSelectedStoryForDetail(item.story); }}
+                    onContextMenu={(e) => openContextMenu(e, item.story, toLocalDateStr(selectedDay()), item.isRecurring, item.isCompleted)}
                     class="w-full text-left flex items-start gap-3 px-3 py-3 rounded-xl border border-base-content/[0.06] bg-base-100 hover:bg-base-content/[0.02] active:bg-base-content/[0.04] transition-all group"
                   >
                     <div class="mt-0.5 shrink-0" onClick={(e) => { e.stopPropagation(); toggleCompletion(item.story.id, toLocalDateStr(selectedDay()), item.isCompleted); }}>
@@ -1697,6 +1745,118 @@ const CalendarPage: Component<Props> = (props) => {
                     {quickAddSubmitting() ? 'Creando…' : 'Crear'}
                   </button>
                 </div>
+              </div>
+            </>
+          );
+        }}
+      </Show>
+
+      {/* Context menu (right-click on a HU) — Abrir / Marcar hecho / Ocultar */}
+      <Show when={contextMenu()}>
+        {(state) => {
+          const MENU_W = 220;
+          const MENU_H = 144;
+          const left = () => {
+            const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
+            return Math.min(Math.max(8, state().x), vw - MENU_W - 8);
+          };
+          const top = () => {
+            const vh = typeof window !== 'undefined' ? window.innerHeight : 768;
+            return Math.min(Math.max(8, state().y), vh - MENU_H - 8);
+          };
+          const isDone = () =>
+            state().isRecurring ? state().isCompleted : state().story.status === 'done';
+          // For recurring HUs, "done" toggles the per-date completion record;
+          // for one-shot HUs, it flips status between 'done' and 'todo'.
+          const toggleDone = () => {
+            const s = state();
+            if (s.isRecurring) {
+              void toggleCompletion(s.story.id, s.dateKey, s.isCompleted);
+            } else if (isDone()) {
+              void reopenStory(s.story.id);
+            } else {
+              void markStoryDone(s.story.id);
+            }
+            closeContextMenu();
+          };
+          const openDetail = () => {
+            setSelectedStoryForDetail(state().story);
+            closeContextMenu();
+          };
+          const requestHide = () => setConfirmingHide(true);
+          const confirmHide = () => {
+            void hideStory(state().story.id);
+            closeContextMenu();
+          };
+          const cancelHide = () => setConfirmingHide(false);
+          return (
+            <>
+              <div class="fixed inset-0 z-[70]" onMouseDown={closeContextMenu} onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }} />
+              <div
+                class="fixed z-[71] w-[220px] rounded-xl border border-base-content/[0.08] bg-base-100/98 shadow-[0_20px_60px_rgba(0,0,0,0.32)] backdrop-blur-xl py-1 overflow-hidden"
+                style={{ left: `${left()}px`, top: `${top()}px` }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <Show
+                  when={confirmingHide()}
+                  fallback={
+                    <>
+                      <button
+                        type="button"
+                        onClick={openDetail}
+                        class="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] font-medium text-base-content/80 hover:bg-base-content/[0.05] transition-colors"
+                      >
+                        <ExternalLink size={13} class="text-base-content/45" />
+                        Abrir detalle
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleDone}
+                        class="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] font-medium text-base-content/80 hover:bg-base-content/[0.05] transition-colors"
+                      >
+                        <Show when={isDone()} fallback={<CheckCircle2 size={13} class="text-ios-green-500/80" />}>
+                          <RotateCcw size={13} class="text-base-content/45" />
+                        </Show>
+                        {isDone() ? 'Reabrir' : 'Marcar como hecho'}
+                      </button>
+                      <div class="my-1 h-px bg-base-content/[0.06]" />
+                      <button
+                        type="button"
+                        onClick={requestHide}
+                        class="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] font-medium text-base-content/70 hover:bg-base-content/[0.05] transition-colors"
+                      >
+                        <EyeOff size={13} class="text-base-content/45" />
+                        Ocultar
+                      </button>
+                    </>
+                  }
+                >
+                  <div class="px-3 py-2.5">
+                    <div class="flex items-start gap-2 mb-2">
+                      <EyeOff size={13} class="text-base-content/45 mt-[2px] shrink-0" />
+                      <p class="text-[12px] font-medium text-base-content/80 leading-snug">
+                        ¿Ocultar esta HU del calendario?
+                      </p>
+                    </div>
+                    <div class="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={cancelHide}
+                        class="flex-1 py-1.5 rounded-md text-[11px] font-semibold text-base-content/60 hover:bg-base-content/[0.05] transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmHide}
+                        class="flex-1 py-1.5 rounded-md text-[11px] font-bold text-white bg-red-500/85 hover:bg-red-500 transition-colors"
+                      >
+                        Ocultar
+                      </button>
+                    </div>
+                  </div>
+                </Show>
               </div>
             </>
           );
