@@ -87,6 +87,9 @@ const SecretDetailView: Component<Props> = (props) => {
       const res = await api.secrets.reveal(props.secret.id);
       if (alive) {
         setValue(res.value);
+        // Revealing IS the intent to see it — show unmasked right away
+        // (one click, not reveal + a second "Mostrar").
+        setShown(true);
         props.onRevealed?.();
       }
     } catch (e: any) {
