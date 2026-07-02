@@ -18,7 +18,7 @@ import ProjectModal from '../components/ProjectModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal';
 import RecurringStoryModal from '../components/RecurringStoryModal';
 import SecretEditor from '../components/secrets/SecretEditor';
-import SecretRevealSheet from '../components/secrets/SecretRevealSheet';
+import SecretDetailSheet from '../components/secrets/SecretDetailSheet';
 import SecretShareModal from '../components/secrets/SecretShareModal';
 import { billingApi } from '../features/billing/lib/api';
 import TopNavigation from '../components/TopNavigation';
@@ -110,7 +110,7 @@ const AdminPage: Component = () => {
   const activeSecrets = () => (secretsList() ?? []).filter((s) => !s.revoked_at);
   const [showSecretEditor, setShowSecretEditor] = createSignal(false);
   const [editingSecret, setEditingSecret] = createSignal<SecretMeta | null>(null);
-  const [revealSecret, setRevealSecret] = createSignal<SecretMeta | null>(null);
+  const [detailSecret, setDetailSecret] = createSignal<SecretMeta | null>(null);
   const [shareSecret, setShareSecret] = createSignal<SecretMeta | null>(null);
   const [confirmDeleteSecret, setConfirmDeleteSecret] = createSignal<SecretMeta | null>(null);
   const [deletingSecret, setDeletingSecret] = createSignal(false);
@@ -768,7 +768,7 @@ const AdminPage: Component = () => {
                 {(secret) => {
                   const proj = () => secretProjectName(secret.project_id);
                   return (
-                    <div class={rowClass} onClick={() => openEditSecret(secret)}>
+                    <div class={rowClass} onClick={() => setDetailSecret(secret)}>
                       <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ios-blue-500/10 text-ios-blue-500">
                         <Lock size={15} />
                       </div>
@@ -807,33 +807,7 @@ const AdminPage: Component = () => {
                           </div>
                         </Show>
                       </div>
-                      <div class="flex shrink-0 items-center gap-0.5">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setRevealSecret(secret); }}
-                          title="Revelar valor"
-                          aria-label={`Revelar ${secret.name}`}
-                          class="rounded-lg p-2 text-base-content/35 transition-colors hover:bg-ios-blue-500/10 hover:text-ios-blue-500"
-                        >
-                          <Eye size={15} />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setShareSecret(secret); }}
-                          title="Compartir por URL"
-                          aria-label={`Compartir ${secret.name}`}
-                          class="rounded-lg p-2 text-base-content/35 transition-colors hover:bg-ios-blue-500/10 hover:text-ios-blue-500"
-                        >
-                          <Link2 size={15} />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteSecret(secret); }}
-                          title="Eliminar secreto"
-                          aria-label={`Eliminar ${secret.name}`}
-                          class="rounded-lg p-2 text-base-content/35 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                        <Pencil size={14} class="text-base-content/15 opacity-0 transition-opacity group-hover:opacity-100" />
-                      </div>
+                      <ChevronRight size={16} class="shrink-0 text-base-content/25 transition-transform group-hover:translate-x-0.5" />
                     </div>
                   );
                 }}
@@ -893,12 +867,17 @@ const AdminPage: Component = () => {
         />
       </Show>
 
-      {/* Secret reveal — compact sheet, plaintext wiped on close */}
-      <Show when={revealSecret()}>
+      {/* Secret detail — unified sheet: reveal inline, share, edit, delete */}
+      <Show when={detailSecret()}>
         {(s) => (
-          <SecretRevealSheet
+          <SecretDetailSheet
             secret={s()}
-            onClose={() => setRevealSecret(null)}
+            projectName={secretProjectName(s().project_id)}
+            lastEventText={s().last_event ? `${secretEventLabel(s().last_event!.event_type)} ${formatRelative(s().last_event!.created_at)}` : null}
+            onClose={() => setDetailSecret(null)}
+            onEdit={() => { const sec = s(); setDetailSecret(null); openEditSecret(sec); }}
+            onShare={() => { const sec = s(); setDetailSecret(null); setShareSecret(sec); }}
+            onDelete={() => { const sec = s(); setDetailSecret(null); setConfirmDeleteSecret(sec); }}
             onRevealed={refetchSecrets}
           />
         )}
