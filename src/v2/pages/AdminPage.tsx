@@ -18,8 +18,7 @@ import ProjectModal from '../components/ProjectModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal';
 import RecurringStoryModal from '../components/RecurringStoryModal';
 import SecretEditor from '../components/secrets/SecretEditor';
-import SecretDetailSheet from '../components/secrets/SecretDetailSheet';
-import SecretShareModal from '../components/secrets/SecretShareModal';
+import SecretDetailView from '../components/secrets/SecretDetailView';
 import { billingApi } from '../features/billing/lib/api';
 import TopNavigation from '../components/TopNavigation';
 import { frequencyLabel, isRecurring } from '../lib/recurrence';
@@ -110,8 +109,10 @@ const AdminPage: Component = () => {
   const activeSecrets = () => (secretsList() ?? []).filter((s) => !s.revoked_at);
   const [showSecretEditor, setShowSecretEditor] = createSignal(false);
   const [editingSecret, setEditingSecret] = createSignal<SecretMeta | null>(null);
-  const [detailSecret, setDetailSecret] = createSignal<SecretMeta | null>(null);
-  const [shareSecret, setShareSecret] = createSignal<SecretMeta | null>(null);
+  // In-place navigation (list ⇄ detail). Derived from the live list so the
+  // detail stays fresh and auto-returns to the list if the secret is deleted.
+  const [detailSecretId, setDetailSecretId] = createSignal<string | null>(null);
+  const detailSecret = () => activeSecrets().find((s) => s.id === detailSecretId()) ?? null;
   const [confirmDeleteSecret, setConfirmDeleteSecret] = createSignal<SecretMeta | null>(null);
   const [deletingSecret, setDeletingSecret] = createSignal(false);
 
@@ -749,8 +750,22 @@ const AdminPage: Component = () => {
           </div>
         </Show>
 
-        {/* ─── Secrets Section ─── */}
+        {/* ─── Secrets Section (list ⇄ in-place detail, no stacked modals) ─── */}
         <Show when={activeTab() === 'secrets'}>
+          <Show
+            when={!detailSecret()}
+            fallback={
+              <SecretDetailView
+                secret={detailSecret()!}
+                projectName={secretProjectName(detailSecret()!.project_id)}
+                lastEventText={detailSecret()!.last_event ? `${secretEventLabel(detailSecret()!.last_event!.event_type)} ${formatRelative(detailSecret()!.last_event!.created_at)}` : null}
+                onBack={() => setDetailSecretId(null)}
+                onEdit={() => openEditSecret(detailSecret()!)}
+                onDelete={() => setConfirmDeleteSecret(detailSecret()!)}
+                onRevealed={refetchSecrets}
+              />
+            }
+          >
           <div class="space-y-3 stagger-in">
             <div class="overflow-hidden rounded-[18px] border border-base-content/[0.06] bg-base-100/55 divide-y divide-base-content/[0.055]">
               <Show when={activeSecrets().length === 0 && secretsReady()}>
@@ -768,7 +783,7 @@ const AdminPage: Component = () => {
                 {(secret) => {
                   const proj = () => secretProjectName(secret.project_id);
                   return (
-                    <div class={rowClass} onClick={() => setDetailSecret(secret)}>
+                    <div class={rowClass} onClick={() => setDetailSecretId(secret.id)}>
                       <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ios-blue-500/10 text-ios-blue-500">
                         <Lock size={15} />
                       </div>
@@ -817,6 +832,7 @@ const AdminPage: Component = () => {
               Vault interno cifrado (AES-256-GCM). Las listas nunca exponen el valor; cada revelación queda auditada.
             </p>
           </div>
+          </Show>
         </Show>
 
         {/* ─── Billing Section ─── */}
@@ -865,32 +881,6 @@ const AdminPage: Component = () => {
           onClose={closeSecretEditor}
           onSaved={handleSecretSaved}
         />
-      </Show>
-
-      {/* Secret detail — unified sheet: reveal inline, share, edit, delete */}
-      <Show when={detailSecret()}>
-        {(s) => (
-          <SecretDetailSheet
-            secret={s()}
-            projectName={secretProjectName(s().project_id)}
-            lastEventText={s().last_event ? `${secretEventLabel(s().last_event!.event_type)} ${formatRelative(s().last_event!.created_at)}` : null}
-            onClose={() => setDetailSecret(null)}
-            onEdit={() => { const sec = s(); setDetailSecret(null); openEditSecret(sec); }}
-            onShare={() => { const sec = s(); setDetailSecret(null); setShareSecret(sec); }}
-            onDelete={() => { const sec = s(); setDetailSecret(null); setConfirmDeleteSecret(sec); }}
-            onRevealed={refetchSecrets}
-          />
-        )}
-      </Show>
-
-      {/* Secret share — bind to a PAT, URL shown once */}
-      <Show when={shareSecret()}>
-        {(s) => (
-          <SecretShareModal
-            secret={s()}
-            onClose={() => setShareSecret(null)}
-          />
-        )}
       </Show>
 
       {/* Secret delete confirm */}
