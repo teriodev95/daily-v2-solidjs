@@ -1,7 +1,7 @@
 import { createSignal, createResource, onCleanup, For, Show, type Component } from 'solid-js';
 import {
   ArrowLeft, Lock, Eye, EyeOff, Copy, Check, AlertCircle, Link2, Pencil, Trash2,
-  FolderKanban, Globe, Loader2, KeyRound,
+  FolderKanban, Globe, Loader2, Clock,
 } from 'lucide-solid';
 import { api, type SecretMeta, type SecretShareCreated } from '../../lib/api';
 
@@ -47,12 +47,6 @@ const formatRelative = (dateStr: string | null): string => {
   const weeks = Math.floor(days / 7);
   if (weeks < 5) return `hace ${weeks}sem`;
   return new Date(dateStr).toLocaleDateString('es', { day: 'numeric', month: 'short' });
-};
-
-const isTokenActive = (t: { revoked_at: string | null; expires_at: string | null }): boolean => {
-  if (t.revoked_at) return false;
-  if (t.expires_at && new Date(t.expires_at).getTime() <= Date.now()) return false;
-  return true;
 };
 
 const cardClass = 'overflow-hidden rounded-[18px] border border-base-content/[0.06] bg-base-100/55';
@@ -120,15 +114,25 @@ const SecretDetailView: Component<Props> = (props) => {
     return Math.min(12, Math.max(3, lines));
   };
 
-  // ── Share links (inline) ──
-  const [tokens] = createResource(() => api.tokens.list());
-  const activeTokens = () => (tokens() ?? []).filter(isTokenActive);
+  // ── Share links (inline, ephemeral 5-minute TTL) ──
   const [links, { mutate: mutateLinks, refetch: refetchLinks }] = createResource(
     () => props.secret.id,
     (id) => api.secrets.shares.list(id),
   );
 
-  const [selectedToken, setSelectedToken] = createSignal('');
+  // 1s ticker driving the countdowns; links vanish from the UI as they expire
+  // (the server enforces the TTL regardless).
+  const [now, setNow] = createSignal(Date.now());
+  const ticker = setInterval(() => setNow(Date.now()), 1000);
+  onCleanup(() => clearInterval(ticker));
+
+  const remainingMs = (expiresAt: string): number => new Date(expiresAt).getTime() - now();
+  const fmtRemaining = (expiresAt: string): string => {
+    const s = Math.max(0, Math.round(remainingMs(expiresAt) / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  const liveLinks = () => (links() ?? []).filter((l) => !l.revoked_at && remainingMs(l.expires_at) > 0);
+
   const [generating, setGenerating] = createSignal(false);
   const [createError, setCreateError] = createSignal('');
   // The just-created link, holding the once-visible url. Wiped on cleanup.
@@ -139,12 +143,11 @@ const SecretDetailView: Component<Props> = (props) => {
   const [revokeError, setRevokeError] = createSignal('');
 
   const generate = async () => {
-    const tokenId = selectedToken();
-    if (!tokenId || generating()) return;
+    if (generating()) return;
     setGenerating(true);
     setCreateError('');
     try {
-      const res = await api.secrets.shares.create(props.secret.id, tokenId);
+      const res = await api.secrets.shares.create(props.secret.id);
       if (!alive) return;
       setCreated(res);
       setCopiedUrl(false);
@@ -352,72 +355,48 @@ const SecretDetailView: Component<Props> = (props) => {
                   </Show>
                 </button>
               </div>
+              <div class="flex items-center justify-between gap-2">
+                <span class={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tabular-nums ${
+                  remainingMs(created()!.expires_at) > 0
+                    ? 'bg-ios-blue-500/10 text-ios-blue-500'
+                    : 'bg-base-content/[0.07] text-base-content/45'
+                }`}>
+                  <Clock size={12} />
+                  {remainingMs(created()!.expires_at) > 0 ? `Expira en ${fmtRemaining(created()!.expires_at)}` : 'Expirado'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCreated(null)}
+                  class="text-[12px] font-semibold text-ios-blue-500 transition-opacity hover:opacity-80"
+                >
+                  Crear otro enlace
+                </button>
+              </div>
               <div class="flex items-start gap-2 text-amber-600 dark:text-amber-400">
                 <AlertCircle size={14} class="mt-0.5 shrink-0" />
                 <p class="text-[11px] leading-relaxed">
-                  Cópiala ahora; no se vuelve a mostrar. El agente la usa con su token; el enlace se revoca junto con el token.
+                  Cópiala ahora; no se vuelve a mostrar. Quien tenga la URL puede leer el valor durante 5 minutos; puedes revocarla antes.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => { setCreated(null); setSelectedToken(''); }}
-                class="text-[12px] font-semibold text-ios-blue-500 transition-opacity hover:opacity-80"
-              >
-                Crear otro enlace
-              </button>
             </div>
           }
         >
-          <Show
-            when={!tokens.loading}
-            fallback={
-              <div class="flex items-center gap-2 px-1 py-2 text-xs text-base-content/40">
-                <Loader2 size={14} class="animate-spin" /> Cargando tokens…
-              </div>
-            }
-          >
-            <Show
-              when={activeTokens().length > 0}
-              fallback={
-                <div class="flex items-start gap-2 rounded-xl border border-base-content/[0.08] bg-base-content/[0.03] px-3 py-2.5 text-base-content/55">
-                  <AlertCircle size={14} class="mt-0.5 shrink-0" />
-                  <p class="text-[11px] leading-relaxed">
-                    No tienes tokens activos. Crea un token de acceso personal para poder compartir este secreto.
-                  </p>
-                </div>
-              }
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={generate}
+              disabled={generating()}
+              class="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-ios-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-ios-blue-600 disabled:opacity-40"
             >
-              <div class="flex flex-col gap-2 sm:flex-row">
-                <div class="relative flex-1">
-                  <KeyRound size={15} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base-content/35" />
-                  <select
-                    value={selectedToken()}
-                    onChange={(e) => setSelectedToken(e.currentTarget.value)}
-                    class="w-full appearance-none rounded-xl border border-base-content/[0.08] bg-base-content/[0.04] py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ios-blue-500/30"
-                  >
-                    <option value="" disabled>Selecciona un token…</option>
-                    <For each={activeTokens()}>
-                      {(t) => <option value={t.id}>{t.name} · {t.prefix}</option>}
-                    </For>
-                  </select>
-                </div>
-                <button
-                  type="button"
-                  onClick={generate}
-                  disabled={!selectedToken() || generating()}
-                  class="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-ios-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-ios-blue-600 disabled:opacity-40"
-                >
-                  <Show when={generating()} fallback={<Link2 size={15} />}>
-                    <Loader2 size={15} class="animate-spin" />
-                  </Show>
-                  Generar enlace
-                </button>
-              </div>
-              <p class="text-[11px] leading-relaxed text-base-content/40">
-                El enlace queda atado al token elegido: solo ese agente puede resolverlo y muere junto con el token.
-              </p>
-            </Show>
-          </Show>
+              <Show when={generating()} fallback={<Link2 size={15} />}>
+                <Loader2 size={15} class="animate-spin" />
+              </Show>
+              Generar enlace (5 min)
+            </button>
+            <p class="flex-1 text-[11px] leading-relaxed text-base-content/40">
+              Enlace público efímero: quien lo tenga puede leer el valor durante 5 minutos. Cada lectura queda auditada.
+            </p>
+          </div>
 
           <Show when={createError()}>
             <div class="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.08] px-3 py-2.5 text-red-500">
@@ -439,68 +418,61 @@ const SecretDetailView: Component<Props> = (props) => {
             <Loader2 size={14} class="animate-spin" /> Cargando enlaces…
           </div>
         }>
-          <Show when={(links() ?? []).length > 0}>
+          <Show when={liveLinks().length > 0}>
             <div class="divide-y divide-base-content/[0.06] overflow-hidden rounded-xl border border-base-content/[0.08]">
-              <For each={links()}>
+              <For each={liveLinks()}>
                 {(link) => (
                   <div class="flex items-center gap-3 px-3.5 py-3">
-                    <div class={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                      link.active ? 'bg-ios-blue-500/10 text-ios-blue-500' : 'bg-base-content/[0.06] text-base-content/30'
-                    }`}>
-                      <KeyRound size={14} />
+                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ios-blue-500/10 text-ios-blue-500">
+                      <Link2 size={14} />
                     </div>
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center gap-2">
-                        <p class="truncate text-[13px] font-medium">{link.token_name}</p>
-                        <span class="shrink-0 font-mono text-[10.5px] text-base-content/45">{link.prefix}</span>
-                        <Show
-                          when={link.active}
-                          fallback={<span class="shrink-0 rounded-md bg-base-content/[0.07] px-1.5 py-0.5 text-[10px] font-medium text-base-content/45">Revocado</span>}
-                        >
-                          <span class="shrink-0 rounded-md bg-ios-green-500/12 px-1.5 py-0.5 text-[10px] font-medium text-ios-green-500">Activo</span>
-                        </Show>
+                        <span class="shrink-0 font-mono text-[12px] font-medium text-base-content/75">{link.prefix}…</span>
+                        <span class="inline-flex shrink-0 items-center gap-1 rounded-md bg-ios-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-ios-blue-500">
+                          <Clock size={10} />
+                          {fmtRemaining(link.expires_at)}
+                        </span>
                       </div>
                       <p class="mt-0.5 truncate text-[11px] text-base-content/40">
                         Creado {formatRelative(link.created_at)} · Último uso {formatRelative(link.last_used_at)}
                       </p>
                     </div>
-                    <Show when={link.active}>
-                      <Show
-                        when={confirmRevoke() === link.id}
-                        fallback={
-                          <button
-                            type="button"
-                            onClick={() => { setRevokeError(''); setConfirmRevoke(link.id); }}
-                            title="Revocar enlace"
-                            aria-label={`Revocar enlace de ${link.token_name}`}
-                            class="shrink-0 rounded-lg p-2 text-base-content/35 transition-colors hover:bg-red-500/10 hover:text-red-500"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        }
-                      >
-                        <div class="flex shrink-0 items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => revoke(link.id)}
-                            disabled={revokingId() === link.id}
-                            class="flex items-center gap-1 rounded-lg bg-red-500 px-2.5 py-1.5 text-[12px] font-semibold text-white transition-all hover:bg-red-600 disabled:opacity-50"
-                          >
-                            <Show when={revokingId() === link.id}>
-                              <Loader2 size={12} class="animate-spin" />
-                            </Show>
-                            Revocar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmRevoke(null)}
-                            disabled={revokingId() === link.id}
-                            class="rounded-lg px-2 py-1.5 text-[12px] font-medium text-base-content/50 transition-colors hover:bg-base-content/5"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </Show>
+                    <Show
+                      when={confirmRevoke() === link.id}
+                      fallback={
+                        <button
+                          type="button"
+                          onClick={() => { setRevokeError(''); setConfirmRevoke(link.id); }}
+                          title="Revocar enlace"
+                          aria-label={`Revocar enlace ${link.prefix}`}
+                          class="shrink-0 rounded-lg p-2 text-base-content/35 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      }
+                    >
+                      <div class="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => revoke(link.id)}
+                          disabled={revokingId() === link.id}
+                          class="flex items-center gap-1 rounded-lg bg-red-500 px-2.5 py-1.5 text-[12px] font-semibold text-white transition-all hover:bg-red-600 disabled:opacity-50"
+                        >
+                          <Show when={revokingId() === link.id}>
+                            <Loader2 size={12} class="animate-spin" />
+                          </Show>
+                          Revocar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRevoke(null)}
+                          disabled={revokingId() === link.id}
+                          class="rounded-lg px-2 py-1.5 text-[12px] font-medium text-base-content/50 transition-colors hover:bg-base-content/5"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
                     </Show>
                   </div>
                 )}

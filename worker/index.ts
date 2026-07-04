@@ -22,7 +22,7 @@ import learningsRoutes from './routes/learnings';
 import wikiRoutes from './routes/wiki';
 import tokensRoutes from './routes/tokens';
 import secretsRoutes from './routes/secrets';
-import secretShareRoutes from './routes/secretShare';
+import secretShareRoutes, { purgeExpiredSecretShareLinks } from './routes/secretShare';
 import almaRoutes from './routes/alma';
 import presenceRoutes from './routes/presence';
 import { wikiAgentRoutes } from './features/wikiShare';
@@ -177,21 +177,10 @@ app.use('/api/secrets/*', authMiddleware);
 app.use('/api/secrets/*', requireAdmin);
 app.use('/api/secrets/*', enforceScope('secrets'));
 
-// Secret share-link resolve: deliberately OUTSIDE the /api/secrets/* gate.
-// Authorization is "this URL token is bound to the PAT making the request"
-// (checked in the handler), NOT the `secrets` scope — least privilege. Same
-// global-API-key ban as secrets, then PAT/session resolution. NO requireAdmin,
-// NO enforceScope. A revoked/expired PAT can't authenticate here at all, so a
-// link "dies with its token" for free. Rate-limited per PAT (best-effort).
-app.use('/api/secret-share/*', async (c, next) => {
-  const authHeader = c.req.header('Authorization') ?? '';
-  if (authHeader.startsWith('Bearer ') && !authHeader.slice('Bearer '.length).startsWith('dk_')) {
-    return c.json({ error: 'global_api_key_forbidden_for_secrets' }, 403);
-  }
-  return next();
-});
-app.use('/api/secret-share/*', tokenAuthMiddleware);
-app.use('/api/secret-share/*', authMiddleware);
+// Secret share-link resolve: PUBLIC by design (issue #8). Security is the
+// unguessable `ss_` token (hashed at rest) + a 5-minute server-side TTL +
+// uniform 404s + per-resolve auditing. No auth middleware at all; the rate
+// limiter keys by client IP when there is no token in context.
 app.use('/api/secret-share/*', agentRateLimitMiddleware);
 
 // Alma: per-user layered technical memory. NOT admin-only — every user has
@@ -414,5 +403,6 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(processLibrarianQueue(env));
     ctx.waitUntil(processBillingSchedules(env));
+    ctx.waitUntil(purgeExpiredSecretShareLinks(env));
   },
 };
