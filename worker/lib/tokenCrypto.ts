@@ -162,3 +162,32 @@ export function generateSecretShareToken(): string {
 export function secretShareTokenPrefix(raw: string): string {
   return raw.slice(0, 11);
 }
+
+// ---------- ALMA share tokens ----------
+
+const ALMA_SHARE_TOKEN_PREFIX = 'as_';
+
+/**
+ * Generates an ephemeral ALMA share token. It uses the same entropy and
+ * rejection-sampling algorithm as secret share links, but a distinct prefix
+ * prevents cross-domain token confusion.
+ */
+export function generateAlmaShareToken(): string {
+  const alphabetLen = TOKEN_ALPHABET.length;
+  const maxAcceptable = Math.floor(256 / alphabetLen) * alphabetLen;
+  const out = new Array<string>(SECRET_SHARE_TOKEN_BODY_LEN);
+  let i = 0;
+  const chunk = new Uint8Array(64);
+  while (i < SECRET_SHARE_TOKEN_BODY_LEN) {
+    crypto.getRandomValues(chunk);
+    for (let j = 0; j < chunk.length && i < SECRET_SHARE_TOKEN_BODY_LEN; j++) {
+      const byte = chunk[j];
+      if (byte < maxAcceptable) out[i++] = TOKEN_ALPHABET[byte % alphabetLen];
+    }
+  }
+  return ALMA_SHARE_TOKEN_PREFIX + out.join('');
+}
+
+export function almaShareTokenPrefix(raw: string): string {
+  return raw.slice(0, 11);
+}

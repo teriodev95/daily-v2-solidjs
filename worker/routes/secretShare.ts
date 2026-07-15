@@ -73,6 +73,8 @@ secretShare.get('/:ref', async (c) => {
     metadata: { link_id: link.id },
   });
 
+  c.header('Cache-Control', 'private, no-store');
+  c.header('X-Content-Type-Options', 'nosniff');
   return c.json({ value, key: secret.key, name: secret.name });
 });
 

@@ -1,12 +1,19 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, desc } from 'drizzle-orm';
 import type { Env, Variables, AppDb } from '../types';
 
 type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
 import * as schema from '../db/schema';
+import {
+  almaShareTokenPrefix,
+  generateAlmaShareToken,
+  hashToken,
+} from '../lib/tokenCrypto';
+import { recordAlmaShareEvent } from './almaShare';
 
 const alma = new Hono<{ Bindings: Env; Variables: Variables }>();
+const ALMA_SHARE_TTL_MS = 5 * 60 * 1000;
 
 // ----- Validation helpers --------------------------------------------------
 
@@ -580,6 +587,100 @@ alma.delete('/:id/blocks/:bid', async (c) => {
 
   const refreshed = await recomputeContent(c, id);
   return c.json({ ok: true, blocks: refreshed.map(toPublicBlock) });
+});
+
+// ----- Share links (ephemeral, five-minute TTL) ---------------------------
+
+// Creating a link does not read or return ALMA content. The raw token is
+// returned exactly once and only its SHA-256 hash is persisted.
+alma.post('/:id/share', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const document = await getOwnedAlma(db, c.req.param('id'), user.userId);
+  if (!document) return c.json({ error: 'Not found' }, 404);
+
+  const raw = generateAlmaShareToken();
+  const linkId = crypto.randomUUID();
+  const now = Date.now();
+  const createdAt = new Date(now).toISOString();
+  const expiresAt = new Date(now + ALMA_SHARE_TTL_MS).toISOString();
+  const prefix = almaShareTokenPrefix(raw);
+
+  await db.insert(schema.almaShareLinks).values({
+    id: linkId,
+    alma_id: document.id,
+    token_hash: await hashToken(raw),
+    prefix,
+    expires_at: expiresAt,
+    created_at: createdAt,
+    last_used_at: null,
+    revoked_at: null,
+  });
+  await recordAlmaShareEvent(db, c, {
+    alma: document,
+    eventType: 'alma.share_created',
+    linkId,
+  });
+
+  const url = `${new URL(c.req.url).origin}/api/alma-share/${raw}`;
+  c.header('Cache-Control', 'private, no-store');
+  c.header('X-Content-Type-Options', 'nosniff');
+  return c.json(
+    { id: linkId, url, token: raw, prefix, expires_at: expiresAt, created_at: createdAt },
+    201,
+  );
+});
+
+alma.get('/:id/share', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const document = await getOwnedAlma(db, c.req.param('id'), user.userId);
+  if (!document) return c.json({ error: 'Not found' }, 404);
+
+  const now = new Date().toISOString();
+  const rows = await db
+    .select({
+      id: schema.almaShareLinks.id,
+      prefix: schema.almaShareLinks.prefix,
+      expires_at: schema.almaShareLinks.expires_at,
+      created_at: schema.almaShareLinks.created_at,
+      last_used_at: schema.almaShareLinks.last_used_at,
+      revoked_at: schema.almaShareLinks.revoked_at,
+    })
+    .from(schema.almaShareLinks)
+    .where(eq(schema.almaShareLinks.alma_id, document.id))
+    .orderBy(desc(schema.almaShareLinks.created_at));
+
+  c.header('Cache-Control', 'private, no-store');
+  return c.json({ links: rows.filter((link) => !link.revoked_at && link.expires_at > now) });
+});
+
+alma.delete('/:id/share/:linkId', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const document = await getOwnedAlma(db, c.req.param('id'), user.userId);
+  if (!document) return c.json({ error: 'Not found' }, 404);
+
+  const linkId = c.req.param('linkId');
+  const [link] = await db
+    .select()
+    .from(schema.almaShareLinks)
+    .where(eq(schema.almaShareLinks.id, linkId))
+    .limit(1);
+  if (!link || link.alma_id !== document.id) return c.json({ error: 'Not found' }, 404);
+
+  if (!link.revoked_at) {
+    await db
+      .update(schema.almaShareLinks)
+      .set({ revoked_at: new Date().toISOString() })
+      .where(eq(schema.almaShareLinks.id, linkId));
+    await recordAlmaShareEvent(db, c, {
+      alma: document,
+      eventType: 'alma.share_revoked',
+      linkId,
+    });
+  }
+  return c.json({ ok: true });
 });
 
 // GET /:id — single document owned by the current user.

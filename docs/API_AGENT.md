@@ -172,6 +172,29 @@ GET /api/wiki/graph?project_id=p1
 
 ---
 
+## Compartir ALMA y Secretos
+
+Los enlaces son capacidades públicas efímeras de cinco minutos. El token raw
+se devuelve una sola vez, sólo su hash queda almacenado y cada resolución se
+audita. Crear un enlace de Secreto no ejecuta el endpoint `reveal`.
+
+```text
+POST   /api/alma/<id>/share
+GET    /api/alma/<id>/share
+DELETE /api/alma/<id>/share/<link_id>
+GET    /api/alma-share/<as_token>          # público
+
+POST   /api/secrets/<id>/share
+GET    /api/secrets/<id>/share
+DELETE /api/secrets/<id>/share/<link_id>
+GET    /api/secret-share/<ss_token>        # público
+```
+
+`POST` no recibe cuerpo. Devuelve `url`, `prefix`, `expires_at` y metadatos; la
+lista posterior sólo contiene el prefijo y nunca puede reconstruir la URL.
+
+---
+
 ## Consultas auxiliares
 
 ```

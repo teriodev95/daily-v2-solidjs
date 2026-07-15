@@ -307,6 +307,33 @@ export const almaBlocks = sqliteTable('alma_blocks', {
   updated_at: text('updated_at').notNull(),
 });
 
+// Five-minute public links for one ALMA document. The raw `as_` token is
+// returned once; only its hash and a display-safe prefix are persisted.
+export const almaShareLinks = sqliteTable('alma_share_links', {
+  id: text('id').primaryKey(),
+  alma_id: text('alma_id').notNull().references(() => almaDocuments.id, { onDelete: 'cascade' }),
+  token_hash: text('token_hash').notNull().unique(),
+  prefix: text('prefix').notNull(),
+  expires_at: text('expires_at').notNull(),
+  created_at: text('created_at').notNull(),
+  last_used_at: text('last_used_at'),
+  revoked_at: text('revoked_at'),
+});
+
+// Append-only audit for ALMA sharing. Deliberately has no foreign key so the
+// security trail survives deletion of the document; content is never stored.
+export const almaShareAuditEvents = sqliteTable('alma_share_audit_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  alma_id: text('alma_id').notNull(),
+  team_id: text('team_id').notNull(),
+  actor_user_id: text('actor_user_id'),
+  actor_token_id: text('actor_token_id'),
+  actor_type: text('actor_type').notNull(),
+  event_type: text('event_type').notNull(),
+  metadata: text('metadata').notNull().default('{}'),
+  created_at: text('created_at').notNull(),
+});
+
 // Re-export wiki share tokens table from its feature folder so Drizzle's
 // schema introspection (drizzle-kit + the typed `AppDb`) picks it up.
 // The feature module imports `projects` and `users` from this file — that's
