@@ -25,6 +25,7 @@ import secretsRoutes from './routes/secrets';
 import secretShareRoutes, { purgeExpiredSecretShareLinks } from './routes/secretShare';
 import almaRoutes from './routes/alma';
 import presenceRoutes from './routes/presence';
+import renderRoutes from './routes/render';
 import { wikiAgentRoutes } from './features/wikiShare';
 import { billingRoutes, billingPortalRoutes, processBillingSchedules } from './features/billing';
 import seedRoutes from './db/seed';
@@ -38,14 +39,14 @@ import { processLibrarianQueue } from './lib/librarian';
  * - If PAT-authenticated, require the token's scopes to cover the module
  *   with at least the needed action (read for GET/HEAD, write otherwise).
  */
-function enforceScope(moduleName: string) {
+function enforceScope(moduleName: string, requiredOverride?: 'read' | 'write') {
   return async (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
     const tokenId = c.get('tokenId');
     if (!tokenId) return next();
 
     const method = c.req.method.toUpperCase();
     const needsWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
-    const requiredAction: 'read' | 'write' = needsWrite ? 'write' : 'read';
+    const requiredAction: 'read' | 'write' = requiredOverride ?? (needsWrite ? 'write' : 'read');
 
     const scopes = c.get('scopes') ?? {};
     const granted = scopes[moduleName] ?? 'none';
@@ -129,6 +130,12 @@ app.use('/api/projects/*', enforceScope('projects'));
 app.use('/api/stories/*', tokenAuthMiddleware);
 app.use('/api/stories/*', authMiddleware);
 app.use('/api/stories/*', enforceScope('stories'));
+
+// Markdown rendering is a read capability even though it uses POST to carry a
+// potentially large source document. It never persists or mutates the source.
+app.use('/api/render/*', tokenAuthMiddleware);
+app.use('/api/render/*', authMiddleware);
+app.use('/api/render/*', enforceScope('stories', 'read'));
 
 app.use('/api/reports/*', tokenAuthMiddleware);
 app.use('/api/reports/*', authMiddleware);
@@ -281,6 +288,9 @@ app.get('/api/meta', async (c) => {
     const coreRow = docs.find((d) => d.tier === 0 && d.kind === 'alma');
     capabilities.alma = {
       granted: almaScope,
+      // PATs represent agent credentials. They may edit unlocked content but
+      // can never remove a lock set by a human session.
+      can_lock_blocks: c.get('tokenKind') !== 'pat',
       core: coreRow ? { title: coreRow.title, content: coreRow.content } : null,
       index: docs.map((d) => ({ id: d.id, tier: d.tier, kind: d.kind, title: d.title })),
       get: 'GET /api/alma/:id',
@@ -294,6 +304,7 @@ app.get('/api/meta', async (c) => {
     frequencies: ['daily', 'weekly', 'monthly'],
     endpoints: {
       stories: { list: 'GET /api/stories', kanban: 'GET /api/stories/kanban', search: 'GET /api/stories/search', create: 'POST /api/stories', get: 'GET /api/stories/:id', update: 'PATCH /api/stories/:id', delete: 'DELETE /api/stories/:id' },
+      render: { markdown: 'POST /api/render/markdown' },
       projects: { list: 'GET /api/projects' },
       members: { list: 'GET /api/team/members' },
       attachments: { list: 'GET /api/attachments/story/:storyId', upload: 'POST /api/attachments/story/:storyId', download: 'GET /api/attachments/file/:id', delete: 'DELETE /api/attachments/:id' },
@@ -356,6 +367,7 @@ app.route('/api/team', teamRoutes);
 app.route('/api/projects', projectRoutes);
 app.route('/api/stories', storiesRoutes);
 app.route('/api/stories', storyDocRoutes);
+app.route('/api/render', renderRoutes);
 app.route('/api/reports', reportsRoutes);
 app.route('/api/goals', goalsRoutes);
 app.route('/api/assignments', assignmentsRoutes);

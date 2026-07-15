@@ -2,7 +2,7 @@
 
 **Base URL**: `https://daily-check-api.clvrt.workers.dev`
 
-**Auth**: `Authorization: Bearer d4f37158be20bbe846b7763ad9ad3875c291effa7ad8d8af8d28b9ad29385dec`
+**Auth**: `Authorization: Bearer <YOUR_DAILY_CHECK_TOKEN>`
 
 ---
 
@@ -198,6 +198,6 @@ GET /api/team/members      → lista de usuarios (id, name, email, role)
 ## Ejemplo rápido
 
 ```bash
-curl -H "Authorization: Bearer d4f37158be20bbe846b7763ad9ad3875c291effa7ad8d8af8d28b9ad29385dec" \
+curl -H "Authorization: Bearer <YOUR_DAILY_CHECK_TOKEN>" \
   https://daily-check-api.clvrt.workers.dev/api/meta
 ```
