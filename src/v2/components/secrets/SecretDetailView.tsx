@@ -1,9 +1,14 @@
 import { createSignal, createResource, onCleanup, For, Show, type Component } from 'solid-js';
 import {
   ArrowLeft, Lock, Eye, EyeOff, Copy, Check, AlertCircle, Link2, Pencil, Trash2,
-  FolderKanban, Globe, Loader2, Clock,
+  FolderKanban, Globe, Loader2, Clock, Terminal,
 } from 'lucide-solid';
-import { api, type SecretMeta, type SecretShareCreated } from '../../lib/api';
+import {
+  api,
+  type SecretMeta,
+  type SecretShareCreated,
+  type SecretShareTtlMinutes,
+} from '../../lib/api';
 
 interface Props {
   secret: SecretMeta;
@@ -109,9 +114,19 @@ const SecretDetailView: Component<Props> = (props) => {
     }
   };
 
-  const rows = (): number => {
-    const lines = value()?.split('\n').length ?? 1;
-    return Math.min(12, Math.max(3, lines));
+  const valueLines = (): string[] => (value() ?? '').split('\n');
+
+  // Per-line copy. The line-list viewer replaces the old select-all-on-click
+  // textarea, so grabbing a single line no longer fights the selection.
+  const [copiedLine, setCopiedLine] = createSignal<number | null>(null);
+  const copyLine = async (line: string, index: number) => {
+    try {
+      await writeToClipboard(line);
+      setCopiedLine(index);
+      setTimeout(() => alive && setCopiedLine(null), 2000);
+    } catch {
+      setRevealError('No se pudo copiar la línea');
+    }
   };
 
   // ── Share links (inline, ephemeral 5-minute TTL) ──
@@ -133,6 +148,7 @@ const SecretDetailView: Component<Props> = (props) => {
   };
   const liveLinks = () => (links() ?? []).filter((l) => !l.revoked_at && remainingMs(l.expires_at) > 0);
 
+  const [ttlMinutes, setTtlMinutes] = createSignal<SecretShareTtlMinutes>(5);
   const [generating, setGenerating] = createSignal(false);
   const [createError, setCreateError] = createSignal('');
   // The just-created link, holding the once-visible url. Wiped on cleanup.
@@ -147,7 +163,7 @@ const SecretDetailView: Component<Props> = (props) => {
     setGenerating(true);
     setCreateError('');
     try {
-      const res = await api.secrets.shares.create(props.secret.id);
+      const res = await api.secrets.shares.create(props.secret.id, ttlMinutes());
       if (!alive) return;
       setCreated(res);
       setCopiedUrl(false);
@@ -172,6 +188,21 @@ const SecretDetailView: Component<Props> = (props) => {
           ? 'Tu navegador no permite copiar. Usa HTTPS o copia manualmente.'
           : 'No se pudo copiar el enlace',
       );
+    }
+  };
+
+  // `?format=raw` returns the bare value as text/plain — agents and scripts
+  // can pipe it straight into a file without parsing JSON.
+  const [copiedCurl, setCopiedCurl] = createSignal(false);
+  const copyCurl = async () => {
+    const url = created()?.url;
+    if (!url) return;
+    try {
+      await writeToClipboard(`curl -s '${url}?format=raw'`);
+      setCopiedCurl(true);
+      setTimeout(() => alive && setCopiedCurl(false), 2000);
+    } catch {
+      setCreateError('No se pudo copiar el comando');
     }
   };
 
@@ -305,15 +336,36 @@ const SecretDetailView: Component<Props> = (props) => {
             </button>
           }
         >
-          <textarea
-            readonly
-            rows={rows()}
-            value={value() ?? ''}
-            onClick={(e) => shown() && e.currentTarget.select()}
-            spellcheck={false}
-            style={{ '-webkit-text-security': shown() ? 'none' : 'disc' } as any}
-            class="max-h-[40vh] w-full resize-y rounded-xl border border-base-content/[0.08] bg-base-content/[0.04] px-3.5 py-3 font-mono text-xs leading-relaxed text-base-content/90 focus:outline-none focus:ring-2 focus:ring-ios-blue-500/30"
-          />
+          <div class="max-h-[40vh] overflow-y-auto rounded-xl border border-base-content/[0.08] bg-base-content/[0.04] py-2 font-mono text-xs leading-relaxed">
+            <For each={valueLines()}>
+              {(line, i) => (
+                <div class="group flex items-center gap-1.5 px-2 hover:bg-base-content/[0.035]">
+                  <span class="w-6 shrink-0 select-none text-right text-[10px] tabular-nums text-base-content/25">
+                    {i() + 1}
+                  </span>
+                  <span class="min-w-0 flex-1 whitespace-pre-wrap break-all py-0.5 text-base-content/90">
+                    {line === '' ? ' ' : shown() ? line : '•'.repeat(line.length)}
+                  </span>
+                  <Show when={line !== ''}>
+                    <button
+                      type="button"
+                      onClick={() => void copyLine(line, i())}
+                      aria-label={`Copiar línea ${i() + 1}`}
+                      class={`shrink-0 rounded-md p-1 transition-all ${
+                        copiedLine() === i()
+                          ? 'text-ios-green-500 opacity-100'
+                          : 'text-base-content/35 opacity-0 hover:bg-base-content/10 hover:text-base-content/75 focus-visible:opacity-100 group-hover:opacity-100'
+                      }`}
+                    >
+                      <Show when={copiedLine() === i()} fallback={<Copy size={12} />}>
+                        <Check size={12} />
+                      </Show>
+                    </button>
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
           <p class="flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
             <AlertCircle size={12} class="mt-0.5 shrink-0" />
             El valor se borra de la pantalla al salir. Esta revelación queda registrada en la auditoría.
@@ -355,15 +407,32 @@ const SecretDetailView: Component<Props> = (props) => {
                   </Show>
                 </button>
               </div>
-              <div class="flex items-center justify-between gap-2">
-                <span class={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tabular-nums ${
-                  remainingMs(created()!.expires_at) > 0
-                    ? 'bg-ios-blue-500/10 text-ios-blue-500'
-                    : 'bg-base-content/[0.07] text-base-content/45'
-                }`}>
-                  <Clock size={12} />
-                  {remainingMs(created()!.expires_at) > 0 ? `Expira en ${fmtRemaining(created()!.expires_at)}` : 'Expirado'}
-                </span>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5">
+                  <span class={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tabular-nums ${
+                    remainingMs(created()!.expires_at) > 0
+                      ? 'bg-ios-blue-500/10 text-ios-blue-500'
+                      : 'bg-base-content/[0.07] text-base-content/45'
+                  }`}>
+                    <Clock size={12} />
+                    {remainingMs(created()!.expires_at) > 0 ? `Expira en ${fmtRemaining(created()!.expires_at)}` : 'Expirado'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={copyCurl}
+                    title="Copia un comando curl que devuelve solo el valor (text/plain)"
+                    class={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+                      copiedCurl()
+                        ? 'bg-ios-green-500/15 text-ios-green-500'
+                        : 'text-base-content/50 hover:bg-base-content/5 hover:text-base-content/80'
+                    }`}
+                  >
+                    <Show when={copiedCurl()} fallback={<Terminal size={12} />}>
+                      <Check size={12} />
+                    </Show>
+                    Copiar curl
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={() => setCreated(null)}
@@ -375,26 +444,47 @@ const SecretDetailView: Component<Props> = (props) => {
               <div class="flex items-start gap-2 text-amber-600 dark:text-amber-400">
                 <AlertCircle size={14} class="mt-0.5 shrink-0" />
                 <p class="text-[11px] leading-relaxed">
-                  Cópiala ahora; no se vuelve a mostrar. Quien tenga la URL puede leer el valor durante 5 minutos; puedes revocarla antes.
+                  Cópiala ahora; no se vuelve a mostrar. Quien tenga la URL puede leer el valor hasta que expire; puedes revocarla antes.
                 </p>
               </div>
             </div>
           }
         >
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <button
-              type="button"
-              onClick={generate}
-              disabled={generating()}
-              class="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-ios-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-ios-blue-600 disabled:opacity-40"
-            >
-              <Show when={generating()} fallback={<Link2 size={15} />}>
-                <Loader2 size={15} class="animate-spin" />
-              </Show>
-              Generar enlace (5 min)
-            </button>
+            <div class="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={generate}
+                disabled={generating()}
+                class="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-ios-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-ios-blue-600 disabled:opacity-40"
+              >
+                <Show when={generating()} fallback={<Link2 size={15} />}>
+                  <Loader2 size={15} class="animate-spin" />
+                </Show>
+                Generar enlace
+              </button>
+              <div class="flex rounded-lg bg-base-content/[0.05] p-0.5" role="radiogroup" aria-label="Duración del enlace">
+                <For each={[5, 15, 60] as SecretShareTtlMinutes[]}>
+                  {(mins) => (
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={ttlMinutes() === mins}
+                      onClick={() => setTtlMinutes(mins)}
+                      class={`rounded-md px-2 py-1.5 text-[11px] font-semibold tabular-nums transition-colors ${
+                        ttlMinutes() === mins
+                          ? 'bg-base-100 text-base-content shadow-sm'
+                          : 'text-base-content/45 hover:text-base-content/75'
+                      }`}
+                    >
+                      {mins} min
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
             <p class="flex-1 text-[11px] leading-relaxed text-base-content/40">
-              Enlace público efímero: quien lo tenga puede leer el valor durante 5 minutos. Cada lectura queda auditada.
+              Enlace público efímero: quien lo tenga puede leer el valor durante {ttlMinutes()} minutos. Cada lectura queda auditada.
             </p>
           </div>
 

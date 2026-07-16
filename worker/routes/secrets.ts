@@ -599,9 +599,13 @@ secrets.get('/:id/audit', async (c) => {
   return c.json(events);
 });
 
-// ----- Share links (ephemeral, 5-minute TTL) -------------------------------
+// ----- Share links (ephemeral, 5/15/60-minute TTL) -------------------------
 
-export const SHARE_LINK_TTL_MS = 5 * 60 * 1000;
+// 5 is the default; a longer window is an explicit caller choice. The rest of
+// the security model (unguessable hashed token, auditing, revocation) is
+// unchanged, so the only widened surface is the validity window itself.
+export const SHARE_LINK_TTL_MINUTES = [5, 15, 60] as const;
+export type ShareLinkTtlMinutes = (typeof SHARE_LINK_TTL_MINUTES)[number];
 
 // Loads a team-scoped secret by id. Returns null when missing or off-team.
 // `requireActive` additionally rejects soft-deleted (revoked) secrets.
@@ -621,8 +625,9 @@ async function loadTeamSecret(
   return row;
 }
 
-// POST /:id/share — mint an ephemeral share link (5-minute TTL, no body).
-// Returns the raw `ss_` token EXACTLY ONCE (never stored, only hashed).
+// POST /:id/share — mint an ephemeral share link. Optional body
+// `{ ttl_minutes: 5 | 15 | 60 }` (default 5). Returns the raw `ss_` token
+// EXACTLY ONCE (never stored, only hashed).
 secrets.post('/:id/share', async (c) => {
   const user = c.get('user');
   const db = c.get('db');
@@ -633,11 +638,20 @@ secrets.post('/:id/share', async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
 
+  let ttlMinutes: ShareLinkTtlMinutes = 5;
+  const body = await c.req.json().catch(() => null);
+  if (body?.ttl_minutes !== undefined) {
+    if (!SHARE_LINK_TTL_MINUTES.includes(body.ttl_minutes)) {
+      return c.json({ error: 'ttl_minutes must be one of: 5, 15, 60' }, 400);
+    }
+    ttlMinutes = body.ttl_minutes;
+  }
+
   const raw = generateSecretShareToken();
   const linkId = crypto.randomUUID();
   const now = Date.now();
   const createdAt = new Date(now).toISOString();
-  const expiresAt = new Date(now + SHARE_LINK_TTL_MS).toISOString();
+  const expiresAt = new Date(now + ttlMinutes * 60 * 1000).toISOString();
   const prefix = secretShareTokenPrefix(raw);
 
   await db.insert(schema.secretShareLinks).values({
@@ -655,7 +669,7 @@ secrets.post('/:id/share', async (c) => {
   await recordSecretEvent(db, c, {
     secret,
     event_type: 'secret.share_created',
-    metadata: { link_id: linkId, expires_at: expiresAt },
+    metadata: { link_id: linkId, expires_at: expiresAt, ttl_minutes: ttlMinutes },
   });
 
   const url = `${new URL(c.req.url).origin}/api/secret-share/${raw}`;

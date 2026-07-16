@@ -10,17 +10,32 @@ import { recordSecretEvent } from './secrets';
 /**
  * PUBLIC resolve endpoint for ephemeral secret share links (issue #8). No
  * auth: the security model is the unguessable `ss_` token (only its hash is
- * stored), a 5-minute server-side TTL, IP rate limiting and per-resolve
- * auditing. 404 is uniform across missing / revoked / expired / dead-secret
- * so the endpoint leaks nothing about why a ref failed.
+ * stored), a short server-side TTL (5-60 min), IP rate limiting and
+ * per-resolve auditing. 404 is uniform across missing / revoked / expired /
+ * dead-secret so the endpoint leaks nothing about why a ref failed — but the
+ * message itself is actionable, so an agent pasting a stale link can tell the
+ * user to request a fresh one instead of a bare "Not found".
  */
 const secretShare = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+const NOT_FOUND_HINT =
+  'Enlace no disponible: no existe, fue revocado o expiró. Los enlaces duran 5-60 minutos; pide al dueño uno nuevo.';
+
+// `?format=raw` (or `Accept: text/plain`) returns the bare value — friendlier
+// for agents and for `curl ... > .env` piping than the JSON envelope.
+const wantsRaw = (c: { req: { query: (k: string) => string | undefined; header: (k: string) => string | undefined } }) =>
+  c.req.query('format') === 'raw' || (c.req.header('accept') ?? '').includes('text/plain');
+
 // GET /:ref — resolve a share link to the secret plaintext while the link is
-// alive (not revoked, not past its 5-minute window). The value is NEVER logged.
+// alive (not revoked, not past its TTL). The value is NEVER logged.
 secretShare.get('/:ref', async (c) => {
   const ref = c.req.param('ref');
   const db = c.get('db');
+  const raw = wantsRaw(c);
+  const notFound = () =>
+    raw
+      ? c.text(NOT_FOUND_HINT, 404)
+      : c.json({ error: 'not_found_or_expired', hint: NOT_FOUND_HINT }, 404);
 
   const [link] = await db
     .select()
@@ -30,7 +45,7 @@ secretShare.get('/:ref', async (c) => {
 
   // Uniform 404: missing, revoked or expired all look the same to the caller.
   if (!link || link.revoked_at || link.expires_at <= new Date().toISOString()) {
-    return c.json({ error: 'Not found' }, 404);
+    return notFound();
   }
 
   const [secret] = await db
@@ -40,7 +55,7 @@ secretShare.get('/:ref', async (c) => {
     .limit(1);
 
   if (!secret || secret.revoked_at) {
-    return c.json({ error: 'Not found' }, 404);
+    return notFound();
   }
 
   const keyHex = c.env.SECRETS_ENCRYPTION_KEY;
@@ -73,6 +88,9 @@ secretShare.get('/:ref', async (c) => {
     metadata: { link_id: link.id },
   });
 
+  if (raw) {
+    return c.text(value);
+  }
   return c.json({ value, key: secret.key, name: secret.name });
 });
 

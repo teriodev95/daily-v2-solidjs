@@ -158,10 +158,10 @@ export interface SecretAuditEvent {
   created_at: string;
 }
 
-// A share link binds a secret to a PAT so an agent can resolve it by URL.
-// The list view only exposes the prefix; the raw url/token is returned once.
-// Ephemeral secret share links (5-minute TTL, public resolve). The list only
-// ever carries metadata; the raw url/token appears once, on creation.
+// Ephemeral secret share links (5/15/60-minute TTL, public resolve). The list
+// only ever carries metadata; the raw url/token appears once, on creation.
+export type SecretShareTtlMinutes = 5 | 15 | 60;
+
 export interface SecretShareLink {
   id: string;
   prefix: string;
@@ -496,8 +496,11 @@ export const api = {
     shares: {
       list: (secretId: string) =>
         request<{ links: SecretShareLink[] }>(`/api/secrets/${secretId}/share`).then((r) => r.links),
-      create: (secretId: string) =>
-        request<SecretShareCreated>(`/api/secrets/${secretId}/share`, { method: 'POST' }),
+      create: (secretId: string, ttlMinutes: SecretShareTtlMinutes = 5) =>
+        request<SecretShareCreated>(`/api/secrets/${secretId}/share`, {
+          method: 'POST',
+          body: JSON.stringify({ ttl_minutes: ttlMinutes }),
+        }),
       revoke: (secretId: string, linkId: string) =>
         request<{ ok: boolean }>(`/api/secrets/${secretId}/share/${linkId}`, { method: 'DELETE' }),
     },
