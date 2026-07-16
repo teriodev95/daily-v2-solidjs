@@ -57,7 +57,11 @@ async function callDeepSeek(content: string, title: string, existingTitles: stri
         'Authorization': `Bearer ${env.DEEPSEEK_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        // deepseek-chat/deepseek-reasoner se deprecan el 2026-07-24. El
+        // bibliotecario es extracción simple (resumen + tags + links), así que
+        // v4-flash sin thinking: el más barato y rápido de la familia V4.
+        model: 'deepseek-v4-flash',
+        thinking: { type: 'disabled' },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: buildUserMessage(title, content, existingTitles) },
