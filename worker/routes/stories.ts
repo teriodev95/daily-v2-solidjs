@@ -971,13 +971,13 @@ stories.delete('/:id/assignees/:uid', async (c) => {
  * calling this endpoint rotates the token — the previous active one is
  * revoked and a fresh one with a new 30-day TTL is issued.
  *
- * Auth: session cookie ONLY. PATs are explicitly rejected so an agent can't
- * mint a share URL to escalate its own access surface.
+ * Auth: session cookie, or a PAT holding the explicit `share_links` scope.
+ * Minting a public URL widens the story's exposure, so for agents it's
+ * opt-in per token (issued tokens default to none).
  */
 stories.post('/:id/share-token', async (c) => {
-  // PAT guard: share tokens are user-intent operations.
-  if (c.get('tokenKind') === 'pat') {
-    return c.json({ error: 'session_required' }, 403);
+  if (c.get('tokenKind') === 'pat' && c.get('scopes')?.share_links !== 'write') {
+    return c.json({ error: 'scope_share_links_required' }, 403);
   }
 
   const user = c.get('user');

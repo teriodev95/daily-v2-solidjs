@@ -31,6 +31,11 @@ const VALID_MODULES = [
   'secrets',
   'alma',
   'billing',
+  // Action scopes (none/write): opt-in powers that used to be human-session
+  // only. Kept as separate keys so already-issued tokens don't gain them
+  // retroactively via their module scopes.
+  'share_links', // mint public share URLs (stories + wiki)
+  'alma_lock', // lock/unlock alma blocks
 ] as const;
 
 type ModuleName = (typeof VALID_MODULES)[number];

@@ -489,12 +489,12 @@ wiki.delete('/:id', async (c) => {
  * the entry point. Rotates any existing active token for the (project, user)
  * pair — callers get a single stable "current share URL" per project.
  *
- * Auth: session cookie ONLY. PATs are explicitly rejected so an agent
- * holding a PAT can't escalate into a broader share surface.
+ * Auth: session cookie, or a PAT holding the explicit `share_links` scope
+ * (same scope that covers story share links) — opt-in per token.
  */
 wiki.post('/:id/share-token', async (c) => {
-  if (c.get('tokenKind') === 'pat') {
-    return c.json({ error: 'session_required' }, 403);
+  if (c.get('tokenKind') === 'pat' && c.get('scopes')?.share_links !== 'write') {
+    return c.json({ error: 'scope_share_links_required' }, 403);
   }
 
   const user = c.get('user');

@@ -1,7 +1,9 @@
 import { For, type Component } from 'solid-js';
 import type { TokenScope } from '../../lib/api';
 
-export const MODULES: { key: string; label: string }[] = [
+// `binary: true` marks action scopes where "Lectura" has no meaning: the
+// permission either enables the action (write) or it doesn't (none).
+export const MODULES: { key: string; label: string; binary?: boolean }[] = [
   { key: 'alma', label: 'Alma' },
   { key: 'wiki', label: 'Wiki' },
   { key: 'reports', label: 'Reportes' },
@@ -14,6 +16,8 @@ export const MODULES: { key: string; label: string }[] = [
   { key: 'goals', label: 'Metas' },
   { key: 'secrets', label: 'Secretos' },
   { key: 'billing', label: 'Facturación' },
+  { key: 'share_links', label: 'Enlaces públicos', binary: true },
+  { key: 'alma_lock', label: 'Candados de Alma', binary: true },
 ];
 
 export const SCOPE_OPTIONS: { value: TokenScope; label: string }[] = [
@@ -57,7 +61,7 @@ const PermissionMatrix: Component<Props> = (props) => {
                   aria-label={`Permiso para ${mod.label}`}
                   class="flex gap-0.5 p-0.5 rounded-lg bg-base-content/[0.04]"
                 >
-                  <For each={SCOPE_OPTIONS}>
+                  <For each={mod.binary ? SCOPE_OPTIONS.filter((opt) => opt.value !== 'read') : SCOPE_OPTIONS}>
                     {(opt) => {
                       const active = () => current() === opt.value;
                       return (

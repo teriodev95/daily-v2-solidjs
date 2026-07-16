@@ -309,7 +309,7 @@ app.get('/api/meta', async (c) => {
     categories: ['yesterday', 'today', 'backlog'],
     frequencies: ['daily', 'weekly', 'monthly'],
     endpoints: {
-      stories: { list: 'GET /api/stories', kanban: 'GET /api/stories/kanban', search: 'GET /api/stories/search', create: 'POST /api/stories', get: 'GET /api/stories/:id', update: 'PATCH /api/stories/:id', delete: 'DELETE /api/stories/:id' },
+      stories: { list: 'GET /api/stories', kanban: 'GET /api/stories/kanban', search: 'GET /api/stories/search', create: 'POST /api/stories', get: 'GET /api/stories/:id', update: 'PATCH /api/stories/:id', delete: 'DELETE /api/stories/:id', share_token: 'POST /api/stories/:id/share-token (scope share_links)' },
       render: { markdown: 'POST /api/render/markdown' },
       projects: { list: 'GET /api/projects' },
       members: { list: 'GET /api/team/members' },

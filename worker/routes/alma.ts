@@ -464,17 +464,19 @@ alma.post('/:id/blocks/reorder', async (c) => {
   return c.json({ blocks: refreshed.map(toPublicBlock) });
 });
 
-// PATCH /:id/blocks/:bid/lock — lock/unlock a block. Human session only: an
-// agent (PAT) can never lock or unlock, so it can never unlock to edit. Does not
-// change text, so content is left untouched.
+// PATCH /:id/blocks/:bid/lock — lock/unlock a block. Human session, or a PAT
+// holding the explicit `alma_lock` scope. NOTE: granting that scope means
+// locks no longer protect content from that agent (it can unlock, edit,
+// relock) — which is why it's a separate opt-in key and not part of
+// `alma: write`. Does not change text, so content is left untouched.
 alma.patch('/:id/blocks/:bid/lock', async (c) => {
   const user = c.get('user');
   const db = c.get('db');
   const id = c.req.param('id');
   const bid = c.req.param('bid');
 
-  if (c.get('tokenKind') === 'pat') {
-    return c.json({ error: 'only a human session can lock/unlock' }, 403);
+  if (c.get('tokenKind') === 'pat' && c.get('scopes')?.alma_lock !== 'write') {
+    return c.json({ error: 'scope_alma_lock_required' }, 403);
   }
 
   let body: { locked?: unknown };
