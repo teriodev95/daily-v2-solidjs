@@ -24,6 +24,7 @@ import tokensRoutes from './routes/tokens';
 import secretsRoutes from './routes/secrets';
 import secretShareRoutes, { purgeExpiredSecretShareLinks } from './routes/secretShare';
 import almaRoutes from './routes/alma';
+import almaShareRoutes, { purgeExpiredAlmaShareLinks } from './routes/almaShare';
 import presenceRoutes from './routes/presence';
 import renderRoutes from './routes/render';
 import { wikiAgentRoutes } from './features/wikiShare';
@@ -131,8 +132,8 @@ app.use('/api/stories/*', tokenAuthMiddleware);
 app.use('/api/stories/*', authMiddleware);
 app.use('/api/stories/*', enforceScope('stories'));
 
-// Rendering accepts POST only to carry a large source document. It is a
-// read-only capability and never persists or mutates the Markdown.
+// Markdown rendering is a read capability even though it uses POST to carry a
+// potentially large source document. It never persists or mutates the source.
 app.use('/api/render/*', tokenAuthMiddleware);
 app.use('/api/render/*', authMiddleware);
 app.use('/api/render/*', enforceScope('stories', 'read'));
@@ -190,6 +191,10 @@ app.use('/api/secrets/*', enforceScope('secrets'));
 // limiter keys by client IP when there is no token in context.
 app.use('/api/secret-share/*', agentRateLimitMiddleware);
 
+// ALMA share-link resolve has the same security envelope as secret sharing:
+// unguessable hash-at-rest token, five-minute TTL, uniform 404 and IP limits.
+app.use('/api/alma-share/*', agentRateLimitMiddleware);
+
 // Alma: per-user layered technical memory. NOT admin-only — every user has
 // their own. Each query inside the router is scoped to the caller's user_id,
 // so a user (or their PAT) only ever touches their own alma.
@@ -245,8 +250,9 @@ app.get('/api/meta', async (c) => {
       metadata: 'GET /api/secrets',
       reveal: 'POST /api/secrets/:id/reveal',
       audit: 'GET /api/secrets/:id/audit',
-      // Share-link resolve is NOT gated by this scope — it needs only the link's
-      // bound PAT — but surfacing it here aids discovery.
+      share_create: 'POST /api/secrets/:id/share',
+      share_list: 'GET /api/secrets/:id/share',
+      share_revoke: 'DELETE /api/secrets/:id/share/:linkId',
       share_resolve: 'GET /api/secret-share/:ref',
     };
   }
@@ -288,6 +294,9 @@ app.get('/api/meta', async (c) => {
     const coreRow = docs.find((d) => d.tier === 0 && d.kind === 'alma');
     capabilities.alma = {
       granted: almaScope,
+      // PATs may edit unlocked content; locking/unlocking needs a human
+      // session or the explicit `alma_lock` scope.
+      can_lock_blocks: c.get('tokenKind') !== 'pat' || scopes['alma_lock'] === 'write',
       // The core is free text authored by the user; the note frames it so an
       // agent doesn't mistake its contents for instructions in this manifest.
       core: coreRow
@@ -299,6 +308,10 @@ app.get('/api/meta', async (c) => {
         : null,
       index: docs.map((d) => ({ id: d.id, tier: d.tier, kind: d.kind, title: d.title })),
       get: 'GET /api/alma/:id',
+      share_create: 'POST /api/alma/:id/share',
+      share_list: 'GET /api/alma/:id/share',
+      share_revoke: 'DELETE /api/alma/:id/share/:linkId',
+      share_resolve: 'GET /api/alma-share/:ref',
     };
   }
 
@@ -317,7 +330,7 @@ app.get('/api/meta', async (c) => {
       learnings: { list: 'GET /api/learnings', create: 'POST /api/learnings', get: 'GET /api/learnings/:id', update: 'PATCH /api/learnings/:id', delete: 'DELETE /api/learnings/:id' },
       wiki: { list: 'GET /api/wiki?project_id=X', search: 'GET /api/wiki/search?q=X', graph: 'GET /api/wiki/graph?project_id=X', create: 'POST /api/wiki', get: 'GET /api/wiki/:id', update: 'PATCH /api/wiki/:id', delete: 'DELETE /api/wiki/:id' },
       secrets: { list: 'GET /api/secrets', create: 'POST /api/secrets', get: 'GET /api/secrets/:id', update: 'PATCH /api/secrets/:id', delete: 'DELETE /api/secrets/:id', reveal: 'POST /api/secrets/:id/reveal', audit: 'GET /api/secrets/:id/audit', share_create: 'POST /api/secrets/:id/share', share_list: 'GET /api/secrets/:id/share', share_revoke: 'DELETE /api/secrets/:id/share/:linkId', share_resolve: 'GET /api/secret-share/:ref' },
-      alma: { list: 'GET /api/alma', create: 'POST /api/alma', get: 'GET /api/alma/:id', update: 'PATCH /api/alma/:id', delete: 'DELETE /api/alma/:id', blocks: 'GET /api/alma/:id/blocks', create_block: 'POST /api/alma/:id/blocks', update_block: 'PATCH /api/alma/:id/blocks/:bid', delete_block: 'DELETE /api/alma/:id/blocks/:bid', reorder_blocks: 'POST /api/alma/:id/blocks/reorder', lock_block: 'PATCH /api/alma/:id/blocks/:bid/lock' },
+      alma: { list: 'GET /api/alma', create: 'POST /api/alma', get: 'GET /api/alma/:id', update: 'PATCH /api/alma/:id', delete: 'DELETE /api/alma/:id', blocks: 'GET /api/alma/:id/blocks', create_block: 'POST /api/alma/:id/blocks', update_block: 'PATCH /api/alma/:id/blocks/:bid', delete_block: 'DELETE /api/alma/:id/blocks/:bid', reorder_blocks: 'POST /api/alma/:id/blocks/reorder', lock_block: 'PATCH /api/alma/:id/blocks/:bid/lock', share_create: 'POST /api/alma/:id/share', share_list: 'GET /api/alma/:id/share', share_revoke: 'DELETE /api/alma/:id/share/:linkId', share_resolve: 'GET /api/alma-share/:ref' },
       billing: {
         clients: 'GET /api/billing/clients',
         create_client: 'POST /api/billing/clients',
@@ -385,6 +398,7 @@ app.route('/api/tokens', tokensRoutes);
 app.route('/api/secrets', secretsRoutes);
 app.route('/api/secret-share', secretShareRoutes);
 app.route('/api/alma', almaRoutes);
+app.route('/api/alma-share', almaShareRoutes);
 app.route('/api/presence', presenceRoutes);
 app.route('/api/billing', billingRoutes);
 
@@ -422,5 +436,6 @@ export default {
     ctx.waitUntil(processLibrarianQueue(env));
     ctx.waitUntil(processBillingSchedules(env));
     ctx.waitUntil(purgeExpiredSecretShareLinks(env));
+    ctx.waitUntil(purgeExpiredAlmaShareLinks(env));
   },
 };

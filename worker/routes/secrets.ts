@@ -673,6 +673,8 @@ secrets.post('/:id/share', async (c) => {
   });
 
   const url = `${new URL(c.req.url).origin}/api/secret-share/${raw}`;
+  c.header('Cache-Control', 'private, no-store');
+  c.header('X-Content-Type-Options', 'nosniff');
   return c.json(
     { id: linkId, url, token: raw, prefix, expires_at: expiresAt, created_at: createdAt },
     201,
@@ -707,6 +709,7 @@ secrets.get('/:id/share', async (c) => {
 
   // ISO-8601 strings compare lexicographically, so a plain string compare works.
   const links = rows.filter((r) => !r.revoked_at && r.expires_at > nowIso);
+  c.header('Cache-Control', 'private, no-store');
   return c.json({ links });
 });
 

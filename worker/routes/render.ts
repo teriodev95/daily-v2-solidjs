@@ -47,7 +47,7 @@ function sanitizeElement(element: Element): void {
         element.setAttribute('rel', 'noopener noreferrer');
       }
     } catch {
-      // Invalid and relative links remain inert in the isolated iOS view.
+      // Invalid and relative links remain plain text in the isolated iOS view.
     }
     const title = attributes.find(([name]) => name.toLowerCase() === 'title')?.[1];
     if (title) element.setAttribute('title', title.slice(0, 256));
