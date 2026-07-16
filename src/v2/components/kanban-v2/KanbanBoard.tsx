@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type Component } from 'solid-js';
-import { CheckCircle2, ChevronDown, Circle, Clipboard, Command, ExternalLink, EyeOff, FolderKanban, Inbox, Loader2, PlayCircle, Trash2, X } from 'lucide-solid';
+import { FolderKanban } from 'lucide-solid';
 import type { Project, Story, StoryStatus } from '../../types';
 import { api, type KanbanBucket, type KanbanResponse } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -8,9 +8,14 @@ import { onRealtime, onRealtimeStatus, type RealtimeEvent } from '../../lib/real
 import HeaderSearchBar from '../HeaderSearchBar';
 import StoryDetail from '../StoryDetail';
 import TopNavigation from '../TopNavigation';
-import FilterBar from '../kanban/FilterBar';
+import FilterBar from './FilterBar';
 import KanbanCard from './KanbanCard';
 import KanbanColumn from './KanbanColumn';
+import CardContextMenu from './CardContextMenu';
+import DoneStoriesModal, { DoneMetric } from './DoneStoriesModal';
+import DragGhost from './DragGhost';
+import ShortcutsOverlay from './ShortcutsOverlay';
+import { createKanbanDrag, type DropTarget } from './createKanbanDrag';
 import { playInteractionSuccess } from '../../lib/interactionMotion';
 import {
   COLUMN_ORDER,
@@ -37,28 +42,6 @@ interface PersistedFilters {
   done_range: DoneRange;
 }
 
-interface DropTarget {
-  status: StoryStatus;
-  beforeId: string | null;
-  afterId: string | null;
-}
-
-interface PointerDragState {
-  story: Story;
-  fromStatus: StoryStatus;
-  fromIndex: number;
-  pointerId: number;
-  startX: number;
-  startY: number;
-  x: number;
-  y: number;
-  offsetX: number;
-  offsetY: number;
-  width: number;
-  height: number;
-  started: boolean;
-}
-
 interface CardMenuState {
   story: Story;
   x: number;
@@ -66,7 +49,6 @@ interface CardMenuState {
 }
 
 const FILTERS_STORAGE_KEY = 'kanban_v2_filters_v1';
-const DRAG_THRESHOLD = 6;
 const BOARD_COLUMN_ORDER: StoryStatus[] = ['backlog', 'todo', 'in_progress'];
 const UNPROJECTED_FILTER_ID = '__unprojected__';
 const UNPROJECTED_PROJECT: Project = {
@@ -105,9 +87,6 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   const [selectedProjectIds, setSelectedProjectIds] = createSignal<string[]>([]);
   const [doneRange, setDoneRange] = createSignal<DoneRange>('week');
   const [selectedStory, setSelectedStory] = createSignal<Story | null>(null);
-  const [activeDrag, setActiveDrag] = createSignal<PointerDragState | null>(null);
-  const [dropTarget, setDropTarget] = createSignal<DropTarget | null>(null);
-  const [suppressCardClick, setSuppressCardClick] = createSignal(false);
   const [cardMenu, setCardMenu] = createSignal<CardMenuState | null>(null);
   const [menuBusy, setMenuBusy] = createSignal<string | null>(null);
   const [confirmingMenuDelete, setConfirmingMenuDelete] = createSignal(false);
@@ -129,13 +108,22 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
 
   let filtersLoaded = false;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
-  let clickSuppressTimer: ReturnType<typeof setTimeout> | undefined;
-  let previousUserSelect = '';
-  let previousCursor = '';
   let donePanelRef: HTMLDivElement | undefined;
 
+  const drag = createKanbanDrag({
+    onTap: (state) => {
+      setFocusedColumn(state.fromStatus);
+      setFocusedIndex(state.fromIndex);
+      setSelectedStory(state.story);
+    },
+    onDragStart: (state) => {
+      setFocusedColumn(state.fromStatus);
+      setFocusedIndex(state.fromIndex);
+    },
+    onDrop: (storyId, target) => void dropStory(storyId, target),
+  });
+
   const visible = createMemo(() => visibleBuckets(buckets(), searchQuery()));
-  const draggingId = () => activeDrag()?.started ? activeDrag()!.story.id : null;
   const activeProjects = () => [
     UNPROJECTED_PROJECT,
     ...data.projects().filter((project) => project.status === 'active'),
@@ -487,125 +475,24 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     }
   };
 
-  const setDocumentDragMode = (enabled: boolean) => {
-    if (enabled) {
-      previousUserSelect = document.body.style.userSelect;
-      previousCursor = document.body.style.cursor;
-      document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'grabbing';
-      return;
-    }
-    document.body.style.userSelect = previousUserSelect;
-    document.body.style.cursor = previousCursor;
-  };
-
-  const suppressNextClick = () => {
-    setSuppressCardClick(true);
-    clearTimeout(clickSuppressTimer);
-    clickSuppressTimer = setTimeout(() => setSuppressCardClick(false), 220);
-  };
-
-  const cleanupDrag = () => {
-    window.removeEventListener('pointermove', handlePointerMove, true);
-    window.removeEventListener('pointerup', handlePointerUp, true);
-    window.removeEventListener('pointercancel', handlePointerCancel, true);
-    setDocumentDragMode(false);
-    setActiveDrag(null);
-    setDropTarget(null);
-  };
-
-  const setDragPosition = (status: StoryStatus, beforeId: string | null, afterId: string | null) => {
-    if (!draggingId()) return;
-    const current = dropTarget();
-    if (current?.status === status && current.beforeId === beforeId && current.afterId === afterId) return;
-    setDropTarget({ status, beforeId, afterId });
-  };
-
-  const findDropTarget = (x: number, y: number): DropTarget | null => {
-    const element = document.elementFromPoint(x, y);
-    const column = element?.closest<HTMLElement>('[data-kanban-column-status]');
-    const status = column?.dataset.kanbanColumnStatus as StoryStatus | undefined;
-    if (!column || !status || !COLUMN_ORDER.includes(status)) return null;
-
-    const cards = Array.from(column.querySelectorAll<HTMLElement>('[data-kanban-card-id]'))
-      .filter((el) => el.dataset.kanbanCardId !== activeDrag()?.story.id);
-    if (cards.length === 0) return { status, beforeId: null, afterId: null };
-
-    let beforeId: string | null = null;
-    let afterId: string | null = null;
-    for (const card of cards) {
-      const rect = card.getBoundingClientRect();
-      const midpoint = rect.top + rect.height / 2;
-      if (y < midpoint) {
-        beforeId = card.dataset.kanbanCardId ?? null;
-        break;
-      }
-      afterId = card.dataset.kanbanCardId ?? null;
-    }
-    return {
-      status,
-      beforeId,
-      afterId: beforeId ? afterId : (cards.at(-1)?.dataset.kanbanCardId ?? null),
-    };
-  };
-
-  const handlePointerMove = (event: PointerEvent) => {
-    const drag = activeDrag();
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    const distance = Math.hypot(dx, dy);
-    const shouldStart = drag.started || distance >= DRAG_THRESHOLD;
-
-    if (!shouldStart) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (!drag.started) {
-      setDocumentDragMode(true);
-      setFocusedColumn(drag.fromStatus);
-      setFocusedIndex(drag.fromIndex);
-    }
-
-    setActiveDrag((current) => current && current.pointerId === event.pointerId
-      ? { ...current, x: event.clientX, y: event.clientY, started: true }
-      : current);
-
-    const target = findDropTarget(event.clientX, event.clientY);
-    if (target) setDragPosition(target.status, target.beforeId, target.afterId);
-  };
-
-  const handlePointerCancel = (event: PointerEvent) => {
-    const drag = activeDrag();
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    cleanupDrag();
-  };
-
-  const dropStory = async (status: StoryStatus, beforeId: string | null, afterId: string | null) => {
-    const storyId = draggingId();
+  const dropStory = async (storyId: string, target: DropTarget) => {
     const current = buckets();
-    if (!storyId || !current) {
-      cleanupDrag();
-      return;
-    }
+    if (!current) return;
     const snapshot = current;
-    const moved = moveStory(current, storyId, status, beforeId, afterId);
-    if (!moved.story) {
-      cleanupDrag();
-      return;
-    }
+    const moved = moveStory(current, storyId, target.status, target.beforeId, target.afterId);
+    if (!moved.story) return;
     setBuckets(moved.next);
     focusStoryById(moved.next, storyId);
-    if (status === 'done' && moved.story.status !== 'done') {
+    if (target.status === 'done' && moved.fromStatus !== 'done') {
       playInteractionSuccess({ source: 'kanban', tone: 'success' });
     }
-    cleanupDrag();
     try {
       const updated = await api.stories.move(storyId, {
-        to_status: status,
-        before_id: beforeId,
-        after_id: afterId,
+        to_status: target.status,
+        before_id: target.beforeId,
+        after_id: target.afterId,
       });
-      applyRealtimeStory(updated as Story, beforeId, afterId);
+      applyRealtimeStory(updated as Story, target.beforeId, target.afterId);
       queueMicrotask(() => focusStoryById(buckets(), storyId));
     } catch (err) {
       console.error('move failed', err);
@@ -613,58 +500,6 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       focusStoryById(snapshot, storyId);
       showToast('No se pudo mover la tarea');
     }
-  };
-
-  const handlePointerUp = (event: PointerEvent) => {
-    const drag = activeDrag();
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    event.stopPropagation();
-
-    if (!drag.started) {
-      cleanupDrag();
-      setFocusedColumn(drag.fromStatus);
-      setFocusedIndex(drag.fromIndex);
-      setSelectedStory(drag.story);
-      return;
-    }
-
-    event.preventDefault();
-    suppressNextClick();
-    const target = dropTarget();
-    if (!target) {
-      cleanupDrag();
-      return;
-    }
-    void dropStory(target.status, target.beforeId, target.afterId);
-  };
-
-  const beginPointerIntent = (
-    event: PointerEvent,
-    story: Story,
-    element: HTMLElement,
-    fromStatus: StoryStatus,
-    fromIndex: number,
-  ) => {
-    const rect = element.getBoundingClientRect();
-    setActiveDrag({
-      story,
-      fromStatus,
-      fromIndex,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      x: event.clientX,
-      y: event.clientY,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
-      width: rect.width,
-      height: rect.height,
-      started: false,
-    });
-    setDropTarget(null);
-    window.addEventListener('pointermove', handlePointerMove, true);
-    window.addEventListener('pointerup', handlePointerUp, true);
-    window.addEventListener('pointercancel', handlePointerCancel, true);
   };
 
   const focusColumnItems = () => {
@@ -691,9 +526,9 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   const handleKeydown = (event: KeyboardEvent) => {
     if (isEditableTarget(event.target)) return;
     if (event.key === 'Escape') {
-      if (activeDrag()) {
+      if (drag.activeDrag()) {
         event.preventDefault();
-        cleanupDrag();
+        drag.cancelDrag();
         return;
       }
       if (cardMenu()) {
@@ -783,16 +618,16 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
       if (online) void loadKanban({ silent: true });
     });
     const onFocus = () => void loadKanban({ silent: true });
-      const onPointerDown = (event: PointerEvent) => {
-        const target = event.target;
-        if (target instanceof HTMLElement && target.closest('[data-kanban-card-menu]')) return;
-        if (target instanceof HTMLElement && target.closest('[data-done-metric]')) return;
-        if (donePanelOpen() && donePanelRef && target instanceof Node && !donePanelRef.contains(target)) {
-          setDonePanelOpen(false);
-        }
-        setCardMenu(null);
-        setConfirmingMenuDelete(false);
-      };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest('[data-kanban-card-menu]')) return;
+      if (target instanceof HTMLElement && target.closest('[data-done-metric]')) return;
+      if (donePanelOpen() && donePanelRef && target instanceof Node && !donePanelRef.contains(target)) {
+        setDonePanelOpen(false);
+      }
+      setCardMenu(null);
+      setConfirmingMenuDelete(false);
+    };
     window.addEventListener('focus', onFocus);
     document.addEventListener('pointerdown', onPointerDown);
     onCleanup(() => {
@@ -806,8 +641,6 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
 
   onCleanup(() => {
     clearTimeout(saveTimer);
-    clearTimeout(clickSuppressTimer);
-    cleanupDrag();
   });
 
   createEffect(() => {
@@ -855,7 +688,7 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
     const b = visible();
     const bucket = b?.[status] ?? { items: [], total: 0 };
     const items = bucket.items as Story[];
-    const target = dropTarget();
+    const target = drag.dropTarget();
 
     return (
       <KanbanColumn
@@ -865,8 +698,8 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
         stories={items}
         focused={focusedColumn() === status}
         quickAddToken={quickAddTokens()[status]}
-        draggingId={draggingId()}
-        placeholderHeight={activeDrag()?.height ?? null}
+        draggingId={drag.draggingId()}
+        placeholderHeight={drag.activeDrag()?.height ?? null}
         dropBeforeId={target?.status === status ? target.beforeId : null}
         dropAfterId={target?.status === status ? target.afterId : null}
         doneRange={status === 'done' ? doneRange() : undefined}
@@ -888,15 +721,15 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
               assignee={assignee}
               otherAssignees={others}
               focused={focusedColumn() === status && focusedIndex() === index}
-              dragging={draggingId() === story.id}
-              suppressClick={suppressCardClick()}
+              dragging={drag.draggingId() === story.id}
+              suppressClick={drag.suppressCardClick()}
               onOpen={() => {
                 setFocusedColumn(status);
                 setFocusedIndex(Math.max(0, index));
                 setSelectedStory(story);
               }}
               onMenuOpen={openCardMenu}
-              onPointerDownCard={(event, item, element) => beginPointerIntent(event, item, element, status, Math.max(0, index))}
+              onPointerDownCard={(event, item, element) => drag.beginDrag(event, item, element, status, Math.max(0, index))}
             />
           );
         }}
@@ -980,8 +813,8 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
         </div>
       </Show>
 
-      <Show when={activeDrag()?.started}>
-        <DragGhost drag={activeDrag()!} />
+      <Show when={drag.activeDrag()?.started}>
+        <DragGhost drag={drag.activeDrag()!} />
       </Show>
 
       <Show when={cardMenu()}>
@@ -1045,410 +878,9 @@ const KanbanBoard: Component<KanbanBoardProps> = (props) => {
   );
 };
 
-const DoneMetric: Component<{
-  count: number;
-  rangeLabel: string;
-  open: boolean;
-  onClick: () => void;
-}> = (props) => (
-  <button
-    type="button"
-    data-done-metric
-    onClick={props.onClick}
-    class={[
-      'inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-3 text-left transition-all',
-      'border-base-content/[0.08] bg-base-100 text-base-content/62 shadow-sm hover:bg-base-content/[0.035] hover:text-base-content/82',
-      props.open ? 'ring-2 ring-status-done/30' : '',
-    ].filter(Boolean).join(' ')}
-    aria-expanded={props.open}
-    aria-haspopup="dialog"
-    title="Ver historias hechas"
-  >
-    <span class="h-1.5 w-1.5 rounded-full bg-status-done" aria-hidden="true" />
-    <span class="text-[12.5px] font-semibold tabular-nums">{props.count}</span>
-    <span class="hidden text-[12.5px] font-medium text-base-content/45 xl:inline">{props.rangeLabel}</span>
-    <ChevronDown size={13} class={`transition-transform ${props.open ? 'rotate-180' : ''}`} />
-  </button>
-);
-
-const DoneStoriesModal: Component<{
-  panelRef: (element: HTMLDivElement) => void;
-  stories: Story[];
-  selectedStory: Story | null;
-  loading: boolean;
-  loaded: boolean;
-  range: DoneRange;
-  count: number;
-  onRangeChange: (range: DoneRange) => void;
-  onSelectStory: (story: Story) => void;
-  onMenuOpen: (event: MouseEvent, story: Story) => void;
-  onClose: () => void;
-  onClearSelection: () => void;
-  getProject: (projectId: string | null) => Project | null;
-  onStoryDeleted: (story: Story) => void;
-  onStoryUpdated: (story: Story, fields: Record<string, unknown>) => void;
-}> = (props) => (
-  <div
-    class="fixed inset-0 z-[105] flex items-center justify-center bg-black/45 px-4 py-6 backdrop-blur-md"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Historias hechas"
-    onClick={props.onClose}
-  >
-    <div
-      ref={props.panelRef}
-      class="flex h-[min(820px,88vh)] w-[min(1180px,94vw)] min-h-0 flex-col overflow-hidden rounded-[24px] border border-base-content/[0.08] bg-base-100/96"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div class="flex items-center justify-between gap-4 border-b border-base-content/[0.06] px-5 py-4">
-        <div class="flex min-w-0 items-center gap-3">
-          <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-status-done/10 text-status-done">
-            <CheckCircle2 size={18} />
-          </span>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <h2 class="truncate text-[15px] font-semibold text-base-content/86">Hecho</h2>
-              <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-base-content/[0.055] px-1.5 text-[10.5px] font-semibold text-base-content/48 tabular-nums">
-                {props.count}
-              </span>
-            </div>
-            <p class="mt-0.5 text-[11px] font-medium text-base-content/35">Historias completadas según tus filtros actuales</p>
-          </div>
-        </div>
-
-        <div class="flex shrink-0 items-center gap-2">
-          <div class="flex rounded-full bg-base-content/[0.04] p-0.5">
-            <For each={[
-              ['week', 'Semana'],
-              ['month', 'Mes'],
-              ['all', 'Todo'],
-            ] as [DoneRange, string][]}>
-              {([range, label]) => (
-                <button
-                  type="button"
-                  onClick={() => props.onRangeChange(range)}
-                  class={[
-                    'rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors',
-                    props.range === range
-                      ? 'bg-base-100 text-base-content/78'
-                      : 'text-base-content/40 hover:text-base-content/68',
-                  ].join(' ')}
-                >
-                  {label}
-                </button>
-              )}
-            </For>
-          </div>
-          <button
-            type="button"
-            onClick={props.onClose}
-            class="inline-flex h-9 w-9 items-center justify-center rounded-full text-base-content/42 transition-colors hover:bg-base-content/[0.055] hover:text-base-content/72"
-            aria-label="Cerrar Hecho"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      </div>
-
-      <div class="grid min-h-0 flex-1 grid-cols-[340px_minmax(0,1fr)]">
-        <aside class="min-h-0 border-r border-base-content/[0.06] bg-base-content/[0.015]">
-          <div class="flex h-full min-h-0 flex-col">
-            <div class="flex items-center justify-between px-4 py-3">
-              <p class="text-[11px] font-bold uppercase tracking-[0.08em] text-base-content/28">Completadas</p>
-              <Show when={props.loading}>
-                <Loader2 size={14} class="animate-spin text-base-content/32" />
-              </Show>
-            </div>
-            <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-              <Show
-                when={!props.loading}
-                fallback={
-                  <div class="flex items-center justify-center gap-2 px-4 py-12 text-[12.5px] font-medium text-base-content/35">
-                    <Loader2 size={14} class="animate-spin" />
-                    Cargando...
-                  </div>
-                }
-              >
-                <Show
-                  when={props.stories.length > 0}
-                  fallback={
-                    <div class="px-5 py-14 text-center">
-                      <CheckCircle2 size={20} class="mx-auto text-base-content/18" />
-                      <p class="mt-2 text-[12.5px] font-medium text-base-content/35">
-                        {props.loaded ? 'Sin historias hechas en este rango.' : 'Abre para cargar historias hechas.'}
-                      </p>
-                    </div>
-                  }
-                >
-                  <div class="space-y-1">
-                    <For each={props.stories}>
-                      {(story) => {
-                        const project = () => props.getProject(story.project_id);
-                        const selected = () => props.selectedStory?.id === story.id;
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => props.onSelectStory(story)}
-                            onContextMenu={(event) => props.onMenuOpen(event, story)}
-                            class={[
-                              'group flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition-colors',
-                              selected()
-                                ? 'bg-status-done/[0.08] text-base-content ring-1 ring-status-done/20'
-                                : 'hover:bg-base-content/[0.035]',
-                            ].join(' ')}
-                          >
-                            <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-status-done" />
-                            <span class="min-w-0 flex-1">
-                              <span class="block line-clamp-2 text-[12.5px] font-semibold leading-snug text-base-content/78">{story.title}</span>
-                              <span class="mt-1.5 flex items-center gap-2 text-[10.5px] font-medium text-base-content/34">
-                                <Show when={project()}>
-                                  <span
-                                    class="rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-none"
-                                    style={{
-                                      color: project()!.color,
-                                      'background-color': `${project()!.color}14`,
-                                    }}
-                                  >
-                                    {project()!.prefix}
-                                  </span>
-                                </Show>
-                                <Show when={story.completed_at}>
-                                  <span>{new Date(story.completed_at!).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</span>
-                                </Show>
-                              </span>
-                            </span>
-                            <ExternalLink size={13} class="mt-0.5 shrink-0 text-base-content/18 opacity-0 transition-opacity group-hover:opacity-100" />
-                          </button>
-                        );
-                      }}
-                    </For>
-                  </div>
-                </Show>
-              </Show>
-            </div>
-          </div>
-        </aside>
-
-        <section class="min-h-0 bg-base-100 p-3">
-          <Show
-            when={props.selectedStory}
-            keyed
-            fallback={
-              <div class="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-base-content/[0.08] text-center">
-                <CheckCircle2 size={24} class="text-base-content/18" />
-                <p class="mt-3 text-[13px] font-semibold text-base-content/48">Selecciona una historia</p>
-                <p class="mt-1 max-w-[260px] text-[12px] font-medium leading-relaxed text-base-content/32">
-                  Usa la lista para revisar contenido, adjuntos y propiedades sin salir de Hecho.
-                </p>
-              </div>
-            }
-          >
-            {(story) => (
-              <StoryDetail
-                story={story}
-                embedded
-                onClose={props.onClearSelection}
-                onDeleted={() => props.onStoryDeleted(story)}
-                onUpdated={(id, fields) => props.onStoryUpdated(story, fields)}
-              />
-            )}
-          </Show>
-        </section>
-      </div>
-    </div>
-  </div>
-);
-
-const DragGhost: Component<{ drag: PointerDragState }> = (props) => (
-  <div
-    class="pointer-events-none fixed z-[120] overflow-hidden rounded-xl border border-base-content/[0.12] bg-base-100/95 px-3 py-2.5 opacity-95 shadow-[0_12px_30px_rgba(31,35,41,0.18)]"
-    style={{
-      left: `${props.drag.x - props.drag.offsetX}px`,
-      top: `${props.drag.y - props.drag.offsetY}px`,
-      width: `${props.drag.width}px`,
-      height: `${props.drag.height}px`,
-    }}
-  >
-    <div class="mb-2 flex min-h-5 items-center justify-between gap-2">
-      <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-base-content/18" aria-hidden="true" />
-      <span class="rounded-full bg-base-content/[0.05] px-2 py-0.5 text-[10.5px] font-medium leading-none text-base-content/45">
-        Moviendo
-      </span>
-    </div>
-    <h3 class="line-clamp-2 break-words text-[13px] font-semibold leading-[1.34] text-base-content/88">
-      {props.drag.story.title}
-    </h3>
-  </div>
-);
-
-const MENU_STATUS_ICONS: Record<StoryStatus, Component<{ size?: number }>> = {
-  backlog: Inbox,
-  todo: Circle,
-  in_progress: PlayCircle,
-  done: CheckCircle2,
-};
-
-const CardContextMenu: Component<{
-  story: Story;
-  x: number;
-  y: number;
-  busy: string | null;
-  canHardDelete: boolean;
-  onOpen: () => void;
-  onCopyLink: () => void;
-  onMove: (status: StoryStatus) => void;
-  onHide: () => void;
-  confirmingDelete: boolean;
-  onRequestDelete: () => void;
-  onCancelDelete: () => void;
-  onConfirmDelete: () => void;
-}> = (props) => (
-  <div
-    data-kanban-card-menu
-    role="menu"
-    class="fixed z-[130] w-[220px] overflow-hidden rounded-2xl border border-base-content/[0.08] bg-base-100 py-1.5 shadow-xl shadow-black/20"
-    style={{ left: `${props.x}px`, top: `${props.y}px` }}
-  >
-    <div class="border-b border-base-content/[0.06] px-3 py-2">
-      <p class="truncate text-[12px] font-semibold text-base-content/78">{props.story.title}</p>
-      <p class="mt-0.5 text-[10.5px] font-medium text-base-content/35">Historia de usuario</p>
-    </div>
-
-    <button
-      type="button"
-      role="menuitem"
-      onClick={props.onOpen}
-      class="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-medium text-base-content/72 transition-colors hover:bg-base-content/[0.045] hover:text-base-content"
-    >
-      <ExternalLink size={14} />
-      Abrir detalle
-    </button>
-
-    <button
-      type="button"
-      role="menuitem"
-      disabled={props.busy === 'copy'}
-      onClick={props.onCopyLink}
-      class="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-medium text-base-content/72 transition-colors hover:bg-base-content/[0.045] hover:text-base-content disabled:opacity-50"
-    >
-      <Clipboard size={14} />
-      {props.busy === 'copy' ? 'Copiando...' : 'Copiar enlace'}
-    </button>
-
-    <div class="my-1 border-t border-base-content/[0.06]" />
-    <div class="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-base-content/28">
-      Mover a
-    </div>
-    <For each={COLUMN_ORDER}>
-      {(status) => {
-        const Icon = MENU_STATUS_ICONS[status];
-        return (
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={props.story.status === status}
-            disabled={props.story.status === status || props.busy === `move-${status}`}
-            onClick={() => props.onMove(status)}
-            class="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[12.5px] font-medium text-base-content/68 transition-colors hover:bg-base-content/[0.045] hover:text-base-content disabled:opacity-45"
-          >
-            <span class="flex items-center gap-2">
-              <Icon size={13} />
-              {STATUS_LABELS[status]}
-            </span>
-            <Show when={props.story.status === status}>
-              <span class="h-1.5 w-1.5 rounded-full bg-ios-blue-500" />
-            </Show>
-          </button>
-        );
-      }}
-    </For>
-
-    <div class="my-1 border-t border-base-content/[0.06]" />
-    <button
-      type="button"
-      role="menuitem"
-      disabled={props.busy === 'hide'}
-      onClick={props.onHide}
-      class="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-medium text-base-content/52 transition-colors hover:bg-red-500/[0.07] hover:text-red-500 disabled:opacity-50"
-    >
-      <EyeOff size={14} />
-      {props.busy === 'hide' ? 'Ocultando...' : 'Ocultar'}
-    </button>
-
-    <Show when={props.canHardDelete}>
-    <div class="my-1 border-t border-base-content/[0.06]" />
-    <Show
-      when={props.confirmingDelete}
-      fallback={
-        <button
-          type="button"
-          role="menuitem"
-          disabled={props.busy === 'delete'}
-          onClick={props.onRequestDelete}
-          class="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-medium text-red-500/78 transition-colors hover:bg-red-500/[0.08] hover:text-red-500 disabled:opacity-50"
-        >
-          <Trash2 size={14} />
-          Eliminar
-        </button>
-      }
-    >
-      <div class="px-3 py-2">
-        <p class="text-[12px] font-semibold text-red-500">¿Eliminar esta HU?</p>
-        <p class="mt-1 text-[11px] leading-snug text-base-content/42">Esta acción borra la historia y sus datos asociados.</p>
-        <div class="mt-2 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            disabled={props.busy === 'delete'}
-            onClick={props.onCancelDelete}
-            class="rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold text-base-content/48 transition-colors hover:bg-base-content/[0.055] hover:text-base-content/75 disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            disabled={props.busy === 'delete'}
-            onClick={props.onConfirmDelete}
-            class="rounded-lg bg-red-500/12 px-2.5 py-1.5 text-[11.5px] font-semibold text-red-500 transition-colors hover:bg-red-500/20 disabled:opacity-50"
-          >
-            {props.busy === 'delete' ? 'Eliminando...' : 'Sí, eliminar'}
-          </button>
-        </div>
-      </div>
-    </Show>
-    </Show>
-  </div>
-);
-
-const ShortcutsOverlay: Component<{ onClose: () => void }> = (props) => (
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-base-content/30 p-4 backdrop-blur-sm"
-    onClick={(event) => {
-      if (event.target === event.currentTarget) props.onClose();
-    }}
-  >
-    <div class="w-full max-w-md overflow-hidden rounded-2xl border border-base-content/[0.08] bg-base-100 shadow-xl">
-      <div class="flex items-center justify-between border-b border-base-content/[0.06] px-5 py-4">
-        <div class="flex items-center gap-2">
-          <Command size={16} class="text-base-content/60" />
-          <h2 class="text-[15px] font-semibold text-base-content">Atajos</h2>
-        </div>
-        <button type="button" onClick={props.onClose} class="rounded-lg p-1.5 text-base-content/40 hover:bg-base-content/5 hover:text-base-content">
-          <X size={16} />
-        </button>
-      </div>
-      <div class="grid gap-2 p-5 text-[13px] text-base-content/70">
-        <p><kbd class="rounded bg-base-200 px-1.5 py-0.5 font-mono text-[11px]">N</kbd> agregar en columna enfocada</p>
-        <p><kbd class="rounded bg-base-200 px-1.5 py-0.5 font-mono text-[11px]">Enter</kbd> abrir tarjeta</p>
-        <p><kbd class="rounded bg-base-200 px-1.5 py-0.5 font-mono text-[11px]">Esc</kbd> cerrar o limpiar foco</p>
-        <p>Flechas para navegar entre tarjetas y columnas.</p>
-      </div>
-    </div>
-  </div>
-);
-
 const KanbanSkeleton: Component = () => (
-  <div class="grid grid-cols-4 gap-2.5">
-    {[0, 1, 2, 3].map(() => (
+  <div class="grid grid-cols-3 gap-3">
+    {[0, 1, 2].map(() => (
       <div class="min-h-[460px] rounded-md px-2">
         <div class="mb-3 h-4 w-28 rounded bg-base-content/[0.06]" />
         <div class="space-y-2">
