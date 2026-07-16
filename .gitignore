@@ -16,3 +16,7 @@ bun.lock
 Thumbs.db
 # Build cache
 .cache/
+# Local dev/agent state
+.dev.vars
+.wrangler/
+.claude/settings.local.json
