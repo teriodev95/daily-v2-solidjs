@@ -65,14 +65,21 @@ const AgentBootstrapModal: Component<Props> = (props) => {
     return res.token;
   });
 
-  const promptJson = createMemo(() => {
+  // Prose wrapper + declarative JSON. The old payload led with an imperative
+  // "mission" as the agent's ONLY message, so agents executed it (exploring
+  // /api/meta) instead of waiting for a real task. The fix: state upfront that
+  // this is connection context and not a task, keep behavior rules conditional
+  // ("cuando el usuario te pida..."), and end with a cheap terminal action
+  // (a one-line handshake) so the agent has something to do that isn't
+  // calling the API.
+  const promptText = createMemo(() => {
     const u = user();
     const t = rawToken();
     const base = absApiBase();
     const obj = {
-      mission:
-        `Operas Daily Check como ${u?.name ?? '...'}. Descubre capacidades vía /api/meta; pide datos solo cuando los necesites.`,
-      identity: {
+      service: 'Daily Check — gestión de proyectos y tareas del equipo',
+      operator: {
+        note: 'Usuario en cuyo nombre actúas',
         user_id: u?.id ?? '',
         name: u?.name ?? '',
         role: u?.role ?? 'user',
@@ -83,21 +90,33 @@ const AgentBootstrapModal: Component<Props> = (props) => {
         auth: t ? `Bearer ${t}` : 'Bearer <reveal-pending>',
       },
       today: todayISO(),
+      usage: [
+        'Cuando el usuario te pida algo de Daily Check, consulta el manifest para descubrir los endpoints disponibles.',
+        'Autentícate con el header Authorization indicado en api.auth.',
+        'Lee o escribe solo lo que la tarea concreta necesite.',
+      ],
     };
-    return JSON.stringify(obj, null, 2);
+    return [
+      'Contexto de conexión a Daily Check — esto NO es una tarea.',
+      'Guarda estos datos de acceso; los usarás cuando yo te pida algo de Daily Check. No llames a la API todavía.',
+      '',
+      JSON.stringify(obj, null, 2),
+      '',
+      `Cuando lo tengas registrado, confirma con una sola línea ("Conectado a Daily Check como ${u?.name ?? '...'}") y espera mi instrucción.`,
+    ].join('\n');
   });
 
   const [copied, setCopied] = createSignal(false);
   const handleCopy = async () => {
     if (rawToken.loading || !rawToken()) return;
     try {
-      await navigator.clipboard.writeText(promptJson());
+      await navigator.clipboard.writeText(promptText());
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
       // fallback
       const el = document.createElement('textarea');
-      el.value = promptJson();
+      el.value = promptText();
       el.style.position = 'fixed';
       el.style.opacity = '0';
       document.body.appendChild(el);
@@ -296,7 +315,7 @@ const AgentBootstrapModal: Component<Props> = (props) => {
               <div class="relative rounded-xl bg-base-content/[0.04] border border-base-content/[0.06] overflow-hidden">
                 <pre class="px-4 py-3 pr-12 text-[11px] leading-[1.55] font-mono text-base-content/80 overflow-x-auto whitespace-pre">
                   <Show when={!rawToken.loading} fallback={<span class="text-base-content/30">Revelando token…</span>}>
-                    {promptJson()}
+                    {promptText()}
                   </Show>
                 </pre>
                 <button
