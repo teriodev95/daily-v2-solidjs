@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show, type Component } from 'solid-js';
 import { api } from '../lib/api';
 import { useOnceReady } from '../lib/onceReady';
-import { Circle, Crosshair, Eye, EyeOff, Focus, Network, Route, Search, X } from 'lucide-solid';
+import { Circle, Crosshair, Eye, EyeOff, Link2, Route, Search, X } from 'lucide-solid';
 
 interface Props {
   projectId: string;
@@ -17,6 +17,8 @@ interface GraphNode {
   degree?: number;
   isIndex?: boolean;
   rank?: number;
+  x?: number;
+  y?: number;
 }
 
 interface GraphLink {
@@ -27,6 +29,12 @@ interface GraphLink {
 type ScopeMode = 'global' | 'local1' | 'local2';
 
 const labelLimit = 42;
+
+const SCOPE_LABELS: Record<ScopeMode, string> = {
+  global: 'Todo',
+  local1: 'Vecinos',
+  local2: 'Extendido',
+};
 
 const getNodeId = (value: string | GraphNode) =>
   typeof value === 'string' ? value : value.id;
@@ -80,12 +88,15 @@ const WikiGraph: Component<Props> = (props) => {
   const isDark = () =>
     document.documentElement.getAttribute('data-theme')?.includes('dark') ?? true;
 
+  // Visibility model: the index toggle, orphan toggle and scope (selection
+  // neighborhood) decide WHICH nodes exist in the simulation. The search query
+  // deliberately does NOT remove nodes — it dims non-matches in place, so the
+  // layout (the user's mental map) never reshuffles while typing.
   const preparedGraph = createMemo(() => {
     const raw = graphData() as { nodes?: GraphNode[]; links?: GraphLink[]; meta?: { duplicate_edges?: number; index_nodes_excluded?: number; raw_links?: number } } | undefined;
     const rawNodes = raw?.nodes ?? [];
     const rawLinks = raw?.links ?? [];
 
-    const query = normalizeGraphValue(graphQuery());
     const baseNodes = rawNodes.map((node, rank) => ({ ...node, rank, isIndex: isIndexNode(node) }));
     const baseAllowedIds = new Set(
       baseNodes
@@ -112,17 +123,10 @@ const WikiGraph: Component<Props> = (props) => {
       globalDegree.set(link.target, (globalDegree.get(link.target) ?? 0) + 1);
     }
 
-    const matchesQuery = (node: GraphNode) => {
-      if (!query) return true;
-      const haystack = normalizeGraphValue(`${node.name} ${(node.tags ?? []).join(' ')}`);
-      return haystack.includes(query);
-    };
-
     const allowedIds = new Set(
       baseNodes
         .filter((node) => baseAllowedIds.has(node.id))
-        .filter(matchesQuery)
-        .filter((node) => showOrphans() || query || node.isIndex || (globalDegree.get(node.id) ?? 0) > 0)
+        .filter((node) => showOrphans() || node.isIndex || (globalDegree.get(node.id) ?? 0) > 0)
         .map((node) => node.id),
     );
 
@@ -142,16 +146,21 @@ const WikiGraph: Component<Props> = (props) => {
         for (const id of next) visibleIds.add(id);
         frontier = next;
       }
-      for (const node of baseNodes) {
-        if (!matchesQuery(node)) visibleIds.delete(node.id);
-      }
     }
 
     const visibleLinks = dedupedLinks.filter((link) => visibleIds.has(link.source) && visibleIds.has(link.target));
+
+    // Adjacency over the visible graph — feeds hover highlighting and the
+    // "Conexiones" list in the selection panel.
+    const neighbors = new Map<string, Set<string>>();
     const degree = new Map<string, number>();
     for (const link of visibleLinks) {
       degree.set(link.source, (degree.get(link.source) ?? 0) + 1);
       degree.set(link.target, (degree.get(link.target) ?? 0) + 1);
+      if (!neighbors.has(link.source)) neighbors.set(link.source, new Set());
+      if (!neighbors.has(link.target)) neighbors.set(link.target, new Set());
+      neighbors.get(link.source)!.add(link.target);
+      neighbors.get(link.target)!.add(link.source);
     }
 
     const nodes = baseNodes
@@ -165,6 +174,14 @@ const WikiGraph: Component<Props> = (props) => {
         };
       });
 
+    const query = normalizeGraphValue(graphQuery());
+    const matchesQuery = (node: GraphNode) =>
+      normalizeGraphValue(`${node.name} ${(node.tags ?? []).join(' ')}`).includes(query);
+    const matchedIds = query ? new Set(nodes.filter(matchesQuery).map((node) => node.id)) : null;
+    const matchedOutOfView = query
+      ? baseNodes.filter((node) => baseAllowedIds.has(node.id) && !visibleIds.has(node.id) && matchesQuery(node)).length
+      : 0;
+
     const connectedIds = new Set<string>();
     for (const link of dedupedLinks) {
       connectedIds.add(link.source);
@@ -177,14 +194,13 @@ const WikiGraph: Component<Props> = (props) => {
     return {
       nodes,
       links: visibleLinks,
+      neighbors,
+      matchedIds,
+      matchedOutOfView,
       stats: {
-        rawNodes: rawNodes.length,
-        rawLinks: rawLinks.length,
         visibleNodes: nodes.length,
-        uniqueLinks: dedupedLinks.length,
         visibleLinks: visibleLinks.length,
-        hiddenOrphans: showOrphans() || query ? 0 : hiddenOrphans,
-        duplicateEdges: raw?.meta?.duplicate_edges ?? Math.max(0, rawLinks.length - dedupedLinks.length),
+        hiddenOrphans: showOrphans() ? 0 : hiddenOrphans,
         indexHidden: !showIndexNode() && ((raw?.meta?.index_nodes_excluded ?? 0) > 0 || baseNodes.some((node) => node.isIndex)),
       },
     };
@@ -196,6 +212,28 @@ const WikiGraph: Component<Props> = (props) => {
     return preparedGraph().nodes.find((node) => node.id === id) ?? null;
   });
 
+  // Neighbors of the selected node, hubs first — the panel's navigation list.
+  const selectedNeighbors = createMemo(() => {
+    const id = selectedNodeId();
+    if (!id) return [];
+    const graph = preparedGraph();
+    const ids = graph.neighbors.get(id);
+    if (!ids) return [];
+    return graph.nodes
+      .filter((node) => ids.has(node.id))
+      .sort((a, b) => (b.degree ?? 0) - (a.degree ?? 0));
+  });
+
+  // Node under focus (hover wins over selection) plus its neighborhood; the
+  // canvas dims everything outside this set.
+  const highlightSet = createMemo<Set<string> | null>(() => {
+    const active = hoverNodeId() ?? selectedNodeId();
+    if (!active) return null;
+    const ids = new Set([active]);
+    for (const id of preparedGraph().neighbors.get(active) ?? []) ids.add(id);
+    return ids;
+  });
+
   const topNodes = createMemo(() =>
     [...preparedGraph().nodes]
       .filter((node) => !node.isIndex)
@@ -204,7 +242,7 @@ const WikiGraph: Component<Props> = (props) => {
   );
 
   const sidePanelTitle = createMemo(() =>
-    preparedGraph().links.length > 0 ? 'Hubs' : graphQuery() ? 'Resultados' : 'Documentos',
+    preparedGraph().links.length > 0 ? 'Hubs' : 'Documentos',
   );
 
   const centerGraph = () => {
@@ -212,15 +250,40 @@ const WikiGraph: Component<Props> = (props) => {
     graphInstance.zoomToFit(450, 92);
   };
 
+  // Select + fly to a node. `id` is enough: coordinates come from the live
+  // simulation objects, so this works from the panel lists too.
+  const focusNode = (id: string) => {
+    setSelectedNodeId(id);
+    if (!graphInstance) return;
+    const node = (graphInstance.graphData()?.nodes ?? []).find((n: GraphNode) => n.id === id);
+    if (node?.x === undefined || node?.y === undefined) return;
+    graphInstance.centerAt(node.x, node.y, 450);
+    if (graphInstance.zoom() < 1.4) graphInstance.zoom(1.6, 450);
+  };
+
+  const clearSelection = () => {
+    setSelectedNodeId(null);
+    setScopeMode('global');
+  };
+
   onMount(() => {
     let disposed = false;
     let frame = 0;
     let resizeObserver: ResizeObserver | null = null;
 
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && selectedNodeId()) {
+        event.stopPropagation();
+        clearSelection();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+
     onCleanup(() => {
       disposed = true;
       if (frame) cancelAnimationFrame(frame);
       resizeObserver?.disconnect();
+      document.removeEventListener('keydown', onKeyDown, true);
       if (graphInstance) {
         graphInstance._destructor?.();
         graphInstance = null;
@@ -245,21 +308,37 @@ const WikiGraph: Component<Props> = (props) => {
           .graphData({ nodes: [], links: [] })
           .nodeLabel((node: GraphNode) => node.name)
           .nodeVal((node: GraphNode) => node.val ?? 3)
-          .linkColor(() => isDark() ? 'rgba(148,163,184,0.22)' : 'rgba(15,23,42,0.18)')
+          .linkColor((link: any) => {
+            const highlight = highlightSet();
+            const active = hoverNodeId() ?? selectedNodeId();
+            const touchesActive = active &&
+              (getNodeId(link.source) === active || getNodeId(link.target) === active);
+            if (highlight && !touchesActive) {
+              return isDark() ? 'rgba(148,163,184,0.06)' : 'rgba(15,23,42,0.05)';
+            }
+            if (touchesActive) {
+              return isDark() ? 'rgba(148,163,184,0.55)' : 'rgba(15,23,42,0.45)';
+            }
+            return isDark() ? 'rgba(148,163,184,0.22)' : 'rgba(15,23,42,0.18)';
+          })
           .linkWidth((link: any) => {
-            const selected = selectedNodeId();
-            if (!selected) return 1;
-            return getNodeId(link.source) === selected || getNodeId(link.target) === selected ? 1.8 : 0.8;
+            const active = hoverNodeId() ?? selectedNodeId();
+            if (!active) return 1;
+            return getNodeId(link.source) === active || getNodeId(link.target) === active ? 1.8 : 0.6;
           })
           .backgroundColor('transparent')
           .onNodeClick((node: GraphNode, event: MouseEvent) => {
-            setSelectedNodeId(node.id);
-            if (event.detail > 1) props.onSelectArticle?.(node.id);
+            if (event.detail > 1) {
+              props.onSelectArticle?.(node.id);
+              return;
+            }
+            focusNode(node.id);
           })
           .onNodeHover((node: GraphNode | null) => {
             setHoverNodeId(node?.id ?? null);
             containerRef.style.cursor = node ? 'pointer' : 'default';
           })
+          .onBackgroundClick(() => clearSelection())
           .width(containerRef.clientWidth)
           .height(containerRef.clientHeight)
           .cooldownTicks(80)
@@ -275,64 +354,76 @@ const WikiGraph: Component<Props> = (props) => {
         graphInstance.d3Force('center').strength(0.045);
 
         graphInstance.nodeCanvasObject((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-        const selected = selectedNodeId() === node.id;
-        const hovered = hoverNodeId() === node.id;
-        const degree = node.degree ?? 0;
-        const radius = node.val ?? 3;
-        const color = nodeColor(node, isDark());
+          const selected = selectedNodeId() === node.id;
+          const hovered = hoverNodeId() === node.id;
+          const degree = node.degree ?? 0;
+          const radius = node.val ?? 3;
+          const color = nodeColor(node, isDark());
+          const highlight = highlightSet();
+          const matched = preparedGraph().matchedIds;
+
+          // Dim what's outside the active neighborhood and outside the search
+          // matches; both can apply at once.
+          const dimmedByFocus = highlight ? !highlight.has(node.id) : false;
+          const dimmedByQuery = matched ? !matched.has(node.id) : false;
+          const dimmed = dimmedByFocus || dimmedByQuery;
+
           const noLinks = preparedGraph().links.length === 0;
-          const shouldLabel =
-          showAllLabels() ||
-          selected ||
-          hovered ||
-          (globalScale > 0.95 && degree >= 2) ||
-          (noLinks && globalScale > 0.95 && (node.rank ?? 99) < 12);
+          const shouldLabel = !dimmed && (
+            showAllLabels() ||
+            selected ||
+            hovered ||
+            (matched?.has(node.id) ?? false) ||
+            (highlight?.has(node.id) ?? false) ||
+            (globalScale > 0.95 && degree >= 2) ||
+            (noLinks && globalScale > 0.95 && (node.rank ?? 99) < 12)
+          );
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
-        ctx.fillStyle = color;
-        ctx.globalAlpha = node.isIndex ? 0.78 : 0.92;
-        ctx.fill();
-        ctx.strokeStyle = isDark() ? 'rgba(255,255,255,0.22)' : 'rgba(15,23,42,0.22)';
-        ctx.lineWidth = 1.1 / globalScale;
-        ctx.stroke();
-
-        if (selected || hovered) {
+          ctx.save();
           ctx.beginPath();
-          ctx.arc(node.x, node.y, radius + (selected ? 5 : 3), 0, 2 * Math.PI, false);
-          ctx.strokeStyle = color;
-          ctx.globalAlpha = selected ? 0.52 : 0.32;
-          ctx.lineWidth = selected ? 2 : 1.5;
-          ctx.stroke();
-        }
-
-        ctx.globalAlpha = 1;
-        if (shouldLabel) {
-          const label = shorten(node.name);
-          const fontSize = Math.max(11 / globalScale, 5);
-          ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-          const textWidth = ctx.measureText(label).width;
-          const padX = 5 / globalScale;
-          const padY = 3 / globalScale;
-          const boxW = textWidth + padX * 2;
-          const boxH = fontSize + padY * 2;
-          const boxX = node.x - boxW / 2;
-          const boxY = node.y + radius + 5 / globalScale;
-
-          ctx.fillStyle = isDark() ? 'rgba(10,10,10,0.76)' : 'rgba(255,255,255,0.86)';
-          ctx.strokeStyle = isDark() ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.10)';
-          ctx.lineWidth = 1 / globalScale;
-          ctx.beginPath();
-          ctx.roundRect(boxX, boxY, boxW, boxH, 6 / globalScale);
+          ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+          ctx.fillStyle = color;
+          ctx.globalAlpha = dimmed ? 0.13 : node.isIndex ? 0.78 : 0.92;
           ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = isDark() ? 'rgba(255,255,255,0.82)' : 'rgba(15,23,42,0.78)';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(label, node.x, boxY + boxH / 2);
-        }
-        ctx.restore();
+          ctx.strokeStyle = isDark() ? 'rgba(255,255,255,0.22)' : 'rgba(15,23,42,0.22)';
+          ctx.lineWidth = 1.1 / globalScale;
+          if (!dimmed) ctx.stroke();
+
+          if (selected || hovered) {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, radius + (selected ? 5 : 3), 0, 2 * Math.PI, false);
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = selected ? 0.52 : 0.32;
+            ctx.lineWidth = selected ? 2 : 1.5;
+            ctx.stroke();
+          }
+
+          ctx.globalAlpha = 1;
+          if (shouldLabel) {
+            const label = shorten(node.name);
+            const fontSize = Math.max(11 / globalScale, 5);
+            ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+            const textWidth = ctx.measureText(label).width;
+            const padX = 5 / globalScale;
+            const padY = 3 / globalScale;
+            const boxW = textWidth + padX * 2;
+            const boxH = fontSize + padY * 2;
+            const boxX = node.x - boxW / 2;
+            const boxY = node.y + radius + 5 / globalScale;
+
+            ctx.fillStyle = isDark() ? 'rgba(10,10,10,0.76)' : 'rgba(255,255,255,0.86)';
+            ctx.strokeStyle = isDark() ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.10)';
+            ctx.lineWidth = 1 / globalScale;
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxW, boxH, 6 / globalScale);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = isDark() ? 'rgba(255,255,255,0.82)' : 'rgba(15,23,42,0.78)';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, node.x, boxY + boxH / 2);
+          }
+          ctx.restore();
         });
 
         resizeObserver?.observe(containerRef);
@@ -357,6 +448,7 @@ const WikiGraph: Component<Props> = (props) => {
     selectedNodeId();
     hoverNodeId();
     showAllLabels();
+    graphQuery();
     if (graphInstance?.refresh) graphInstance.refresh();
   });
 
@@ -364,10 +456,14 @@ const WikiGraph: Component<Props> = (props) => {
     const selected = selectedNodeId();
     if (!selected) return;
     if (!preparedGraph().nodes.some((node) => node.id === selected)) {
-      setSelectedNodeId(null);
-      setScopeMode('global');
+      clearSelection();
     }
   });
+
+  const toolButtonClass = (active: boolean, activeClass = 'bg-base-content/10 text-base-content') =>
+    `inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
+      active ? activeClass : 'text-base-content/45 hover:bg-base-content/[0.05] hover:text-base-content/75'
+    }`;
 
   return (
     <div class="relative w-full h-full min-h-[440px] bg-base-100 rounded-2xl border border-base-content/[0.06] overflow-hidden">
@@ -375,40 +471,36 @@ const WikiGraph: Component<Props> = (props) => {
 
       <div class="absolute left-3 top-3 right-3 flex items-start justify-between gap-3 pointer-events-none">
         <div class="pointer-events-auto flex max-w-[calc(100%-2.5rem)] flex-wrap items-center gap-1.5 rounded-2xl border border-base-content/[0.08] bg-base-100/88 px-2 py-2 shadow-sm backdrop-blur-xl">
-          <label class="flex h-8 w-[178px] shrink-0 items-center gap-2 rounded-xl bg-base-content/[0.045] px-2.5 text-base-content/42">
+          <label class="flex h-8 w-[196px] shrink-0 items-center gap-2 rounded-xl bg-base-content/[0.045] px-2.5 text-base-content/42">
             <Search size={13} />
             <input
               value={graphQuery()}
               onInput={(event) => setGraphQuery(event.currentTarget.value)}
-              placeholder="Filtrar nodos"
+              placeholder="Resaltar documentos"
               class="min-w-0 flex-1 bg-transparent text-[12px] font-semibold text-base-content/75 placeholder:text-base-content/32 focus:outline-none"
             />
+            <Show when={graphQuery()}>
+              <span class="shrink-0 text-[10px] font-bold tabular-nums text-base-content/40">
+                {preparedGraph().matchedIds?.size ?? 0}
+              </span>
+              <button
+                type="button"
+                onClick={() => setGraphQuery('')}
+                aria-label="Limpiar búsqueda"
+                class="shrink-0 text-base-content/35 hover:text-base-content/70"
+              >
+                <X size={12} />
+              </button>
+            </Show>
           </label>
-          <button
-            type="button"
-            onClick={() => setScopeMode('global')}
-            aria-pressed={scopeMode() === 'global'}
-            class={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition-colors ${scopeMode() === 'global' ? 'bg-base-content/10 text-base-content' : 'text-base-content/45 hover:bg-base-content/[0.05] hover:text-base-content/75'}`}
-          >
-            <Network size={12} />
-            Global
-          </button>
-          <Show when={selectedNodeId()}>
+          <Show when={graphQuery() && preparedGraph().matchedOutOfView > 0}>
             <button
               type="button"
-              onClick={() => setScopeMode('local1')}
-              aria-pressed={scopeMode() === 'local1'}
-              class={`rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition-colors ${scopeMode() === 'local1' ? 'bg-ios-blue-500/12 text-ios-blue-500' : 'text-base-content/45 hover:bg-base-content/[0.05] hover:text-base-content/75'}`}
+              onClick={() => { setShowOrphans(true); setScopeMode('global'); }}
+              title="Hay coincidencias fuera de la vista actual (aislados o fuera del enfoque)"
+              class="rounded-xl bg-amber-500/12 px-2.5 py-1.5 text-[11px] font-bold text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
             >
-              1 salto
-            </button>
-            <button
-              type="button"
-              onClick={() => setScopeMode('local2')}
-              aria-pressed={scopeMode() === 'local2'}
-              class={`rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition-colors ${scopeMode() === 'local2' ? 'bg-ios-blue-500/12 text-ios-blue-500' : 'text-base-content/45 hover:bg-base-content/[0.05] hover:text-base-content/75'}`}
-            >
-              2 saltos
+              +{preparedGraph().matchedOutOfView} fuera de vista
             </button>
           </Show>
           <span class="mx-0.5 h-5 w-px bg-base-content/[0.08]" />
@@ -416,7 +508,8 @@ const WikiGraph: Component<Props> = (props) => {
             type="button"
             onClick={() => setShowOrphans((value) => !value)}
             aria-pressed={showOrphans()}
-            class={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition-colors ${showOrphans() ? 'bg-base-content/10 text-base-content' : 'text-base-content/45 hover:bg-base-content/[0.05] hover:text-base-content/75'}`}
+            title="Mostrar documentos sin enlaces"
+            class={toolButtonClass(showOrphans())}
           >
             <Circle size={12} />
             Aislados
@@ -425,18 +518,20 @@ const WikiGraph: Component<Props> = (props) => {
             type="button"
             onClick={() => setShowIndexNode((value) => !value)}
             aria-pressed={showIndexNode()}
-            class={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition-colors ${showIndexNode() ? 'bg-purple-500/12 text-purple-500' : 'text-base-content/45 hover:bg-base-content/[0.05] hover:text-base-content/75'}`}
+            title="Incluir el nodo _Índice"
+            class={toolButtonClass(showIndexNode(), 'bg-purple-500/12 text-purple-500')}
           >
             {showIndexNode() ? <Eye size={12} /> : <EyeOff size={12} />}
-            Indice
+            Índice
           </button>
           <button
             type="button"
             onClick={() => setShowAllLabels((value) => !value)}
             aria-pressed={showAllLabels()}
-            class={`rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition-colors ${showAllLabels() ? 'bg-base-content/10 text-base-content' : 'text-base-content/45 hover:bg-base-content/[0.05] hover:text-base-content/75'}`}
+            title="Mostrar todos los nombres"
+            class={toolButtonClass(showAllLabels())}
           >
-            Labels
+            Nombres
           </button>
           <button
             type="button"
@@ -469,8 +564,10 @@ const WikiGraph: Component<Props> = (props) => {
             <span>{preparedGraph().stats.hiddenOrphans} aislados ocultos</span>
           </Show>
           <Show when={preparedGraph().stats.indexHidden}>
-            <span class="text-purple-500/70">indice oculto</span>
+            <span class="text-purple-500/70">índice oculto</span>
           </Show>
+          <span class="h-3 w-px bg-base-content/[0.1]" />
+          <span class="text-base-content/28">Clic selecciona · Doble clic abre · Esc deselecciona</span>
         </div>
       </div>
 
@@ -485,7 +582,7 @@ const WikiGraph: Component<Props> = (props) => {
               {(node) => (
                 <button
                   type="button"
-                  onClick={() => setSelectedNodeId(node.id)}
+                  onClick={() => focusNode(node.id)}
                   class="flex w-full items-center justify-between gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-base-content/[0.04]"
                 >
                   <span class="flex min-w-0 items-center gap-2">
@@ -505,11 +602,11 @@ const WikiGraph: Component<Props> = (props) => {
 
       <Show when={selectedNode()}>
         {(node) => (
-          <div class="absolute bottom-3 right-3 top-[4.6rem] w-[min(320px,calc(100%-1.5rem))] rounded-2xl border border-base-content/[0.08] bg-base-100/92 p-4 shadow-[0_18px_45px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+          <div class="absolute bottom-3 right-3 top-[4.6rem] flex w-[min(320px,calc(100%-1.5rem))] flex-col rounded-2xl border border-base-content/[0.08] bg-base-100/92 p-4 shadow-[0_18px_45px_rgba(0,0,0,0.18)] backdrop-blur-xl">
             <div class="mb-3 flex items-start justify-between gap-3">
               <div class="min-w-0">
                 <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-base-content/35">
-                  Seleccion
+                  Selección
                 </p>
                 <h3 class="mt-1 line-clamp-3 text-[14px] font-bold leading-snug text-base-content/88">
                   {node().name}
@@ -517,52 +614,93 @@ const WikiGraph: Component<Props> = (props) => {
               </div>
               <button
                 type="button"
-                onClick={() => { setSelectedNodeId(null); setScopeMode('global'); }}
+                onClick={clearSelection}
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base-content/35 transition-colors hover:bg-base-content/[0.06] hover:text-base-content/75"
-                aria-label="Quitar seleccion"
+                aria-label="Quitar selección (Esc)"
+                title="Quitar selección (Esc)"
               >
                 <X size={14} />
               </button>
             </div>
 
-            <div class="mb-3 flex flex-wrap gap-1.5">
-              <For each={(node().tags ?? []).filter((tag) => tag !== '_índice').slice(0, 6)}>
-                {(tag) => (
-                  <span class="max-w-full truncate rounded-lg bg-base-content/[0.055] px-2 py-1 text-[10px] font-bold text-base-content/50">
-                    {tag}
-                  </span>
+            <Show when={(node().tags ?? []).filter((tag) => tag !== '_índice').length > 0}>
+              <div class="mb-3 flex flex-wrap gap-1.5">
+                <For each={(node().tags ?? []).filter((tag) => tag !== '_índice').slice(0, 6)}>
+                  {(tag) => (
+                    <span class="max-w-full truncate rounded-lg bg-base-content/[0.055] px-2 py-1 text-[10px] font-bold text-base-content/50">
+                      {tag}
+                    </span>
+                  )}
+                </For>
+              </div>
+            </Show>
+
+            {/* Scope of the surrounding graph while this node is selected */}
+            <div class="mb-3 flex rounded-xl bg-base-content/[0.045] p-0.5" role="radiogroup" aria-label="Alcance del grafo">
+              <For each={(['global', 'local1', 'local2'] as ScopeMode[])}>
+                {(mode) => (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={scopeMode() === mode}
+                    onClick={() => setScopeMode(mode)}
+                    title={mode === 'global' ? 'Mostrar toda la red' : mode === 'local1' ? 'Solo vecinos directos' : 'Vecinos hasta 2 saltos'}
+                    class={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition-colors ${
+                      scopeMode() === mode
+                        ? 'bg-base-100 text-base-content shadow-sm'
+                        : 'text-base-content/45 hover:text-base-content/70'
+                    }`}
+                  >
+                    {SCOPE_LABELS[mode]}
+                  </button>
                 )}
               </For>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
-              <div class="rounded-xl bg-base-content/[0.035] px-3 py-2">
-                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-base-content/30">Relaciones</p>
-                <p class="mt-1 text-[17px] font-black text-base-content/82">{node().degree ?? 0}</p>
-              </div>
-              <div class="rounded-xl bg-base-content/[0.035] px-3 py-2">
-                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-base-content/30">Vista</p>
-                <p class="mt-1 text-[12px] font-bold text-base-content/65">{scopeMode() === 'global' ? 'Global' : scopeMode() === 'local1' ? '1 salto' : '2 saltos'}</p>
-              </div>
+            {/* Connections — click-through navigation between documents */}
+            <div class="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-base-content/35">
+              <Link2 size={11} />
+              Conexiones · {selectedNeighbors().length}
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto">
+              <Show
+                when={selectedNeighbors().length > 0}
+                fallback={
+                  <p class="px-1 py-2 text-[11px] leading-relaxed text-base-content/35">
+                    Sin enlaces con otros documentos visibles.
+                  </p>
+                }
+              >
+                <div class="space-y-0.5 py-1">
+                  <For each={selectedNeighbors()}>
+                    {(neighbor) => (
+                      <button
+                        type="button"
+                        onClick={() => focusNode(neighbor.id)}
+                        class="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-base-content/[0.05]"
+                      >
+                        <span class="flex min-w-0 items-center gap-2">
+                          <span
+                            class="h-2 w-2 shrink-0 rounded-full"
+                            style={{ 'background-color': nodeColor(neighbor, isDark()) }}
+                          />
+                          <span class="truncate text-[11.5px] font-semibold text-base-content/70">{neighbor.name}</span>
+                        </span>
+                        <span class="shrink-0 text-[10px] font-bold text-base-content/28">{neighbor.degree}</span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
             </div>
 
-            <div class="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => props.onSelectArticle?.(node().id)}
-                class="flex-1 rounded-xl bg-ios-blue-500 px-3 py-2 text-[12px] font-bold text-white shadow-sm transition-transform active:scale-[0.98]"
-              >
-                Abrir doc
-              </button>
-              <button
-                type="button"
-                onClick={() => setScopeMode(scopeMode() === 'local1' ? 'local2' : 'local1')}
-                class="inline-flex items-center gap-1.5 rounded-xl bg-base-content/[0.055] px-3 py-2 text-[12px] font-bold text-base-content/65 transition-colors hover:bg-base-content/[0.08]"
-              >
-                <Focus size={13} />
-                Expandir
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => props.onSelectArticle?.(node().id)}
+              class="mt-3 w-full rounded-xl bg-ios-blue-500 px-3 py-2.5 text-[12.5px] font-bold text-white shadow-sm transition-transform active:scale-[0.98]"
+            >
+              Abrir documento
+            </button>
           </div>
         )}
       </Show>
@@ -571,7 +709,7 @@ const WikiGraph: Component<Props> = (props) => {
         <div class="absolute inset-0 z-10 flex items-center justify-center bg-base-100/72 px-6 text-center backdrop-blur-sm">
           <div>
             <p class="text-[14px] font-bold text-base-content/70">No se pudo cargar el grafo</p>
-            <p class="mt-1 max-w-[320px] text-[12px] leading-relaxed text-base-content/40">La vista conserva el indice, pero la red necesita reintentar la consulta.</p>
+            <p class="mt-1 max-w-[320px] text-[12px] leading-relaxed text-base-content/40">La vista conserva el índice, pero la red necesita reintentar la consulta.</p>
             <button
               type="button"
               onClick={() => void refetch()}
@@ -592,24 +730,11 @@ const WikiGraph: Component<Props> = (props) => {
       <Show when={graphReady() && !graphData.error && preparedGraph().nodes.length === 0}>
         <div class="absolute inset-0 flex items-center justify-center px-6 text-center">
           <div>
-            <p class="text-[14px] font-bold text-base-content/68">
-              {graphQuery() ? 'Sin coincidencias' : 'Sin relaciones visibles'}
-            </p>
+            <p class="text-[14px] font-bold text-base-content/68">Sin relaciones visibles</p>
             <p class="mt-1 max-w-[320px] text-[12px] leading-relaxed text-base-content/38">
-              {graphQuery()
-                ? 'No hay nodos que coincidan con el filtro actual.'
-                : 'El mapa oculta documentos aislados para evitar ruido visual.'}
+              El mapa oculta documentos aislados para evitar ruido visual.
             </p>
             <div class="mt-4 flex flex-wrap justify-center gap-2">
-              <Show when={graphQuery()}>
-                <button
-                  type="button"
-                  onClick={() => setGraphQuery('')}
-                  class="rounded-xl bg-base-content/[0.06] px-4 py-2 text-[12px] font-bold text-base-content/65 transition-colors hover:bg-base-content/[0.1]"
-                >
-                  Limpiar filtro
-                </button>
-              </Show>
               <button
                 type="button"
                 onClick={() => setShowOrphans(true)}
@@ -622,7 +747,7 @@ const WikiGraph: Component<Props> = (props) => {
                 onClick={() => { setShowIndexNode(true); void refetch(); }}
                 class="rounded-xl bg-purple-500/14 px-4 py-2 text-[12px] font-bold text-purple-500 transition-colors hover:bg-purple-500/20"
               >
-                Activar indice
+                Activar índice
               </button>
             </div>
           </div>
