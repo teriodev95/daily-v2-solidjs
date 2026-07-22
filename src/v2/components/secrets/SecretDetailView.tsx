@@ -146,6 +146,13 @@ const SecretDetailView: Component<Props> = (props) => {
     const s = Math.max(0, Math.round(remainingMs(expiresAt) / 1000));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
+  // Remaining fraction of the created link's TTL, as a CSS width.
+  const remainingPct = (createdAt: string, expiresAt: string): string => {
+    const total = new Date(expiresAt).getTime() - new Date(createdAt).getTime();
+    if (total <= 0) return '0%';
+    const frac = Math.max(0, Math.min(1, remainingMs(expiresAt) / total));
+    return `${(frac * 100).toFixed(1)}%`;
+  };
   const liveLinks = () => (links() ?? []).filter((l) => !l.revoked_at && remainingMs(l.expires_at) > 0);
 
   const [ttlMinutes, setTtlMinutes] = createSignal<SecretShareTtlMinutes>(5);
@@ -158,6 +165,10 @@ const SecretDetailView: Component<Props> = (props) => {
   const [confirmRevoke, setConfirmRevoke] = createSignal<string | null>(null);
   const [revokeError, setRevokeError] = createSignal('');
 
+  // true = auto-copy landed in the clipboard; false = the browser refused
+  // (e.g. Safari outside the user-gesture window) and the user must copy by hand.
+  const [autoCopied, setAutoCopied] = createSignal<boolean | null>(null);
+
   const generate = async () => {
     if (generating()) return;
     setGenerating(true);
@@ -167,7 +178,15 @@ const SecretDetailView: Component<Props> = (props) => {
       if (!alive) return;
       setCreated(res);
       setCopiedUrl(false);
+      setAutoCopied(null);
       void refetchLinks();
+      // Copy immediately: creating the link IS the intent to share it.
+      try {
+        await writeToClipboard(res.url);
+        if (alive) setAutoCopied(true);
+      } catch {
+        if (alive) setAutoCopied(false);
+      }
     } catch (e: any) {
       if (alive) setCreateError(e?.message ?? 'No se pudo generar el enlace');
     } finally {
@@ -383,7 +402,48 @@ const SecretDetailView: Component<Props> = (props) => {
         <Show
           when={!created()}
           fallback={
-            <div class="space-y-2.5 rounded-xl border border-ios-green-500/25 bg-ios-green-500/[0.07] p-3">
+            <div
+              class={`space-y-2.5 rounded-xl border p-3 transition-colors ${
+                remainingMs(created()!.expires_at) > 0
+                  ? 'border-ios-green-500/25 bg-ios-green-500/[0.07]'
+                  : 'border-base-content/[0.08] bg-base-content/[0.03]'
+              }`}
+            >
+              {/* Estado del auto-copiado + countdown */}
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="inline-flex items-center gap-1.5 text-[12.5px] font-semibold">
+                  <Show
+                    when={autoCopied() !== false}
+                    fallback={
+                      <>
+                        <AlertCircle size={14} class="shrink-0 text-amber-500" />
+                        <span class="text-amber-600 dark:text-amber-400">Enlace creado — cópialo manualmente</span>
+                      </>
+                    }
+                  >
+                    <Check size={14} class="shrink-0 text-ios-green-500" strokeWidth={2.6} />
+                    <span class="text-ios-green-500">Enlace copiado al portapapeles</span>
+                  </Show>
+                </span>
+                <span class={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tabular-nums ${
+                  remainingMs(created()!.expires_at) > 0
+                    ? 'bg-ios-blue-500/10 text-ios-blue-500'
+                    : 'bg-base-content/[0.07] text-base-content/45'
+                }`}>
+                  <Clock size={12} />
+                  {remainingMs(created()!.expires_at) > 0 ? fmtRemaining(created()!.expires_at) : 'Expirado'}
+                </span>
+              </div>
+
+              {/* Vida restante del enlace */}
+              <div class="h-1 overflow-hidden rounded-full bg-base-content/[0.07]" aria-hidden="true">
+                <div
+                  class="h-full rounded-full bg-ios-blue-500/55 transition-[width] duration-1000 ease-linear"
+                  style={{ width: remainingPct(created()!.created_at, created()!.expires_at) }}
+                />
+              </div>
+
+              {/* URL — clic selecciona todo, botón re-copia */}
               <div class="relative">
                 <input
                   type="text"
@@ -396,6 +456,7 @@ const SecretDetailView: Component<Props> = (props) => {
                   type="button"
                   onClick={copyUrl}
                   aria-label="Copiar enlace"
+                  title="Copiar enlace"
                   class={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 transition-all ${
                     copiedUrl()
                       ? 'bg-ios-green-500/15 text-ios-green-500'
@@ -407,46 +468,37 @@ const SecretDetailView: Component<Props> = (props) => {
                   </Show>
                 </button>
               </div>
+
+              {/* Acciones */}
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center gap-1.5">
-                  <span class={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tabular-nums ${
-                    remainingMs(created()!.expires_at) > 0
-                      ? 'bg-ios-blue-500/10 text-ios-blue-500'
-                      : 'bg-base-content/[0.07] text-base-content/45'
-                  }`}>
-                    <Clock size={12} />
-                    {remainingMs(created()!.expires_at) > 0 ? `Expira en ${fmtRemaining(created()!.expires_at)}` : 'Expirado'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={copyCurl}
-                    title="Copia un comando curl que devuelve solo el valor (text/plain)"
-                    class={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
-                      copiedCurl()
-                        ? 'bg-ios-green-500/15 text-ios-green-500'
-                        : 'text-base-content/50 hover:bg-base-content/5 hover:text-base-content/80'
-                    }`}
-                  >
-                    <Show when={copiedCurl()} fallback={<Terminal size={12} />}>
-                      <Check size={12} />
-                    </Show>
-                    Copiar curl
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={copyCurl}
+                  title="Copia un comando curl que devuelve solo el valor (text/plain)"
+                  class={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors ${
+                    copiedCurl()
+                      ? 'bg-ios-green-500/15 text-ios-green-500'
+                      : 'bg-base-content/[0.05] text-base-content/60 hover:bg-base-content/[0.08] hover:text-base-content/85'
+                  }`}
+                >
+                  <Show when={copiedCurl()} fallback={<Terminal size={13} />}>
+                    <Check size={13} />
+                  </Show>
+                  Copiar curl
+                </button>
                 <button
                   type="button"
                   onClick={() => setCreated(null)}
-                  class="text-[12px] font-semibold text-ios-blue-500 transition-opacity hover:opacity-80"
+                  class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold text-ios-blue-500 transition-colors hover:bg-ios-blue-500/10"
                 >
+                  <Link2 size={13} />
                   Crear otro enlace
                 </button>
               </div>
-              <div class="flex items-start gap-2 text-amber-600 dark:text-amber-400">
-                <AlertCircle size={14} class="mt-0.5 shrink-0" />
-                <p class="text-[11px] leading-relaxed">
-                  Cópiala ahora; no se vuelve a mostrar. Quien tenga la URL puede leer el valor hasta que expire; puedes revocarla antes.
-                </p>
-              </div>
+
+              <p class="text-[11px] leading-relaxed text-base-content/40">
+                No se vuelve a mostrar al salir. Quien tenga la URL puede leer el valor hasta que expire; puedes revocarla en la lista de abajo.
+              </p>
             </div>
           }
         >
