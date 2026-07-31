@@ -308,10 +308,19 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     const completedAt = newStatus === 'done' ? now : null;
     const payload: Record<string, unknown> = { status: newStatus, completed_at: completedAt };
     pendingMoves.set(storyId, { status: newStatus, completed_at: completedAt });
-    api.stories.update(storyId, payload).catch(() => {
-      pendingMoves.delete(storyId);
-      refetchStories();
-    });
+    api.stories.update(storyId, payload)
+      .then((updated) => {
+        // Cierra el ciclo con lo que guardó el servidor, sin esperar a un
+        // refetch. Si el usuario ya movió la tarjeta otra vez, no lo pisamos.
+        if (pendingMoves.get(storyId)?.status !== newStatus) return;
+        const server = updated as Story;
+        pendingMoves.set(storyId, { status: server.status, completed_at: server.completed_at ?? null });
+        setLocalStories(prev => prev.map(s => s.id === storyId ? { ...s, ...server } as Story : s));
+      })
+      .catch(() => {
+        pendingMoves.delete(storyId);
+        refetchStories();
+      });
   };
 
   const cardClass = (storyId: string) =>
@@ -389,7 +398,6 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   };
 
   // ─── Delete with undo toast ───
-  let deleteTimer: ReturnType<typeof setTimeout> | null = null;
   const [deletePending, setDeletePending] = createSignal<{ story?: Story, goalId?: string, goalText?: string } | null>(null);
   const [toastExiting, setToastExiting] = createSignal(false);
 
@@ -467,6 +475,25 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     }
   };
 
+  // Un temporizador POR objetivo. Antes había uno solo compartido: borrar un
+  // segundo objetivo dentro de la ventana de "Deshacer" cancelaba el borrado
+  // del primero, que desaparecía de la pantalla pero nunca se borraba y volvía
+  // al recargar. Borrar varios seguidos era justo el caso normal de uso.
+  const pendingGoalDeletes = new Map<string, ReturnType<typeof setTimeout>>();
+
+  const commitGoalDelete = (id: string) => {
+    const timer = pendingGoalDeletes.get(id);
+    if (timer) clearTimeout(timer);
+    pendingGoalDeletes.delete(id);
+    api.goals.delete(id).catch(() => refetchGoals());
+  };
+
+  const cancelGoalDelete = (id: string) => {
+    const timer = pendingGoalDeletes.get(id);
+    if (timer) clearTimeout(timer);
+    pendingGoalDeletes.delete(id);
+  };
+
   const ctxDeleteGoal = (id: string, text: string) => {
     closeCtxMenu();
     // optimistic
@@ -477,34 +504,36 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     setToastExiting(false);
     setDeletePending({ goalId: id, goalText: text });
 
-    if (deleteTimer) clearTimeout(deleteTimer);
-    deleteTimer = setTimeout(() => {
-      dismissToast(() => {
-        api.goals.delete(id).catch(() => refetchGoals());
-      });
-      deleteTimer = null;
-    }, 4000);
+    cancelGoalDelete(id);
+    pendingGoalDeletes.set(id, setTimeout(() => {
+      pendingGoalDeletes.delete(id);
+      api.goals.delete(id).catch(() => refetchGoals());
+      // Cierra el toast solo si sigue mostrando este objetivo.
+      if (deletePending()?.goalId === id) dismissToast(() => {});
+    }, 4000));
   };
 
-  // The goal delete waits 4s so "Deshacer" can cancel it. If the page is closed,
-  // hidden, or the view unmounts first, that timer dies with it and the goal
-  // silently comes back on the next load — so flush it before we lose it.
-  const flushPendingGoalDelete = () => {
-    const goalId = deletePending()?.goalId;
-    if (!goalId) return;
-    if (deleteTimer) { clearTimeout(deleteTimer); deleteTimer = null; }
+  // El borrado espera 4s para permitir "Deshacer". Si la página se cierra, se
+  // oculta o la vista se desmonta antes, esos temporizadores mueren con ella y
+  // los objetivos vuelven al recargar — así que se confirman todos aquí.
+  const flushPendingGoalDeletes = () => {
+    if (pendingGoalDeletes.size === 0) return;
+    for (const [id, timer] of pendingGoalDeletes) {
+      clearTimeout(timer);
+      api.goals.delete(id).catch(() => { });
+    }
+    pendingGoalDeletes.clear();
     setDeletePending(null);
-    api.goals.delete(goalId).catch(() => refetchGoals());
   };
 
   onMount(() => {
     const onHidden = () => {
-      if (document.visibilityState === 'hidden') flushPendingGoalDelete();
+      if (document.visibilityState === 'hidden') flushPendingGoalDeletes();
     };
-    window.addEventListener('pagehide', flushPendingGoalDelete);
+    window.addEventListener('pagehide', flushPendingGoalDeletes);
     document.addEventListener('visibilitychange', onHidden);
     onCleanup(() => {
-      window.removeEventListener('pagehide', flushPendingGoalDelete);
+      window.removeEventListener('pagehide', flushPendingGoalDeletes);
       document.removeEventListener('visibilitychange', onHidden);
     });
   });
@@ -540,7 +569,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const undoDelete = () => {
     const pending = deletePending();
     if (!pending) return;
-    if (deleteTimer) { clearTimeout(deleteTimer); deleteTimer = null; }
+    if (pending.goalId) cancelGoalDelete(pending.goalId);
 
     dismissToast(() => {
       if (pending.story) {
@@ -558,8 +587,8 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     });
   };
 
-  // Leaving the report (tab switch inside the app) also has to commit it.
-  onCleanup(() => flushPendingGoalDelete());
+  // Salir del reporte (cambio de pestaña dentro de la app) también confirma.
+  onCleanup(() => flushPendingGoalDeletes());
 
   // Close context menu on outside click or Escape, Ctrl+Z undo
   const handleGlobalClick = (e: MouseEvent) => {
