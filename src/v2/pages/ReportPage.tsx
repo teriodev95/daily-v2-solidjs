@@ -1,4 +1,4 @@
-import { createSignal, createResource, createEffect, createMemo, onCleanup, For, Show, type Component } from 'solid-js';
+import { createSignal, createResource, createEffect, createMemo, onCleanup, onMount, For, Show, type Component } from 'solid-js';
 import type { Story, StoryStatus, Assignment, WeekGoal, StoryCompletion, Learning } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -146,16 +146,32 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   const [deletedIds, setDeletedIds] = createSignal<Set<string>>(new Set());
   const [archivingIds, setArchivingIds] = createSignal<Set<string>>(new Set());
 
+  // Optimistic status moves the server hasn't reflected in a fetch yet. A
+  // refetch that was already in flight when the user acted (tab switch,
+  // window focus, a teammate's realtime event) resolves with pre-move data
+  // and would wipe the change — the card then vanishes from "Trabajo
+  // completado" until a reload. Plain Map, not a signal: only the sync effect
+  // below reads it, so it needs no reactivity.
+  const pendingMoves = new Map<string, { status: StoryStatus; completed_at: string | null }>();
+
   createEffect(() => {
     const fetched = userStories();
-    if (fetched) {
-      const removed = deletedIds();
-      if (removed.size > 0) {
-        setLocalStories((fetched as Story[]).filter(s => !removed.has(s.id)));
-      } else {
-        setLocalStories(fetched as Story[]);
-      }
-    }
+    if (!fetched) return;
+    const removed = deletedIds();
+    setLocalStories(
+      (fetched as Story[])
+        .filter(s => !removed.has(s.id))
+        .map(s => {
+          const move = pendingMoves.get(s.id);
+          if (!move) return s;
+          // Server agrees — drop the overlay and take its row as truth.
+          if (s.status === move.status) {
+            pendingMoves.delete(s.id);
+            return s;
+          }
+          return { ...s, ...move } as Story;
+        }),
+    );
   });
 
   const report = () => reportData();
@@ -289,9 +305,13 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     }, 190);
 
     // Background API sync (fire immediately)
-    const payload: Record<string, unknown> = { status: newStatus };
-    payload.completed_at = newStatus === 'done' ? now : null;
-    api.stories.update(storyId, payload).catch(() => refetchStories());
+    const completedAt = newStatus === 'done' ? now : null;
+    const payload: Record<string, unknown> = { status: newStatus, completed_at: completedAt };
+    pendingMoves.set(storyId, { status: newStatus, completed_at: completedAt });
+    api.stories.update(storyId, payload).catch(() => {
+      pendingMoves.delete(storyId);
+      refetchStories();
+    });
   };
 
   const cardClass = (storyId: string) =>
@@ -460,11 +480,34 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     if (deleteTimer) clearTimeout(deleteTimer);
     deleteTimer = setTimeout(() => {
       dismissToast(() => {
-        api.goals.delete(id).catch(() => { });
+        api.goals.delete(id).catch(() => refetchGoals());
       });
       deleteTimer = null;
     }, 4000);
   };
+
+  // The goal delete waits 4s so "Deshacer" can cancel it. If the page is closed,
+  // hidden, or the view unmounts first, that timer dies with it and the goal
+  // silently comes back on the next load — so flush it before we lose it.
+  const flushPendingGoalDelete = () => {
+    const goalId = deletePending()?.goalId;
+    if (!goalId) return;
+    if (deleteTimer) { clearTimeout(deleteTimer); deleteTimer = null; }
+    setDeletePending(null);
+    api.goals.delete(goalId).catch(() => refetchGoals());
+  };
+
+  onMount(() => {
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') flushPendingGoalDelete();
+    };
+    window.addEventListener('pagehide', flushPendingGoalDelete);
+    document.addEventListener('visibilitychange', onHidden);
+    onCleanup(() => {
+      window.removeEventListener('pagehide', flushPendingGoalDelete);
+      document.removeEventListener('visibilitychange', onHidden);
+    });
+  });
 
   const toggleGoalComplete = (id: string, currentStatus: boolean | undefined) => {
     closeCtxMenu();
@@ -515,7 +558,8 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     });
   };
 
-  onCleanup(() => { if (deleteTimer) clearTimeout(deleteTimer); });
+  // Leaving the report (tab switch inside the app) also has to commit it.
+  onCleanup(() => flushPendingGoalDelete());
 
   // Close context menu on outside click or Escape, Ctrl+Z undo
   const handleGlobalClick = (e: MouseEvent) => {

@@ -334,7 +334,9 @@ export const api = {
     update: (id: string, data: Record<string, unknown>) =>
       request<WeekGoal>(`/api/goals/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
-      request<{ ok: boolean }>(`/api/goals/${id}`, { method: 'DELETE' }),
+      // `keepalive` lets a delete fired while the page is unloading still reach
+      // the API instead of being cancelled with the document.
+      request<{ ok: boolean }>(`/api/goals/${id}`, { method: 'DELETE', keepalive: true }),
   },
 
   assignments: {

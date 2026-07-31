@@ -69,6 +69,13 @@ goals.patch('/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json<Partial<{ text: string; is_completed: boolean; is_closed: boolean; is_shared: boolean }>>();
 
+  // Scope the write to the caller's team so an id from another team is a 404
+  // rather than a silent cross-team edit.
+  const [existing] = await db.select().from(schema.weekGoals).where(eq(schema.weekGoals.id, id)).limit(1);
+  if (!existing || existing.team_id !== user.teamId) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
   await db.update(schema.weekGoals).set(body).where(eq(schema.weekGoals.id, id));
 
   const [updated] = await db.select().from(schema.weekGoals).where(eq(schema.weekGoals.id, id)).limit(1);
@@ -76,6 +83,27 @@ goals.patch('/:id', async (c) => {
     publish(c.env, teamChannel(user.teamId), { type: 'goal.updated', id }, c.req.header('x-client-id')),
   );
   return c.json(updated);
+});
+
+// DELETE /:id — hard-delete a goal. The UI's "Eliminar" has always called this;
+// without the route it 404'd, the client swallowed the error and the goal came
+// back on the next load. "Cerrar" (is_closed) stays the soft option.
+goals.delete('/:id', async (c) => {
+  const db = c.get('db');
+  const user = c.get('user');
+  const id = c.req.param('id');
+
+  const [existing] = await db.select().from(schema.weekGoals).where(eq(schema.weekGoals.id, id)).limit(1);
+  if (!existing || existing.team_id !== user.teamId) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  await db.delete(schema.weekGoals).where(eq(schema.weekGoals.id, id));
+
+  c.executionCtx.waitUntil(
+    publish(c.env, teamChannel(user.teamId), { type: 'goal.deleted', id }, c.req.header('x-client-id')),
+  );
+  return c.json({ ok: true });
 });
 
 export default goals;
