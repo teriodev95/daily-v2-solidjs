@@ -14,6 +14,9 @@ interface Props {
   entity: ShareableEntity;
   /** Optional extra context for the prompt (e.g. "Espacio: Daily Check" for wiki) */
   contextLabel?: string;
+  /** 32px en vez de 40px, para barras de escritorio donde convive con chips
+   *  de 28px. En móvil se deja el tamaño normal por el objetivo táctil. */
+  compact?: boolean;
 }
 
 type ToastKind = 'success' | 'error';
@@ -210,7 +213,9 @@ const CopyForAgentButton: Component<Props> = (props) => {
         aria-haspopup="menu"
         aria-expanded={open()}
         title="Compartir con agente"
-        class="inline-flex h-10 w-10 items-center justify-center rounded-xl text-base-content/62 bg-base-content/[0.04] hover:bg-base-content/[0.08] hover:text-base-content transition-[background-color,color,opacity] disabled:opacity-50 disabled:cursor-wait"
+        class={`inline-flex items-center justify-center text-base-content/62 bg-base-content/[0.04] hover:bg-base-content/[0.08] hover:text-base-content transition-[background-color,color,opacity] disabled:opacity-50 disabled:cursor-wait ${
+          props.compact ? 'h-8 w-8 rounded-lg' : 'h-10 w-10 rounded-xl'
+        }`}
       >
         <Show when={loading()} fallback={<Share2 size={17} strokeWidth={2.2} />}>
           <Loader2 size={17} class="animate-spin" />

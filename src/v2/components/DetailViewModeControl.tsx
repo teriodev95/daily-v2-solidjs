@@ -64,6 +64,9 @@ const DetailViewPreview: Component<{ mode: DetailViewMode; active: boolean }> = 
 interface Props {
   mode: DetailViewMode;
   onChange: (mode: DetailViewMode) => void;
+  /** 32px en vez de 40px, para barras de escritorio donde convive con chips
+   *  de 28px. En móvil se deja el tamaño normal por el objetivo táctil. */
+  compact?: boolean;
 }
 
 const DetailViewModeControl: Component<Props> = (props) => {
@@ -125,7 +128,9 @@ const DetailViewModeControl: Component<Props> = (props) => {
           e.stopPropagation();
           setOpen(true);
         }}
-        class="inline-flex h-10 w-10 items-center justify-center rounded-xl text-base-content/38 hover:bg-base-content/[0.055] hover:text-base-content/70 focus:outline-none focus-visible:ring-1 focus-visible:ring-ios-blue-500/35 transition-[background-color,color,opacity,box-shadow]"
+        class={`inline-flex items-center justify-center text-base-content/38 hover:bg-base-content/[0.055] hover:text-base-content/70 focus:outline-none focus-visible:ring-1 focus-visible:ring-ios-blue-500/35 transition-[background-color,color,opacity,box-shadow] ${
+          props.compact ? 'h-8 w-8 rounded-lg' : 'h-10 w-10 rounded-xl'
+        }`}
       >
         {(() => {
           const ViewIcon = currentOption().icon;

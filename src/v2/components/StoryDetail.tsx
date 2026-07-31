@@ -475,22 +475,17 @@ const StoryDetail: Component<Props> = (props) => {
     saveTimeRange(startTime(), value);
   };
 
-  // Compact label for the time-range chip in the header.
-  // Same suffix → "9 – 10 a.m."; crossing → "11 a.m. – 1 p.m."
+  // Etiqueta del chip de horario, en 24 h: "8:15–14:00", "9–10".
+  // Era el chip más ancho de la barra ("8:15 a.m.–2 p.m.") y el que disparaba
+  // el salto a una segunda fila en el caso común; en 24 h ocupa ~40% menos.
   const formatTimeChip = (start: string, end: string): string => {
-    const fmt = (hhmm: string): { num: string; sfx: 'a.m.' | 'p.m.' } => {
+    const fmt = (hhmm: string): string => {
       const [hStr, mStr] = hhmm.split(':');
       const h = Number(hStr);
       const m = Number(mStr);
-      const sfx = h < 12 ? 'a.m.' : 'p.m.';
-      let h12 = h % 12;
-      if (h12 === 0) h12 = 12;
-      const num = m === 0 ? `${h12}` : `${h12}:${String(m).padStart(2, '0')}`;
-      return { num, sfx };
+      return m === 0 ? `${h}` : `${h}:${String(m).padStart(2, '0')}`;
     };
-    const s = fmt(start);
-    const e = fmt(end);
-    return s.sfx === e.sfx ? `${s.num}–${e.num} ${s.sfx}` : `${s.num} ${s.sfx}–${e.num} ${e.sfx}`;
+    return `${fmt(start)}–${fmt(end)}`;
   };
 
   const detailOverlayClass = () => {
@@ -532,8 +527,16 @@ const StoryDetail: Component<Props> = (props) => {
       >
         {/* Unified property bar */}
         <div class="sticky top-0 bg-base-100/80 backdrop-blur-xl z-20 px-4 sm:px-6 py-3.5 border-b border-base-content/[0.04]">
-          <div class="flex items-center gap-y-2 gap-x-1.5">
-            <div class="flex items-center gap-y-2 gap-x-1.5 flex-1 flex-wrap min-w-0 [&>*]:shrink-0 [&_button]:whitespace-nowrap [&_span]:whitespace-nowrap">
+          {/* items-start: al envolver a dos filas las acciones siguen ancladas
+              a la primera, en vez de centrarse contra un bloque más alto. */}
+          <div class="flex items-start gap-y-2 gap-x-2">
+            {/* Los chips van en grupos (identidad · tiempo · personas) para que
+                al no caber salte un grupo completo y no un chip suelto. El
+                gap-x-3 entre grupos sustituye a los separadores, que al ser
+                hijos sueltos del wrap quedaban huérfanos al inicio de una fila. */}
+            <div class="flex items-center gap-y-2 gap-x-3 flex-1 flex-wrap min-w-0 [&>*]:shrink-0 [&_button]:whitespace-nowrap [&_span]:whitespace-nowrap">
+
+            <div class="flex items-center gap-x-1.5">
 
             {/* Project chip */}
             <div class="relative">
@@ -555,7 +558,9 @@ const StoryDetail: Component<Props> = (props) => {
               </button>
               <Show when={showProjectPicker()}>
                 <div class="fixed inset-0 z-20" onClick={() => setShowProjectPicker(false)} />
-                <div class="absolute top-[calc(100%+6px)] left-0 z-30 bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[200px] backdrop-blur-md">
+                {/* max-h + overscroll-contain: la lista scrollea sola y la rueda
+                    deja de encadenarse al detalle de la HU que hay detrás. */}
+                <div class="absolute top-[calc(100%+6px)] left-0 z-30 max-h-[min(340px,60vh)] overflow-y-auto overscroll-contain bg-base-100 rounded-2xl border border-base-content/[0.08] shadow-xl shadow-black/20 p-1.5 min-w-[200px] backdrop-blur-md">
                   <button
                     onClick={() => { setProjectId(''); setShowProjectPicker(false); saveImmediate({ project_id: null }); }}
                     class={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-all ${!projectId() ? 'bg-base-content/[0.06] text-base-content' : 'hover:bg-base-content/5 text-base-content/50'}`}
@@ -664,8 +669,10 @@ const StoryDetail: Component<Props> = (props) => {
               </Show>
             </div>
 
-            {/* Separator */}
-            <div class="w-px h-4 bg-base-content/[0.06] mx-0.5" />
+            </div>{/* fin grupo identidad */}
+
+            {/* Grupo tiempo: fecha · horario · estimación */}
+            <div class="flex items-center gap-x-1.5">
 
             {/* Date chip */}
             <div class="relative">
@@ -825,8 +832,10 @@ const StoryDetail: Component<Props> = (props) => {
               </Show>
             </div>
 
-            {/* Separator */}
-            <div class="w-px h-4 bg-base-content/[0.06] mx-0.5" />
+            </div>{/* fin grupo tiempo */}
+
+            {/* Grupo personas: asignado + añadir */}
+            <div class="flex items-center gap-x-1.5">
 
             {/* Assignees — primary + stacked extras + discrete add button */}
             <Show when={currentAssignee()} fallback={
@@ -875,9 +884,11 @@ const StoryDetail: Component<Props> = (props) => {
               </button>
             </Show>
 
+            </div>{/* fin grupo personas */}
+
             {/* Recurring badge */}
             <Show when={props.story.frequency}>
-              <div class="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/[0.08] text-purple-500/70">
+              <div class="flex items-center gap-1 h-7 px-2 rounded-lg bg-purple-500/[0.08] text-purple-500/70">
                 <RefreshCw size={10} />
                 <span class="text-[10px] font-bold">{frequencyLabel(props.story)}</span>
               </div>
@@ -885,8 +896,8 @@ const StoryDetail: Component<Props> = (props) => {
 
             </div>
 
-            {/* Actions — pinned to the right; never wrap, never scroll. */}
-            <div class="flex items-center gap-1.5 shrink-0 pl-1.5">
+            {/* Acciones — ancladas arriba a la derecha; nunca envuelven. */}
+            <div class="flex items-center gap-1 shrink-0 self-start">
               <PresenceAvatars scope={`story:${props.story.id}`} excludeSelf size="sm" max={3} showEditingPointer />
               <Show when={saveStatus() === 'saved' || saveStatus() === 'error'}>
                 <span class="flex items-center gap-1 transition-opacity">
@@ -902,6 +913,7 @@ const StoryDetail: Component<Props> = (props) => {
                 </span>
               </Show>
               <CopyForAgentButton
+                compact
                 entity={{
                   type: 'story',
                   id: props.story.id,
@@ -909,16 +921,16 @@ const StoryDetail: Component<Props> = (props) => {
                 }}
               />
               <Show when={!props.embedded}>
-                <DetailViewModeControl mode={activeViewMode()} onChange={setViewMode} />
+                <DetailViewModeControl compact mode={activeViewMode()} onChange={setViewMode} />
               </Show>
               <button
                 type="button"
                 onClick={() => props.onClose()}
-                class="inline-flex h-10 w-10 items-center justify-center rounded-xl text-base-content/45 hover:bg-base-content/[0.08] hover:text-base-content transition-colors"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-base-content/45 hover:bg-base-content/[0.08] hover:text-base-content transition-colors"
                 aria-label="Cerrar detalle"
                 title="Cerrar"
               >
-                <X size={18} class="transition-colors" />
+                <X size={16} class="transition-colors" />
               </button>
             </div>
           </div>
