@@ -1,7 +1,8 @@
 import { createMiddleware } from 'hono/factory';
 import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
-import { verifyJWT } from '../lib/crypto';
+import { createJWT, verifyJWT } from '../lib/crypto';
+import { SESSION_TTL_SECONDS, sessionCookie, shouldRenewSession } from '../lib/session';
 import * as schema from '../db/schema';
 
 export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Variables }>(
@@ -43,13 +44,22 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Varia
     const payload = await verifyJWT(match[1], c.env.JWT_SECRET);
     if (!payload) return c.json({ error: 'Unauthorized' }, 401);
 
-    c.set('user', {
+    const sessionUser = {
       userId: payload.userId as string,
       teamId: payload.teamId as string,
       role: payload.role as 'admin' | 'collaborator',
-    });
+    };
+    c.set('user', sessionUser);
 
     await next();
+
+    // Renovación deslizante: mientras la persona siga entrando, el token se
+    // reemite y la sesión nunca vence; si deja de entrar durante todo el TTL,
+    // caduca sola. Solo aplica al camino de cookie — un PAT sale antes.
+    if (shouldRenewSession(payload.iat)) {
+      const fresh = await createJWT(sessionUser, c.env.JWT_SECRET, SESSION_TTL_SECONDS);
+      c.header('Set-Cookie', sessionCookie(fresh, SESSION_TTL_SECONDS, c.req.url), { append: true });
+    }
   },
 );
 

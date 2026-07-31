@@ -3,15 +3,10 @@ import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import * as schema from '../db/schema';
 import { verifyPassword, createJWT } from '../lib/crypto';
+import { SESSION_TTL_SECONDS, sessionCookie } from '../lib/session';
 import { authMiddleware } from '../middleware/auth';
 
 const auth = new Hono<{ Bindings: Env; Variables: Variables }>();
-
-function sessionCookie(value: string, maxAge: number, reqUrl: string) {
-  const isHttps = new URL(reqUrl).protocol === 'https:';
-  const sameSite = isHttps ? 'SameSite=None; Secure' : 'SameSite=Lax';
-  return `session=${value}; HttpOnly; ${sameSite}; Path=/; Max-Age=${maxAge}`;
-}
 
 auth.post('/login', async (c) => {
   const { email, password } = await c.req.json<{ email: string; password: string }>();
@@ -27,10 +22,11 @@ auth.post('/login', async (c) => {
   const token = await createJWT(
     { userId: user.id, teamId: user.team_id, role: user.role },
     c.env.JWT_SECRET,
+    SESSION_TTL_SECONDS,
   );
 
   const sessionId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
   await db.insert(schema.sessions).values({
     id: sessionId,
     user_id: user.id,
@@ -40,7 +36,7 @@ auth.post('/login', async (c) => {
 
   c.header(
     'Set-Cookie',
-    sessionCookie(token, 604800, c.req.url),
+    sessionCookie(token, SESSION_TTL_SECONDS, c.req.url),
   );
 
   const { password: _, ...safeUser } = user;
