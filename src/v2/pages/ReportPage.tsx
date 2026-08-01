@@ -1470,6 +1470,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
           onClose={() => { setShowShareModal(false); setShareAutoCopy(false); }}
           completedYesterday={completedYesterday()}
           completedToday={completedToday()}
+          previousLabel={yesterdayRange().isWeekend ? 'fin de semana' : 'ayer'}
           activeStories={activeStories()}
           backlogStories={[]}
           goals={myGoals()}

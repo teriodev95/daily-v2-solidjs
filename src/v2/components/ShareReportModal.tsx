@@ -13,6 +13,7 @@ interface ShareReportModalProps {
   assignments: Assignment[];
   report: DailyReport | null | undefined;
   learnings?: { title: string; status: string }[];
+  previousLabel?: 'ayer' | 'fin de semana';
   userName: string;
   autoCopy?: boolean;
 }
@@ -30,6 +31,7 @@ const ShareReportModal: Component<ShareReportModalProps> = (props) => {
       assignments: props.assignments,
       report: props.report,
       learnings: props.learnings ?? [],
+      previousLabel: props.previousLabel,
     });
   });
 

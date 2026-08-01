@@ -11,6 +11,8 @@ export interface ReportSharePayload {
   assignments: Assignment[];
   report: DailyReport | null | undefined;
   learnings?: { title: string; status: string }[];
+  /** "ayer" o "fin de semana" — los lunes la ventana anterior es el finde. */
+  previousLabel?: 'ayer' | 'fin de semana';
 }
 
 const getWeekNumber = () => {
@@ -53,18 +55,27 @@ export const buildTelegramReportText = (payload: ReportSharePayload) => {
   lines.push('═══════════════════════════');
   lines.push('');
 
-  lines.push('**✅ ¿QUÉ LOGRÉ AYER?**');
-  if (payload.completedYesterday.length > 0) {
-    payload.completedYesterday.forEach((story) => {
-      lines.push(`▪️ ${story.title.toUpperCase()}`);
+  // Logros = lo terminado hoy + lo del día anterior, igual que la columna
+  // "Trabajo completado" del tablero. Antes lo completado HOY se listaba en
+  // "¿en qué me enfocaré hoy?", así que una tarea ya terminada se anunciaba
+  // como pendiente y no figuraba como logro en ninguna parte.
+  const previousLabel = payload.previousLabel ?? 'ayer';
+  lines.push('**✅ ¿QUÉ LOGRÉ?**');
+  const doneItems = uniqueStories([...payload.completedToday, ...payload.completedYesterday]);
+  if (doneItems.length > 0) {
+    const yesterdayIds = new Set(payload.completedYesterday.map((story) => story.id));
+    doneItems.forEach((story) => {
+      const suffix = yesterdayIds.has(story.id) ? ` _(${previousLabel})_` : '';
+      lines.push(`▪️ ${story.title.toUpperCase()}${suffix}`);
     });
   } else {
     lines.push('▫️ Sin logros registrados');
   }
   lines.push('');
 
+  // Solo lo que sigue pendiente: por hacer y en progreso.
   lines.push('**🎯 ¿EN QUÉ ME ENFOCARÉ HOY?**');
-  const todayItems = uniqueStories([...payload.completedToday, ...payload.activeStories]);
+  const todayItems = uniqueStories(payload.activeStories);
   if (todayItems.length > 0) {
     todayItems.forEach((story) => {
       lines.push(`▪️ ${story.title.toUpperCase()}`);

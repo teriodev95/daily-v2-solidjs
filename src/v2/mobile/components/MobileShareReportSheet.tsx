@@ -12,6 +12,7 @@ interface MobileShareReportSheetProps {
   goals: WeekGoal[];
   assignments: Assignment[];
   report: DailyReport | null | undefined;
+  previousLabel?: 'ayer' | 'fin de semana';
   userName: string;
 }
 
@@ -27,6 +28,7 @@ const MobileShareReportSheet: Component<MobileShareReportSheetProps> = (props) =
       goals: props.goals,
       assignments: props.assignments,
       report: props.report,
+      previousLabel: props.previousLabel,
     }),
   );
 
