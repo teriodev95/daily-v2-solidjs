@@ -121,6 +121,41 @@ const AppShell: Component = () => {
     return t;
   };
 
+  // El reporte vive en el chip del día junto al calendario; el Dock arranca
+  // con el resto de secciones.
+  const dockTabs = () => tabs().filter((t) => t.id !== 'report');
+
+  // Cristal compartido por las dos superficies del Dock, para que se lean como
+  // piezas hermanas y no como dos estilos distintos.
+  const dockSurfaceClass =
+    'relative bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-[32px] border border-base-content/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)] p-1.5 flex items-end gap-1.5';
+
+  // Un botón del Dock (icono + punto de activo + tooltip). El markup estaba
+  // repetido para las pestañas y para el calendario.
+  const DockTab = (p: { id: Tab; label: string; icon: any; shortcut: string }) => {
+    const active = () => activeTab() === p.id;
+    return (
+      <DockIcon
+        onClick={() => switchTab(p.id)}
+        class="relative flex flex-col items-center justify-center shrink-0 rounded-[26px] transition-colors duration-300 active:scale-95 group cursor-pointer"
+      >
+        <div class={`absolute inset-0 rounded-[26px] transition-all duration-300 ${active() ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
+
+        <div class={`relative z-10 transition-colors duration-200 flex items-center justify-center ${active() ? 'text-base-content' : 'text-base-content/50 group-hover:text-base-content/80'}`}>
+          <p.icon size={22} strokeWidth={active() ? 2.5 : 2} />
+        </div>
+
+        <div class={`absolute bottom-1 w-1 h-1 rounded-full transition-all duration-300 ease-out ${active() ? 'bg-ios-blue-500 scale-100 opacity-100' : 'bg-base-content/30 scale-50 opacity-0 group-hover:opacity-40'}`} />
+
+        <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
+          {p.label}
+          <kbd class="ml-2 opacity-60 font-mono text-[9px]">{p.shortcut}</kbd>
+          <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
+        </div>
+      </DockIcon>
+    );
+  };
+
   // Mobile dock: Tasks first (leftmost), then the rest
   const mobileTabs = () => {
     const t: { id: Tab; label: string; icon: any; key: string }[] = [
@@ -239,6 +274,10 @@ const AppShell: Component = () => {
           DESKTOP macOS Style Dock
           ========================================= */}
       <div class="hidden sm:flex fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 justify-center pointer-events-none px-0">
+        {/* El nav ya no pinta la píldora: es solo el riel que separa las dos
+            superficies. Conserva rounded-[32px] porque el resplandor de éxito
+            que inyecta interactionMotion usa borderRadius:inherit y sin eso
+            quedaría rectangular al no haber ya una píldora que lo recorte. */}
         <Dock
           magnification={65}
           distance={140}
@@ -246,70 +285,40 @@ const AppShell: Component = () => {
             unmountDockMotion?.();
             unmountDockMotion = interactionMotion.mountDock(element);
           }}
-          class="relative overflow-hidden bg-base-200/75 backdrop-blur-[32px] saturate-[1.5] rounded-[32px] border border-base-content/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)] pointer-events-auto p-1.5 flex items-end gap-1.5"
+          class="pointer-events-auto flex items-end gap-2.5 rounded-[32px]"
         >
-          <For each={tabs()}>
-            {(tab) => (
-              <DockIcon
-                onClick={() => switchTab(tab.id)}
-                class="relative flex flex-col items-center justify-center shrink-0 rounded-[26px] transition-colors duration-300 active:scale-95 group cursor-pointer"
-              >
-                {/* hover/active background */}
-                <div class={`absolute inset-0 rounded-[26px] transition-all duration-300 ${activeTab() === tab.id ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
+          {/* Dos superficies separadas (estilo tab bar de iOS): el chip del día
+              y el Dock. Cada una es su propio cristal — el gap-2.5 del nav es
+              el aire real entre ambas, no una división pintada dentro de una
+              sola píldora. */}
+          <div class={dockSurfaceClass}>
+            <DockTab id="report" label="Reporte" icon={ClipboardList} shortcut="R" />
+            <DockTab id="calendar" label="Calendario" icon={CalendarDays} shortcut="C" />
+          </div>
 
-                {/* icon container */}
-                <div class={`relative z-10 transition-colors duration-200 flex items-center justify-center ${activeTab() === tab.id ? 'text-base-content' : 'text-base-content/50 group-hover:text-base-content/80'}`}>
-                  <tab.icon size={22} strokeWidth={activeTab() === tab.id ? 2.5 : 2} />
-                </div>
+          <div class={dockSurfaceClass}>
+            <For each={dockTabs()}>
+              {(tab) => (
+                <DockTab id={tab.id} label={tab.label} icon={tab.icon} shortcut={tab.key} />
+              )}
+            </For>
 
-                {/* Active indicator dot */}
-                <div class={`absolute bottom-1 w-1 h-1 rounded-full transition-all duration-300 ease-out ${activeTab() === tab.id ? 'bg-ios-blue-500 scale-100 opacity-100' : 'bg-base-content/30 scale-50 opacity-0 group-hover:opacity-40'}`} />
-
-                {/* macOS style tooltip label */}
-                <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
-                  {tab.label}
-                  <kbd class="ml-2 opacity-60 font-mono text-[9px]">{tab.key}</kbd>
-                  <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
-                </div>
-              </DockIcon>
-            )}
-          </For>
-
-          {/* Separator */}
-          <div class="w-px h-6 bg-base-content/[0.1] mx-1 shrink-0 rounded-full self-center" />
-
-          {/* Calendar */}
-          <DockIcon
-            onClick={() => switchTab('calendar')}
-            class="relative flex flex-col items-center justify-center shrink-0 rounded-[26px] transition-colors duration-300 active:scale-95 group cursor-pointer"
-          >
-            <div class={`absolute inset-0 rounded-[26px] transition-all duration-300 ${activeTab() === 'calendar' ? 'bg-base-content/5' : 'bg-transparent group-hover:bg-base-content/5'}`} />
-            <div class={`relative z-10 transition-colors duration-200 flex items-center justify-center ${activeTab() === 'calendar' ? 'text-base-content' : 'text-base-content/50 group-hover:text-base-content/80'}`}>
-              <CalendarDays size={21} strokeWidth={activeTab() === 'calendar' ? 2.5 : 2} />
-            </div>
-            <div class={`absolute bottom-1 w-1 h-1 rounded-full transition-all duration-300 ease-out ${activeTab() === 'calendar' ? 'bg-ios-blue-500 scale-100 opacity-100' : 'bg-base-content/30 scale-50 opacity-0 group-hover:opacity-40'}`} />
-            <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
-              Calendario
-              <kbd class="ml-2 opacity-60 font-mono text-[9px]">C</kbd>
-              <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
-            </div>
-          </DockIcon>
-
-          {/* Create FAB */}
-          <DockIcon
-            onClick={() => openCreateModal()}
-            class="relative flex flex-col items-center justify-center shrink-0 rounded-[26px] transition-colors duration-300 active:scale-95 group cursor-pointer"
-          >
-            <div class="absolute inset-0 rounded-[26px] transition-all duration-300 bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20" />
-            <div class="relative z-10 text-ios-blue-500 transition-colors duration-200 flex items-center justify-center">
-              <Plus size={22} strokeWidth={2.5} />
-            </div>
-            <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
-              Nueva HU
-              <kbd class="ml-2 opacity-60 font-mono text-[9px]">N</kbd>
-              <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
-            </div>
-          </DockIcon>
+            {/* Create FAB */}
+            <DockIcon
+              onClick={() => openCreateModal()}
+              class="relative flex flex-col items-center justify-center shrink-0 rounded-[26px] transition-colors duration-300 active:scale-95 group cursor-pointer"
+            >
+              <div class="absolute inset-0 rounded-[26px] transition-all duration-300 bg-ios-blue-500/10 group-hover:bg-ios-blue-500/20" />
+              <div class="relative z-10 text-ios-blue-500 transition-colors duration-200 flex items-center justify-center">
+                <Plus size={22} strokeWidth={2.5} />
+              </div>
+              <div class="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none flex px-2.5 py-1 bg-base-content/90 dark:bg-base-200/90 text-base-100 dark:text-base-content text-[11px] font-medium rounded-lg shadow-xl translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
+                Nueva HU
+                <kbd class="ml-2 opacity-60 font-mono text-[9px]">N</kbd>
+                <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-base-content/90 dark:bg-base-200/90 rotate-45 border-b border-r border-base-content/[0.08]" />
+              </div>
+            </DockIcon>
+          </div>
         </Dock>
       </div>
 
