@@ -1,4 +1,4 @@
-import { createSignal, createResource, createEffect, createMemo, onCleanup, onMount, For, Show, type Component } from 'solid-js';
+import { createSignal, createResource, createEffect, createMemo, onCleanup, onMount, For, Show, type Component, type JSX } from 'solid-js';
 import type { Story, StoryStatus, Assignment, WeekGoal, StoryCompletion, Learning } from '../types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -697,7 +697,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   // Pista contextual de una columna. Tooltip propio y no el title nativo: aquel
   // tarda ~1s en aparecer, no se puede estilar y en táctil no existe. Se abre al
   // pasar el cursor y también al hacer clic o enfocar con teclado.
-  const InfoHint = (p: { text: string; label: string; icon?: any }) => {
+  const InfoHint = (p: { children: JSX.Element; label: string; icon?: any }) => {
     const [open, setOpen] = createSignal(false);
     const Icon = p.icon ?? Info;
     return (
@@ -723,9 +723,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
         <Show when={open()}>
           <div
             role="tooltip"
-            class="absolute right-0 top-[calc(100%+8px)] z-40 w-[252px] rounded-lg bg-base-content/92 dark:bg-base-200/95 px-3 py-2 text-[11px] font-medium leading-relaxed text-base-100 dark:text-base-content shadow-xl shadow-black/20 border border-base-content/[0.08]"
+            class="absolute right-0 top-[calc(100%+8px)] z-40 w-[262px] rounded-lg bg-base-content/92 dark:bg-base-200/95 px-3 py-2.5 text-[11px] font-medium leading-relaxed text-base-100 dark:text-base-content shadow-xl shadow-black/20 border border-base-content/[0.08]"
           >
-            {p.text}
+            {p.children}
             <div class="absolute -top-1 right-3.5 h-2 w-2 rotate-45 bg-base-content/92 dark:bg-base-200/95 border-l border-t border-base-content/[0.08]" />
           </div>
         </Show>
@@ -997,10 +997,22 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   <h2 class="text-sm font-bold">Trabajo completado</h2>
                   <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Tareas finalizadas</p>
                 </div>
-                <InfoHint
-                  label="Cuánto duran aquí las tareas"
-                  text="Muestra lo que completaste hoy y ayer; los lunes también el fin de semana. Después desaparece de aquí, pero la tarea se conserva y la encuentras en el buscador y en el tablero."
-                />
+                <InfoHint label="Cuánto duran aquí las tareas">
+                  <p class="font-semibold">Qué se ve aquí</p>
+                  <div class="mt-1.5 space-y-1">
+                    <div class="flex gap-2">
+                      <span class="w-[76px] shrink-0 opacity-60">Mar a dom</span>
+                      <span>hoy y el día anterior</span>
+                    </div>
+                    <div class="flex gap-2">
+                      <span class="w-[76px] shrink-0 opacity-60">Lunes</span>
+                      <span>hoy, sábado y domingo</span>
+                    </div>
+                  </div>
+                  <p class="mt-2 opacity-65">
+                    Después sale de esta lista. La tarea no se borra: sigue en el buscador y el tablero.
+                  </p>
+                </InfoHint>
               </div>
               <div class="space-y-2">
                 {/* Today's completions */}
@@ -1092,11 +1104,11 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   <h2 class="text-sm font-bold">Trabajo activo</h2>
                   <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Por hacer y en progreso</p>
                 </div>
-                <InfoHint
-                  icon={AlertTriangle}
-                  label="Qué incluye el trabajo activo"
-                  text="Incluye tareas programadas o vencidas. Se quedan aquí hasta que las completes."
-                />
+                <InfoHint icon={AlertTriangle} label="Qué incluye el trabajo activo">
+                  <p class="font-semibold">Qué se ve aquí</p>
+                  <p class="mt-1.5">Tareas por hacer y en progreso, incluidas las programadas y las vencidas.</p>
+                  <p class="mt-2 opacity-65">Se quedan aquí hasta que las completes.</p>
+                </InfoHint>
               </div>
               <div class="space-y-2">
                 <For each={activeStories()}>
