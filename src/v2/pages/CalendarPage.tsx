@@ -228,14 +228,25 @@ const CalendarPage: Component<Props> = (props) => {
   const auth = useAuth();
   const data = useData();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const currentWeekStart = buildWeek(today)[0];
+  // La página no se desmonta al cambiar de pestaña (queda con display:none), así
+  // que un `today` constante se congelaría al cargar la app: pasada la
+  // medianoche el marcador de hoy y el botón "Hoy" apuntarían al día anterior.
+  // Se deriva del tick de un minuto que ya alimenta la línea de hora actual.
+  const [nowTick, setNowTick] = createSignal(Date.now());
+  const today = createMemo(() => {
+    const d = new Date(nowTick());
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+  const currentWeekStart = createMemo(() => buildWeek(today())[0]);
 
-  // Persisted calendar state (last view, last navigated date, last user filter).
-  // Versioned key so a shape change in the future doesn't break old caches.
+  // Estado persistido del calendario: la vista y el filtro de personas, no la
+  // fecha. Antes también se guardaba baseDate, así que al volver días después
+  // abría en la semana vieja donde te habías quedado; ahora siempre ancla en
+  // hoy, como Google/Apple Calendar, y solo recuerda cómo prefieres verlo.
+  // Clave versionada para que un cambio de forma no rompa cachés previas.
   const CALENDAR_STATE_KEY = 'dc-calendar-state-v1';
-  type StoredState = { view?: 'day' | 'week' | 'month'; baseDate?: string; selectedUserIds?: string[] };
+  type StoredState = { view?: 'day' | 'week' | 'month'; selectedUserIds?: string[] };
   const readStoredState = (): StoredState | null => {
     try {
       const raw = localStorage.getItem(CALENDAR_STATE_KEY);
@@ -245,10 +256,8 @@ const CalendarPage: Component<Props> = (props) => {
   const stored = readStoredState();
 
   const [view, setView] = createSignal<'day' | 'week' | 'month'>(stored?.view ?? 'month');
-  const [baseDate, setBaseDate] = createSignal(
-    stored?.baseDate ? new Date(stored.baseDate) : today,
-  );
-  const [selectedDay, setSelectedDay] = createSignal<Date>(today);
+  const [baseDate, setBaseDate] = createSignal(today());
+  const [selectedDay, setSelectedDay] = createSignal<Date>(today());
   const [showDayModal, setShowDayModal] = createSignal(false);
   const [selectedStoryForDetail, setSelectedStoryForDetail] = createSignal<Story | null>(null);
 
@@ -265,14 +274,27 @@ const CalendarPage: Component<Props> = (props) => {
     }
   });
 
-  // Persist view/date/filter on any change. Cheap (single localStorage write per tick).
+  // Persiste vista y filtro en cada cambio (una escritura por tick).
   createEffect(() => {
     const state: StoredState = {
       view: view(),
-      baseDate: baseDate().toISOString(),
       selectedUserIds: selectedUserIds(),
     };
     try { localStorage.setItem(CALENDAR_STATE_KEY, JSON.stringify(state)); } catch {}
+  });
+
+  // Como la vista queda montada, abrir el calendario al día siguiente mostraría
+  // la fecha donde se quedó ayer. Al volver a la pestaña se reancla en hoy solo
+  // si ya cambió el día: dentro de la misma jornada se respeta hacia dónde
+  // navegaste.
+  let lastSeenDay = today().getTime();
+  createEffect(() => {
+    if (activeTab() !== 'calendar') return;
+    const currentDay = today().getTime();
+    if (currentDay === lastSeenDay) return;
+    lastSeenDay = currentDay;
+    setBaseDate(today());
+    setSelectedDay(today());
   });
 
   const [stories, { mutate: mutateStories, refetch: refetchStories }] = createResource(
@@ -351,7 +373,6 @@ const CalendarPage: Component<Props> = (props) => {
 
   // Now indicator tick: re-render minute-by-minute when day/week view active so the red
   // "current time" line stays accurate. Keeps things simple — just bumps a signal.
-  const [nowTick, setNowTick] = createSignal(Date.now());
   onMount(() => {
     const id = window.setInterval(() => setNowTick(Date.now()), 60_000);
     onCleanup(() => window.clearInterval(id));
@@ -416,8 +437,8 @@ const CalendarPage: Component<Props> = (props) => {
   };
 
   const goToday = () => {
-    setBaseDate(today);
-    setSelectedDay(today);
+    setBaseDate(today());
+    setSelectedDay(today());
   };
 
   const toggleCompletion = async (storyId: string, dateKey: string, currentlyCompleted: boolean) => {
@@ -1051,7 +1072,7 @@ const CalendarPage: Component<Props> = (props) => {
         <div class={`grid flex-1 ${view() === 'month' ? 'auto-rows-fr' : 'min-h-[160px]'}`}>
           <For each={visibleWeeks()}>
             {(week) => {
-              const isCurrentWeek = () => isSameDay(week[0], currentWeekStart);
+              const isCurrentWeek = () => isSameDay(week[0], currentWeekStart());
               return (
                 <div class="grid min-h-0 grid-cols-[38px_repeat(7,minmax(0,1fr))] sm:grid-cols-[46px_repeat(7,minmax(0,1fr))]">
                   <div class="flex items-start justify-center border-r border-b border-base-content/[0.04] bg-base-content/[0.012] px-1 py-2">
@@ -1068,7 +1089,7 @@ const CalendarPage: Component<Props> = (props) => {
                     const dateKey = toLocalDateStr(d);
                     const isCurrentMonth = () => d.getMonth() === baseDate().getMonth();
                     const items = () => itemsByDate().get(dateKey) ?? [];
-                    const isToday = isSameDay(d, today);
+                    const isToday = isSameDay(d, today());
                     const isSelected = () => isSameDay(d, selectedDay());
 
                     const isDropHover = () => dragHoverKey() === dateKey;
@@ -1258,7 +1279,7 @@ const CalendarPage: Component<Props> = (props) => {
                 </div>
                 <For each={days()}>
                   {(d) => {
-                    const isToday = isSameDay(d, today);
+                    const isToday = isSameDay(d, today());
                     const weekday = DAY_NAMES_SHORT[(d.getDay() + 6) % 7];
                     return (
                       <button
@@ -1377,7 +1398,7 @@ const CalendarPage: Component<Props> = (props) => {
                   <For each={days()}>
                     {(d) => {
                       const key = toLocalDateStr(d);
-                      const isToday = isSameDay(d, today);
+                      const isToday = isSameDay(d, today());
                       const timed = () => dayItems().get(key)?.timed ?? [];
                       const stackDepth = createMemo(() => computeStackDepth(timed()));
                       const isDropHover = () => dragHoverKey() === key;
