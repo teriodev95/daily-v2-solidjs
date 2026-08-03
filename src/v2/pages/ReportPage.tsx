@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { useData } from '../lib/data';
 import { useOnceReady } from '../lib/onceReady';
 import {
-  CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle,
+  CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle, Info,
   Plus, Target, RotateCcw, Check, CalendarDays,
   Eye, Trash2, ArrowRightCircle, Flag, XCircle, RefreshCw, Archive, Send, Search, ClipboardList,
   ExternalLink, Clipboard, EyeOff, Inbox, PlayCircle, CheckCircle2
@@ -954,10 +954,16 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                 <div class="w-9 h-9 rounded-full bg-ios-green-500/10 flex items-center justify-center">
                   <CheckCircle size={18} class="text-ios-green-500" />
                 </div>
-                <div>
+                <div class="flex-1">
                   <h2 class="text-sm font-bold">Trabajo completado</h2>
                   <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Tareas finalizadas</p>
                 </div>
+                <span
+                  class="text-base-content/15 hover:text-base-content/40 transition-colors cursor-help"
+                  title="Muestra lo que completaste hoy y ayer; los lunes también el fin de semana. Después desaparece de aquí, pero la tarea se conserva y la encuentras en el buscador y en el tablero."
+                >
+                  <Info size={14} />
+                </span>
               </div>
               <div class="space-y-2">
                 {/* Today's completions */}
