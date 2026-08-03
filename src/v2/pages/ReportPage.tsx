@@ -694,6 +694,45 @@ const ReportPage: Component<ReportPageProps> = (props) => {
   };
 
   // Inline goal add
+  // Pista contextual de una columna. Tooltip propio y no el title nativo: aquel
+  // tarda ~1s en aparecer, no se puede estilar y en táctil no existe. Se abre al
+  // pasar el cursor y también al hacer clic o enfocar con teclado.
+  const InfoHint = (p: { text: string; label: string; icon?: any }) => {
+    const [open, setOpen] = createSignal(false);
+    const Icon = p.icon ?? Info;
+    return (
+      <div
+        class="relative shrink-0"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          aria-label={p.label}
+          class={`flex items-center justify-center rounded-full p-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30 ${
+            open()
+              ? 'text-base-content/55 bg-base-content/[0.06]'
+              : 'text-base-content/15 hover:text-base-content/45'
+          }`}
+        >
+          <Icon size={14} />
+        </button>
+        <Show when={open()}>
+          <div
+            role="tooltip"
+            class="absolute right-0 top-[calc(100%+8px)] z-40 w-[252px] rounded-lg bg-base-content/92 dark:bg-base-200/95 px-3 py-2 text-[11px] font-medium leading-relaxed text-base-100 dark:text-base-content shadow-xl shadow-black/20 border border-base-content/[0.08]"
+          >
+            {p.text}
+            <div class="absolute -top-1 right-3.5 h-2 w-2 rotate-45 bg-base-content/92 dark:bg-base-200/95 border-l border-t border-base-content/[0.08]" />
+          </div>
+        </Show>
+      </div>
+    );
+  };
+
   const GoalInlineAdd = () => {
     const [editing, setEditing] = createSignal(false);
     const [value, setValue] = createSignal('');
@@ -958,12 +997,10 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   <h2 class="text-sm font-bold">Trabajo completado</h2>
                   <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Tareas finalizadas</p>
                 </div>
-                <span
-                  class="text-base-content/15 hover:text-base-content/40 transition-colors cursor-help"
-                  title="Muestra lo que completaste hoy y ayer; los lunes también el fin de semana. Después desaparece de aquí, pero la tarea se conserva y la encuentras en el buscador y en el tablero."
-                >
-                  <Info size={14} />
-                </span>
+                <InfoHint
+                  label="Cuánto duran aquí las tareas"
+                  text="Muestra lo que completaste hoy y ayer; los lunes también el fin de semana. Después desaparece de aquí, pero la tarea se conserva y la encuentras en el buscador y en el tablero."
+                />
               </div>
               <div class="space-y-2">
                 {/* Today's completions */}
@@ -1055,9 +1092,11 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   <h2 class="text-sm font-bold">Trabajo activo</h2>
                   <p class="text-[10px] font-semibold uppercase tracking-widest text-base-content/25">Por hacer y en progreso</p>
                 </div>
-                <span class="text-base-content/15 hover:text-base-content/40 transition-colors cursor-help" title="Incluye tareas programadas o vencidas. Se quedan aquí hasta completarlas.">
-                  <AlertTriangle size={14} />
-                </span>
+                <InfoHint
+                  icon={AlertTriangle}
+                  label="Qué incluye el trabajo activo"
+                  text="Incluye tareas programadas o vencidas. Se quedan aquí hasta que las completes."
+                />
               </div>
               <div class="space-y-2">
                 <For each={activeStories()}>
