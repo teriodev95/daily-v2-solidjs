@@ -6,7 +6,7 @@ import { useData } from '../lib/data';
 import { useOnceReady } from '../lib/onceReady';
 import {
   CheckCircle, Circle, ArrowRight, BookOpen, AlertTriangle, Info,
-  Plus, Target, RotateCcw, Check, CalendarDays,
+  Plus, Target, RotateCcw, Check, CalendarDays, Play,
   Eye, Trash2, ArrowRightCircle, Flag, XCircle, RefreshCw, Archive, Send, Search, ClipboardList,
   ExternalLink, Clipboard, EyeOff, Inbox, PlayCircle, CheckCircle2
 } from 'lucide-solid';
@@ -28,6 +28,8 @@ interface ReportPageProps {
   onStoryDeleted?: () => void;
   shareRequested?: number; // increment to trigger share modal with auto-copy
   hiddenRequested?: number; // increment to open hidden stories overlay
+  /** Abre el modo foco. Vive en AppV2 para sobrevivir al cambio de pestaña. */
+  onFocusStory?: (story: Story) => void;
 }
 
 const ReportPage: Component<ReportPageProps> = (props) => {
@@ -1188,6 +1190,18 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-ios-blue-500 opacity-50" />
                             <span class="relative inline-flex rounded-full h-2 w-2 bg-ios-blue-500" />
                           </span>
+                        </Show>
+                        {/* Modo foco — aparece al pasar el cursor para no competir
+                            con el contenido de la tarjeta */}
+                        <Show when={props.onFocusStory}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); props.onFocusStory?.(story); }}
+                            class="shrink-0 rounded-md p-1.5 text-base-content/15 opacity-0 transition-all hover:bg-ios-blue-500/10 hover:text-ios-blue-500 focus-visible:opacity-100 group-hover:opacity-100"
+                            title="Enfocar esta tarea"
+                            aria-label={`Enfocar: ${story.title}`}
+                          >
+                            <Play size={14} />
+                          </button>
                         </Show>
                       </div>
                     );

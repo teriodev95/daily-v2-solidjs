@@ -28,7 +28,10 @@ import { usePresence } from './lib/presence';
 import MobileShell from './mobile/shell/MobileShell';
 import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
-import { interactionMotion } from './lib/interactionMotion';
+import { interactionMotion, playInteractionSuccess } from './lib/interactionMotion';
+import FocusMode from './components/FocusMode';
+import { clearFocusSession, readFocusSession, startFocusSession } from './lib/focusSession';
+import { api } from './lib/api';
 import BillingPortal from './features/billing/BillingPortal';
 
 type Tab = 'report' | 'team' | 'projects' | 'admin' | 'tasks' | 'wiki' | 'calendar' | 'tokens' | 'alma';
@@ -92,6 +95,55 @@ const AppShell: Component = () => {
     setCreateInitialDate(initialDate);
     setShowCreateModal(true);
   };
+
+  // ─── Modo foco ───
+  // El estado vive aquí y no en ReportPage para que la sesión sobreviva a los
+  // cambios de pestaña. Solo se guarda el id + el inicio (localStorage): el
+  // tiempo es informativo y no se persiste en la HU.
+  const [focus, setFocus] = createSignal<{ story: Story; startedAt: number } | null>(null);
+
+  const startFocus = (story: Story) => {
+    const session = startFocusSession(story.id);
+    setFocus({ story, startedAt: session.startedAt });
+    // Entrar a foco es empezar a trabajar: el equipo lo ve en el tablero.
+    if (story.status !== 'in_progress') {
+      api.stories.update(story.id, { status: 'in_progress' })
+        .then(() => setRefreshKey((k) => k + 1))
+        .catch(() => { /* el foco sigue sirviendo aunque falle el estado */ });
+    }
+  };
+
+  const exitFocus = () => {
+    clearFocusSession();
+    setFocus(null);
+  };
+
+  const completeFocus = () => {
+    const current = focus();
+    if (!current) return;
+    exitFocus();
+    playInteractionSuccess({ source: 'report', tone: 'success' });
+    api.stories.update(current.story.id, { status: 'done', completed_at: new Date().toISOString() })
+      .catch(() => { /* al refrescar se ve el estado real */ })
+      .finally(() => setRefreshKey((k) => k + 1));
+  };
+
+  // Restaura la sesión tras recargar (p. ej. si la PWA se actualiza mientras
+  // trabajas). Si la tarea ya no aplica, se descarta la sesión en silencio.
+  onMount(async () => {
+    const session = readFocusSession();
+    if (!session) return;
+    try {
+      const story = await api.stories.get(session.storyId) as Story;
+      if (!story || story.status === 'done' || story.is_active === false) {
+        clearFocusSession();
+        return;
+      }
+      setFocus({ story, startedAt: session.startedAt });
+    } catch {
+      clearFocusSession();
+    }
+  });
 
   const handleStoryCreated = () => {
     setRefreshKey(k => k + 1);
@@ -237,7 +289,7 @@ const AppShell: Component = () => {
       {/* Content — all pages mounted, toggle visibility to avoid refetch flicker */}
       <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
         <div class={activeTab() === 'report' ? 'stagger-in' : ''} style={{ display: activeTab() === 'report' ? undefined : 'none' }}>
-          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} shareRequested={shareRequested()} hiddenRequested={hiddenRequested()} />
+          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} shareRequested={shareRequested()} hiddenRequested={hiddenRequested()} onFocusStory={startFocus} />
         </div>
         <div class={activeTab() === 'team' ? 'stagger-in' : ''} style={{ display: activeTab() === 'team' ? undefined : 'none' }}>
           <TeamPage />
@@ -418,6 +470,18 @@ const AppShell: Component = () => {
 
       {/* Online teammates pill (bottom-right, desktop only) */}
       <OnlineUsers />
+
+      {/* Modo foco — tapa todo lo demás a propósito */}
+      <Show when={focus()}>
+        {(session) => (
+          <FocusMode
+            story={session().story}
+            startedAt={session().startedAt}
+            onExit={exitFocus}
+            onComplete={completeFocus}
+          />
+        )}
+      </Show>
     </div>
   );
 };
