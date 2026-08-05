@@ -11,6 +11,7 @@ import {
   ExternalLink, Clipboard, EyeOff, Inbox, PlayCircle, CheckCircle2
 } from 'lucide-solid';
 import { isRecurring, frequencyLabel } from '../lib/recurrence';
+import { Motion } from 'solid-motionone';
 import StoryDetail from '../components/StoryDetail';
 import LearningDetail from '../components/LearningDetail';
 import ShareReportModal from '../components/ShareReportModal';
@@ -21,6 +22,34 @@ import { playInteractionSuccess } from '../lib/interactionMotion';
 import { getReportDateWindow, getReportStoryDateKey, isRecurringReportCompletion, selectDailyReportStories } from '../lib/reportSelectors';
 import { activeTab } from '../lib/activeTab';
 import { useRealtimeRefetch } from '../lib/realtime';
+
+// ─── Movimiento de las tarjetas entre columnas ───
+// "Completado" está a la izquierda y "activo" a la derecha, así que cada
+// tarjeta entra desde el lado de su columna de origen: el gesto se lee como un
+// traslado y no como "aparece de la nada".
+//
+// Solo se anima la entrada. El <Presence> de solid-motionone 1.0.4 es un
+// switch de un único hijo (usa resolveFirst): al envolver un <For> se queda
+// con el primer elemento y el resto de la lista desaparece. Animar la salida
+// de una lista exige createListTransition, y no compensa la complejidad.
+// Motion One no atiende `prefers-reduced-motion` por su cuenta: quien lo pida
+// recibe un fundido casi instantáneo, sin desplazamiento ni rebote.
+const reduceMotion =
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+
+const SETTLED = { opacity: 1, x: 0, scale: 1 };
+const shift = (x: number) => (reduceMotion ? { opacity: 0 } : { opacity: 0, x, scale: 0.97 });
+const ENTER_FROM_ACTIVE = shift(14);
+const ENTER_FROM_COMPLETED = shift(-14);
+
+// Curva neutra para el trabajo pendiente.
+const GLIDE = reduceMotion
+  ? { duration: 0.01 }
+  : { duration: 0.24, easing: [0.22, 1, 0.36, 1] as [number, number, number, number] };
+// Al completar, un rebote corto: es el único momento que celebra algo.
+const REWARD_SPRING = reduceMotion
+  ? { duration: 0.01 }
+  : { duration: 0.34, easing: [0.34, 1.56, 0.64, 1] as [number, number, number, number] };
 
 interface ReportPageProps {
   onCreateStory?: (category: ReportCategory) => void;
@@ -145,8 +174,6 @@ const ReportPage: Component<ReportPageProps> = (props) => {
 
   // Local state for optimistic updates
   const [localStories, setLocalStories] = createSignal<Story[]>([]);
-  const [exitingIds, setExitingIds] = createSignal<Set<string>>(new Set());
-  const [enteringIds, setEnteringIds] = createSignal<Set<string>>(new Set());
   const [deletedIds, setDeletedIds] = createSignal<Set<string>>(new Set());
   const [archivingIds, setArchivingIds] = createSignal<Set<string>>(new Set());
 
@@ -281,32 +308,31 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     return days[d.getDay()];
   };
 
+  // Solo anima la tarjeta que acaba de llegar. <For> indexa por referencia y
+  // los selectores devuelven objetos nuevos en cada recálculo, así que un
+  // refetch (volver a la ventana, evento del equipo, cambio de pestaña)
+  // re-crea TODAS las tarjetas: sin esta marca, todas repetían la animación a
+  // la vez y eso se veía como parpadeo. Set plano: se lee al montar, no
+  // necesita reactividad.
+  const justArrived = new Set<string>();
+
   // Animated move with exit → enter transition
   const moveStory = (storyId: string, newStatus: StoryStatus) => {
     const now = new Date().toISOString();
     const previousStory = localStories().find((story) => story.id === storyId);
     const completedLocally = newStatus === 'done' && previousStory?.status !== 'done';
 
-    // Step 1: Play exit animation
-    setExitingIds(prev => new Set([...prev, storyId]));
     if (completedLocally) playInteractionSuccess({ source: 'report', tone: 'success' });
+    justArrived.add(storyId);
 
-    // Step 2: After exit animation, update state and play enter
-    setTimeout(() => {
-      setExitingIds(prev => { const n = new Set(prev); n.delete(storyId); return n; });
-      setEnteringIds(prev => new Set([...prev, storyId]));
-
-      setLocalStories(prev => prev.map(s =>
-        s.id === storyId
-          ? { ...s, status: newStatus, completed_at: newStatus === 'done' ? now : null } as Story
-          : s
-      ));
-
-      // Clear enter animation after it completes
-      setTimeout(() => {
-        setEnteringIds(prev => { const n = new Set(prev); n.delete(storyId); return n; });
-      }, 260);
-    }, 190);
+    // El estado cambia de inmediato y Motion anima la llegada a la otra
+    // columna. Antes esto eran dos setTimeout encadenados con las duraciones
+    // duplicadas en el CSS, que se desincronizaban al tocar una sola de las dos.
+    setLocalStories(prev => prev.map(s =>
+      s.id === storyId
+        ? { ...s, status: newStatus, completed_at: newStatus === 'done' ? now : null } as Story
+        : s
+    ));
 
     // Completarla desde la tarjeta cierra su sesión de foco, si estaba abierta
     // o minimizada: si no, la píldora seguiría contando una tarea ya hecha.
@@ -331,10 +357,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       });
   };
 
+  // Entrar/salir lo maneja Motion; aquí solo queda el atenuado al ocultar.
   const cardClass = (storyId: string) =>
-    archivingIds().has(storyId) ? 'opacity-45 pointer-events-none' :
-      exitingIds().has(storyId) ? 'animate-card-exit' :
-      enteringIds().has(storyId) ? 'animate-card-enter' : '';
+    archivingIds().has(storyId) ? 'opacity-45 pointer-events-none' : '';
 
   // ─── Context menu ───
   const [ctxMenu, setCtxMenu] = createSignal<{ story?: Story; goal?: { id: string, text: string }; assignment?: Assignment; x: number; y: number } | null>(null);
@@ -583,12 +608,8 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       if (pending.story) {
         // Remove from deleted tracking
         setDeletedIds(prev => { const n = new Set(prev); n.delete(pending.story!.id); return n; });
-        // Restore story with enter animation
-        setEnteringIds(prev => new Set([...prev, pending.story!.id]));
+        // Vuelve a la lista; Motion anima su entrada.
         setLocalStories(prev => [...prev, pending.story!]);
-        setTimeout(() => {
-          setEnteringIds(prev => { const n = new Set(prev); n.delete(pending.story!.id); return n; });
-        }, 260);
       } else if (pending.goalId) {
         refetchGoals();
       }
@@ -640,12 +661,8 @@ const ReportPage: Component<ReportPageProps> = (props) => {
         assignee_id: userId(),
         completed_at: status === 'done' ? now : null,
       });
-      // Add to local list with enter animation
-      setEnteringIds(prev => new Set([...prev, created.id]));
+      justArrived.add((created as Story).id);
       setLocalStories(prev => [...prev, created as Story]);
-      setTimeout(() => {
-        setEnteringIds(prev => { const n = new Set(prev); n.delete(created.id); return n; });
-      }, 260);
     } catch { refetchStories(); }
   };
 
@@ -1028,10 +1045,14 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   {(story) => {
                     const completedByOccurrence = () => isRecurringReportCompletion(story);
                     return (
-                      <div
-                        onContextMenu={(e) => !completedByOccurrence() && openCtxMenu(e, story)}
+                      <Motion.div
+                        initial={justArrived.has(story.id) ? ENTER_FROM_ACTIVE : false}
+                        animate={SETTLED}
+                        transition={REWARD_SPRING}
+                        onMotionComplete={() => justArrived.delete(story.id)}
+                        onContextMenu={(e: MouseEvent) => !completedByOccurrence() && openCtxMenu(e, story)}
                         onClick={() => setSelectedStory(story)}
-                        class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-all group ${cardClass(story.id)}`}
+                        class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-colors group ${cardClass(story.id)}`}
                       >
                         <button
                           onClick={(e) => {
@@ -1055,7 +1076,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                           <ProjectBadge story={story} />
                         </div>
                         <span class="text-[9px] text-base-content/15 shrink-0">hoy</span>
-                      </div>
+                      </Motion.div>
                     );
                   }}
                 </For>
@@ -1124,10 +1145,14 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                     const isRec = () => isRecurring(story);
                     const recCompleted = () => todayCompletionSet().has(story.id);
                     return (
-                      <div
-                        onContextMenu={(e) => !isRec() && openCtxMenu(e, story)}
+                      <Motion.div
+                        initial={justArrived.has(story.id) ? ENTER_FROM_COMPLETED : false}
+                        animate={SETTLED}
+                        transition={GLIDE}
+                        onMotionComplete={() => justArrived.delete(story.id)}
+                        onContextMenu={(e: MouseEvent) => !isRec() && openCtxMenu(e, story)}
                         onClick={() => setSelectedStory(story)}
-                        class={`flex items-center gap-2 px-3 py-3 rounded-xl cursor-pointer transition-all group ${
+                        class={`flex items-center gap-2 px-3 py-3 rounded-xl cursor-pointer transition-colors group ${
                           isRec() && recCompleted() ? 'bg-base-200/40' : 'bg-base-200/60 hover:bg-base-200/90'
                         } ${cardClass(story.id)}`}
                       >
@@ -1135,13 +1160,16 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                         <Show
                           when={isRec()}
                           fallback={
-                            <button
-                              onClick={(e) => { e.stopPropagation(); moveStory(story.id, 'done'); }}
-                              class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 transition-all shrink-0"
+                            <Motion.button
+                              hover={{ scale: 1.15 }}
+                              press={{ scale: 0.85 }}
+                              transition={{ duration: 0.18, easing: [0.34, 1.56, 0.64, 1] }}
+                              onClick={(e: MouseEvent) => { e.stopPropagation(); moveStory(story.id, 'done'); }}
+                              class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 transition-colors shrink-0"
                               title="Marcar completada"
                             >
                               <Check size={14} />
-                            </button>
+                            </Motion.button>
                           }
                         >
                           <button
@@ -1209,7 +1237,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                             <Play size={14} />
                           </button>
                         </Show>
-                      </div>
+                      </Motion.div>
                     );
                   }}
                 </For>
