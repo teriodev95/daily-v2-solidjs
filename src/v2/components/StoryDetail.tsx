@@ -1,4 +1,4 @@
-import { createSignal, createEffect, on, onMount, onCleanup, For, Show, type Component } from 'solid-js';
+import { createSignal, createEffect, createMemo, createResource, on, onMount, onCleanup, For, Show, type Component } from 'solid-js';
 import { onRealtime, onRealtimeStatus } from '../lib/realtime';
 import type { Story, AcceptanceCriteria, User } from '../types';
 import { useData } from '../lib/data';
@@ -8,10 +8,13 @@ import {
   X, CheckCircle, Circle, Flame, ArrowUp, ArrowRight, ArrowDown,
   ClipboardCheck, Trash2,
   Check, Loader2, UserPlus, CalendarDays, RefreshCw, FolderKanban, Archive, AlertCircle,
-  Clock,
+  Clock, Sparkles,
 } from 'lucide-solid';
 import { frequencyLabel, toLocalDateStr } from '../lib/recurrence';
 import { formatTimeAgo } from '../lib/relativeDate';
+import {
+  endAfter, findConflicts, findFreeSlot, nextRoundedTime, toMinutes, type Slot,
+} from '../lib/timeSlots';
 import AttachmentSection from './AttachmentSection';
 import { ContentEditor, type ContentPreviewRequest } from './ContentEditor';
 import DatePickerPopover from './DatePickerPopover';
@@ -454,13 +457,69 @@ const StoryDetail: Component<Props> = (props) => {
     saveTimeRange(null, null);
   };
 
+  // ─── Agenda del día: para no proponer una hora ya ocupada ───
+  // Se cargan las HUs del mismo encargado y se filtran a las de esta fecha que
+  // ya tienen horario. Se pide solo al abrir el selector, no al abrir la HU.
+  const [daySchedule] = createResource(
+    () => (showTimePicker() && dueDate() ? { date: dueDate(), owner: assigneeId() || props.story.assignee_id } : null),
+    async ({ date, owner }) => {
+      if (!owner) return [] as Slot[];
+      const rows = await api.stories.list({ assignee_id: owner }) as Story[];
+      return rows
+        .filter((row) =>
+          row.id !== props.story.id &&
+          row.is_active !== false &&
+          row.status !== 'done' &&
+          (row.scheduled_date ?? row.due_date) === date &&
+          !!row.start_time && !!row.end_time,
+        )
+        .map((row) => ({ start: row.start_time!, end: row.end_time!, title: row.title }));
+    },
+  );
+
+  const busySlots = (): (Slot & { title?: string })[] => daySchedule() ?? [];
+
+  /** Choques del horario actual con lo ya agendado ese día. */
+  const scheduleConflicts = createMemo(() => {
+    const start = startTime();
+    const end = endTime();
+    if (toMinutes(start) === null || toMinutes(end) === null) return [];
+    return findConflicts({ start, end }, busySlots());
+  });
+
+  const applyRange = (range: Slot) => {
+    setStartTime(range.start);
+    setEndTime(range.end);
+    saveTimeRange(range.start, range.end);
+  };
+
+  /** Atajo de duración: mantiene el inicio y recalcula el fin. */
+  const applyDuration = (minutes: number) => {
+    const start = toMinutes(startTime()) !== null ? startTime() : nextRoundedTime();
+    const end = endAfter(start, minutes);
+    if (!end) return;
+    applyRange({ start, end });
+  };
+
+  /** Primer hueco libre del día para la duración actual (o 1 h). */
+  const suggestFreeSlot = (durationMin?: number) => {
+    const currentStart = toMinutes(startTime());
+    const currentEnd = toMinutes(endTime());
+    const duration = durationMin
+      ?? (currentStart !== null && currentEnd !== null && currentEnd > currentStart ? currentEnd - currentStart : 60);
+    const slot = findFreeSlot(busySlots(), duration, { from: nextRoundedTime() })
+      ?? findFreeSlot(busySlots(), duration);
+    if (slot) applyRange(slot);
+  };
+
   const setScheduled = () => {
-    // Sensible defaults so the inputs aren't empty when the user opts in.
-    const nextStart = startTime() || '09:00';
-    const nextEnd = endTime() || '10:00';
-    setStartTime(nextStart);
-    setEndTime(nextEnd);
-    saveTimeRange(nextStart, nextEnd);
+    // Propone el primer hueco libre en vez de un 09:00 fijo que podía chocar
+    // con algo ya agendado.
+    if (toMinutes(startTime()) !== null && toMinutes(endTime()) !== null) return;
+    const slot = findFreeSlot(busySlots(), 60, { from: nextRoundedTime() })
+      ?? findFreeSlot(busySlots(), 60)
+      ?? { start: '09:00', end: '10:00' };
+    applyRange(slot);
   };
 
   const updateStartTime = (value: string) => {
@@ -479,10 +538,13 @@ const StoryDetail: Component<Props> = (props) => {
   // Era el chip más ancho de la barra ("8:15 a.m.–2 p.m.") y el que disparaba
   // el salto a una segunda fila en el caso común; en 24 h ocupa ~40% menos.
   const formatTimeChip = (start: string, end: string): string => {
+    // Un <input type="time"> a medio llenar emite "" o "08:", que antes se
+    // colaban al chip como "0:NaN". Ahora ese lado se muestra vacío.
     const fmt = (hhmm: string): string => {
-      const [hStr, mStr] = hhmm.split(':');
-      const h = Number(hStr);
-      const m = Number(mStr);
+      const total = toMinutes(hhmm);
+      if (total === null) return '--';
+      const h = Math.floor(total / 60);
+      const m = total % 60;
       return m === 0 ? `${h}` : `${h}:${String(m).padStart(2, '0')}`;
     };
     return `${fmt(start)}–${fmt(end)}`;
@@ -778,11 +840,78 @@ const StoryDetail: Component<Props> = (props) => {
                       />
                     </label>
                   </div>
+                  {/* Atajos: elegir inicio y luego duración de un clic */}
+                  <div class="mt-2.5 flex flex-wrap items-center gap-1">
+                    <span class="mr-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-base-content/30">Dura</span>
+                    <For each={[[30, '30 min'], [60, '1 h'], [120, '2 h']] as [number, string][]}>
+                      {([mins, label]) => (
+                        <button
+                          type="button"
+                          onClick={() => applyDuration(mins)}
+                          class="rounded-lg bg-base-content/[0.05] px-2 py-1 text-[11px] font-semibold text-base-content/60 transition-colors hover:bg-ios-blue-500/12 hover:text-ios-blue-500"
+                        >
+                          {label}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+
+                  <div class="mt-1.5 flex flex-wrap items-center gap-1">
+                    <span class="mr-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-base-content/30">Inicia</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const start = nextRoundedTime();
+                        const mins = toMinutes(startTime()) !== null && toMinutes(endTime()) !== null
+                          ? (toMinutes(endTime())! - toMinutes(startTime())!) : 60;
+                        const end = endAfter(start, mins);
+                        if (end) applyRange({ start, end });
+                      }}
+                      class="rounded-lg bg-base-content/[0.05] px-2 py-1 text-[11px] font-semibold text-base-content/60 transition-colors hover:bg-ios-blue-500/12 hover:text-ios-blue-500"
+                    >
+                      Ahora
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => suggestFreeSlot()}
+                      title="Primer hueco del día sin choques"
+                      class="inline-flex items-center gap-1 rounded-lg bg-base-content/[0.05] px-2 py-1 text-[11px] font-semibold text-base-content/60 transition-colors hover:bg-ios-blue-500/12 hover:text-ios-blue-500"
+                    >
+                      <Sparkles size={11} />
+                      Hueco libre
+                    </button>
+                  </div>
+
                   <Show when={timeRangeInvalid()}>
                     <p class="mt-2 text-[11px] font-medium text-red-500/85">
                       La hora de fin debe ser posterior al inicio
                     </p>
                   </Show>
+
+                  {/* Choques con lo ya agendado ese día */}
+                  <Show when={scheduleConflicts().length > 0}>
+                    <div class="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/[0.07] px-2.5 py-2">
+                      <p class="flex items-center gap-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                        <AlertCircle size={12} />
+                        Se encima con {scheduleConflicts().length === 1 ? 'otra tarea' : `${scheduleConflicts().length} tareas`}
+                      </p>
+                      <For each={scheduleConflicts().slice(0, 3)}>
+                        {(slot) => (
+                          <p class="mt-1 truncate text-[10.5px] text-base-content/50">
+                            {slot.start}–{slot.end} · {(slot as { title?: string }).title ?? 'Sin título'}
+                          </p>
+                        )}
+                      </For>
+                      <button
+                        type="button"
+                        onClick={() => suggestFreeSlot()}
+                        class="mt-1.5 text-[11px] font-bold text-ios-blue-500 transition-opacity hover:opacity-80"
+                      >
+                        Mover al primer hueco libre
+                      </button>
+                    </div>
+                  </Show>
+
                   <Show when={hasSchedule()}>
                     <button
                       onClick={() => { setAllDay(); setShowTimePicker(false); }}
