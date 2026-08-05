@@ -30,6 +30,8 @@ interface ReportPageProps {
   hiddenRequested?: number; // increment to open hidden stories overlay
   /** Abre el modo foco. Vive en AppV2 para sobrevivir al cambio de pestaña. */
   onFocusStory?: (story: Story) => void;
+  /** Avisa que una tarea se completó, para cerrar su sesión de foco si la tenía. */
+  onStoryCompleted?: (storyId: string) => void;
 }
 
 const ReportPage: Component<ReportPageProps> = (props) => {
@@ -305,6 +307,10 @@ const ReportPage: Component<ReportPageProps> = (props) => {
         setEnteringIds(prev => { const n = new Set(prev); n.delete(storyId); return n; });
       }, 260);
     }, 190);
+
+    // Completarla desde la tarjeta cierra su sesión de foco, si estaba abierta
+    // o minimizada: si no, la píldora seguiría contando una tarea ya hecha.
+    if (newStatus === 'done') props.onStoryCompleted?.(storyId);
 
     // Background API sync (fire immediately)
     const completedAt = newStatus === 'done' ? now : null;

@@ -15,6 +15,9 @@ const KEY = 'dc-focus-session-v1';
 export interface FocusSession {
   storyId: string;
   startedAt: number;
+  /** Minimizada a la píldora flotante. El cronómetro sigue corriendo igual:
+   *  no depende de que la pantalla esté abierta, sino de `startedAt`. */
+  minimized: boolean;
 }
 
 export const readFocusSession = (): FocusSession | null => {
@@ -23,16 +26,27 @@ export const readFocusSession = (): FocusSession | null => {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<FocusSession>;
     if (typeof parsed.storyId !== 'string' || typeof parsed.startedAt !== 'number') return null;
-    return { storyId: parsed.storyId, startedAt: parsed.startedAt };
+    return { storyId: parsed.storyId, startedAt: parsed.startedAt, minimized: parsed.minimized === true };
   } catch {
     return null;
   }
 };
 
-export const startFocusSession = (storyId: string): FocusSession => {
-  const session: FocusSession = { storyId, startedAt: Date.now() };
+const write = (session: FocusSession) => {
   try { localStorage.setItem(KEY, JSON.stringify(session)); } catch { /* sin espacio: el foco funciona igual, solo no sobrevive a recargas */ }
+};
+
+export const startFocusSession = (storyId: string): FocusSession => {
+  const session: FocusSession = { storyId, startedAt: Date.now(), minimized: false };
+  write(session);
   return session;
+};
+
+/** Cambia solo el estado de minimizado; `startedAt` se conserva intacto. */
+export const setFocusMinimized = (minimized: boolean) => {
+  const current = readFocusSession();
+  if (!current) return;
+  write({ ...current, minimized });
 };
 
 export const clearFocusSession = () => {

@@ -30,7 +30,8 @@ import Dock from './components/Dock';
 import DockIcon from './components/DockIcon';
 import { interactionMotion, playInteractionSuccess } from './lib/interactionMotion';
 import FocusMode from './components/FocusMode';
-import { clearFocusSession, readFocusSession, startFocusSession } from './lib/focusSession';
+import FocusPill from './components/FocusPill';
+import { clearFocusSession, readFocusSession, setFocusMinimized, startFocusSession } from './lib/focusSession';
 import { api } from './lib/api';
 import BillingPortal from './features/billing/BillingPortal';
 
@@ -100,11 +101,11 @@ const AppShell: Component = () => {
   // El estado vive aquí y no en ReportPage para que la sesión sobreviva a los
   // cambios de pestaña. Solo se guarda el id + el inicio (localStorage): el
   // tiempo es informativo y no se persiste en la HU.
-  const [focus, setFocus] = createSignal<{ story: Story; startedAt: number } | null>(null);
+  const [focus, setFocus] = createSignal<{ story: Story; startedAt: number; minimized: boolean } | null>(null);
 
   const startFocus = (story: Story) => {
     const session = startFocusSession(story.id);
-    setFocus({ story, startedAt: session.startedAt });
+    setFocus({ story, startedAt: session.startedAt, minimized: false });
     // Entrar a foco es empezar a trabajar: el equipo lo ve en el tablero.
     if (story.status !== 'in_progress') {
       api.stories.update(story.id, { status: 'in_progress' })
@@ -116,6 +117,18 @@ const AppShell: Component = () => {
   const exitFocus = () => {
     clearFocusSession();
     setFocus(null);
+  };
+
+  // Minimizar/restaurar solo alternan la visibilidad: `startedAt` no se toca,
+  // así que el cronómetro no se reinicia ni se pausa.
+  const setFocusMinimizedState = (minimized: boolean) => {
+    setFocusMinimized(minimized);
+    setFocus((current) => (current ? { ...current, minimized } : current));
+  };
+
+  /** Cierra la sesión si la tarea enfocada se completó desde otro sitio. */
+  const clearFocusIfStory = (storyId: string) => {
+    if (focus()?.story.id === storyId) exitFocus();
   };
 
   const completeFocus = () => {
@@ -139,7 +152,7 @@ const AppShell: Component = () => {
         clearFocusSession();
         return;
       }
-      setFocus({ story, startedAt: session.startedAt });
+      setFocus({ story, startedAt: session.startedAt, minimized: session.minimized });
     } catch {
       clearFocusSession();
     }
@@ -289,7 +302,7 @@ const AppShell: Component = () => {
       {/* Content — all pages mounted, toggle visibility to avoid refetch flicker */}
       <main class="max-w-5xl mx-auto px-4 lg:px-6 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
         <div class={activeTab() === 'report' ? 'stagger-in' : ''} style={{ display: activeTab() === 'report' ? undefined : 'none' }}>
-          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} shareRequested={shareRequested()} hiddenRequested={hiddenRequested()} onFocusStory={startFocus} />
+          <ReportPage onCreateStory={(cat) => openCreateModal(cat)} refreshKey={refreshKey()} onStoryDeleted={handleStoryCreated} shareRequested={shareRequested()} hiddenRequested={hiddenRequested()} onFocusStory={startFocus} onStoryCompleted={clearFocusIfStory} />
         </div>
         <div class={activeTab() === 'team' ? 'stagger-in' : ''} style={{ display: activeTab() === 'team' ? undefined : 'none' }}>
           <TeamPage />
@@ -472,15 +485,23 @@ const AppShell: Component = () => {
       <OnlineUsers />
 
       {/* Modo foco — tapa todo lo demás a propósito */}
-      <Show when={focus()}>
-        {(session) => (
-          <FocusMode
-            story={session().story}
-            startedAt={session().startedAt}
-            onExit={exitFocus}
-            onComplete={completeFocus}
-          />
-        )}
+      <Show when={focus() && !focus()!.minimized}>
+        <FocusMode
+          story={focus()!.story}
+          startedAt={focus()!.startedAt}
+          onExit={exitFocus}
+          onComplete={completeFocus}
+          onMinimize={() => setFocusMinimizedState(true)}
+        />
+      </Show>
+
+      {/* Minimizado: la sesión sigue viva en la píldora */}
+      <Show when={focus()?.minimized}>
+        <FocusPill
+          story={focus()!.story}
+          startedAt={focus()!.startedAt}
+          onRestore={() => setFocusMinimizedState(false)}
+        />
       </Show>
     </div>
   );

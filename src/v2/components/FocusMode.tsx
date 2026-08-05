@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show, type Component } from 'solid-js';
-import { Check, X } from 'lucide-solid';
+import { Check, Minus, X } from 'lucide-solid';
 import type { Story } from '../types';
 import { formatElapsed } from '../lib/focusSession';
 
@@ -9,6 +9,8 @@ interface Props {
   startedAt: number;
   onExit: () => void;
   onComplete: () => void;
+  /** Oculta la pantalla dejando la sesión viva en la píldora flotante. */
+  onMinimize: () => void;
 }
 
 /**
@@ -26,7 +28,9 @@ const FocusMode: Component<Props> = (props) => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        props.onExit();
+        // Escape minimiza en vez de terminar: nada se pierde y la sesión sigue
+        // en la píldora. Cerrarla es explícito (✕ o "Salir sin completar").
+        props.onMinimize();
       }
     };
     // Captura para salir antes de que otros manejadores de Escape reaccionen.
@@ -56,15 +60,26 @@ const FocusMode: Component<Props> = (props) => {
       aria-modal="true"
       aria-label={`Enfocado en ${props.story.title}`}
     >
-      <button
-        type="button"
-        onClick={() => props.onExit()}
-        class="absolute right-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full text-base-content/30 transition-colors hover:bg-base-content/[0.06] hover:text-base-content/70"
-        aria-label="Salir del modo foco (Esc)"
-        title="Salir (Esc)"
-      >
-        <X size={18} />
-      </button>
+      <div class="absolute right-5 top-5 flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => props.onMinimize()}
+          class="inline-flex h-9 w-9 items-center justify-center rounded-full text-base-content/30 transition-colors hover:bg-base-content/[0.06] hover:text-base-content/70"
+          aria-label="Minimizar sin detener el cronómetro"
+          title="Minimizar — el cronómetro sigue"
+        >
+          <Minus size={18} />
+        </button>
+        <button
+          type="button"
+          onClick={() => props.onExit()}
+          class="inline-flex h-9 w-9 items-center justify-center rounded-full text-base-content/30 transition-colors hover:bg-base-content/[0.06] hover:text-base-content/70"
+          aria-label="Terminar la sesión de foco"
+          title="Terminar sesión"
+        >
+          <X size={18} />
+        </button>
+      </div>
 
       <div class="flex w-full max-w-2xl flex-col items-center text-center">
         <span class="text-[10px] font-bold uppercase tracking-[0.16em] text-base-content/25">
@@ -98,13 +113,23 @@ const FocusMode: Component<Props> = (props) => {
           Completar tarea
         </button>
 
-        <button
-          type="button"
-          onClick={() => props.onExit()}
-          class="mt-4 text-[12px] font-semibold text-base-content/35 transition-colors hover:text-base-content/65"
-        >
-          Salir sin completar
-        </button>
+        <div class="mt-4 flex items-center gap-4 text-[12px] font-semibold">
+          <button
+            type="button"
+            onClick={() => props.onMinimize()}
+            class="text-base-content/35 transition-colors hover:text-base-content/65"
+          >
+            Minimizar (Esc)
+          </button>
+          <span class="h-3 w-px bg-base-content/10" />
+          <button
+            type="button"
+            onClick={() => props.onExit()}
+            class="text-base-content/35 transition-colors hover:text-base-content/65"
+          >
+            Salir sin completar
+          </button>
+        </div>
       </div>
     </div>
   );
