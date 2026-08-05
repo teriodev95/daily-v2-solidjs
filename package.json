@@ -29,6 +29,7 @@
     "wrangler": "^4.67.0"
   },
   "dependencies": {
+    "@solid-primitives/keyed": "^1.5.3",
     "@solid-primitives/spring": "^0.1.2",
     "centrifuge": "^5.5.3",
     "drizzle-orm": "^0.45.1",

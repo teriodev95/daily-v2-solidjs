@@ -12,6 +12,7 @@ import {
 } from 'lucide-solid';
 import { isRecurring, frequencyLabel } from '../lib/recurrence';
 import { Motion } from 'solid-motionone';
+import { Key } from '@solid-primitives/keyed';
 import StoryDetail from '../components/StoryDetail';
 import LearningDetail from '../components/LearningDetail';
 import ShareReportModal from '../components/ShareReportModal';
@@ -1041,24 +1042,24 @@ const ReportPage: Component<ReportPageProps> = (props) => {
               </div>
               <div class="space-y-2">
                 {/* Today's completions */}
-                <For each={completedToday()}>
-                  {(story) => {
-                    const completedByOccurrence = () => isRecurringReportCompletion(story);
+                <Key each={completedToday()} by="id">
+                  {(storyAcc) => {
+                    const completedByOccurrence = () => isRecurringReportCompletion(storyAcc());
                     return (
                       <Motion.div
-                        initial={justArrived.has(story.id) ? ENTER_FROM_ACTIVE : false}
+                        initial={justArrived.has(storyAcc().id) ? ENTER_FROM_ACTIVE : false}
                         animate={SETTLED}
                         transition={REWARD_SPRING}
-                        onMotionComplete={() => justArrived.delete(story.id)}
-                        onContextMenu={(e: MouseEvent) => !completedByOccurrence() && openCtxMenu(e, story)}
-                        onClick={() => setSelectedStory(story)}
-                        class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-colors group ${cardClass(story.id)}`}
+                        onMotionComplete={() => justArrived.delete(storyAcc().id)}
+                        onContextMenu={(e: MouseEvent) => !completedByOccurrence() && openCtxMenu(e, storyAcc())}
+                        onClick={() => setSelectedStory(storyAcc())}
+                        class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-colors group ${cardClass(storyAcc().id)}`}
                       >
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (completedByOccurrence()) toggleRecurringCompletion(story.id);
-                            else moveStory(story.id, 'in_progress');
+                            if (completedByOccurrence()) toggleRecurringCompletion(storyAcc().id);
+                            else moveStory(storyAcc().id, 'in_progress');
                           }}
                           class="p-1.5 rounded-md text-base-content/15 sm:text-base-content/0 group-hover:text-base-content/20 hover:!text-amber-500 hover:!bg-amber-500/10 transition-all shrink-0"
                           title={completedByOccurrence() ? 'Desmarcar de hoy' : 'Reabrir'}
@@ -1066,20 +1067,20 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                           <RotateCcw size={14} />
                         </button>
                         <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                          <span class="text-sm text-base-content/40 line-through flex-1 truncate">{story.title}</span>
+                          <span class="text-sm text-base-content/40 line-through flex-1 truncate">{storyAcc().title}</span>
                           <Show when={completedByOccurrence()}>
                             <span class="text-[9px] font-bold text-purple-500/60 bg-purple-500/10 px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
                               <RefreshCw size={8} />
-                              {frequencyLabel(story)}
+                              {frequencyLabel(storyAcc())}
                             </span>
                           </Show>
-                          <ProjectBadge story={story} />
+                          <ProjectBadge story={storyAcc()} />
                         </div>
                         <span class="text-[9px] text-base-content/15 shrink-0">hoy</span>
                       </Motion.div>
                     );
                   }}
-                </For>
+                </Key>
                 {/* Yesterday's completions */}
                 <Show when={completedYesterday().length > 0}>
                   <Show when={completedToday().length > 0}>
@@ -1091,28 +1092,28 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                       <div class="flex-1 h-px bg-base-content/5" />
                     </div>
                   </Show>
-                  <For each={completedYesterday()}>
-                    {(story) => {
-                      const proj = getProject(story.project_id);
-                      const completedDate = () => story.report_completion_date ?? story.completed_at ?? '';
-                      const completedByOccurrence = () => isRecurringReportCompletion(story);
+                  <Key each={completedYesterday()} by="id">
+                    {(storyAcc) => {
+                      const proj = getProject(storyAcc().project_id);
+                      const completedDate = () => storyAcc().report_completion_date ?? storyAcc().completed_at ?? '';
+                      const completedByOccurrence = () => isRecurringReportCompletion(storyAcc());
                       return (
-                        <button onContextMenu={(e) => !completedByOccurrence() && openCtxMenu(e, story)} onClick={() => setSelectedStory(story)} class="w-full text-left flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 hover:bg-base-200/60 transition-all cursor-pointer">
+                        <button onContextMenu={(e) => !completedByOccurrence() && openCtxMenu(e, storyAcc())} onClick={() => setSelectedStory(storyAcc())} class="w-full text-left flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/40 hover:bg-base-200/60 transition-all cursor-pointer">
                           <CheckCircle size={13} class="text-ios-green-500/30 shrink-0" />
-                          <span class="text-sm text-base-content/30 flex-1 truncate">{story.title}</span>
+                          <span class="text-sm text-base-content/30 flex-1 truncate">{storyAcc().title}</span>
                           <Show when={completedByOccurrence()}>
                             <RefreshCw size={11} class="text-purple-500/35 shrink-0" />
                           </Show>
                           <Show when={yesterdayRange().isWeekend && completedDate()}>
                             <span class="text-[9px] text-base-content/15 capitalize">{formatCompletedDay(completedDate())}</span>
                           </Show>
-                          <Show when={story.code}>
-                            <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0" style={{ "background-color": `${proj?.color ?? '#525252'}10`, color: `${proj?.color ?? '#525252'}80` }}>{story.code}</span>
+                          <Show when={storyAcc().code}>
+                            <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0" style={{ "background-color": `${proj?.color ?? '#525252'}10`, color: `${proj?.color ?? '#525252'}80` }}>{storyAcc().code}</span>
                           </Show>
                         </button>
                       );
                     }}
-                  </For>
+                  </Key>
                 </Show>
                 <Show when={completedToday().length === 0 && completedYesterday().length === 0}>
                   <div class="px-3 py-4 rounded-xl bg-base-200/30 text-center">
@@ -1140,21 +1141,21 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                 </InfoHint>
               </div>
               <div class="space-y-2">
-                <For each={activeStories()}>
-                  {(story) => {
-                    const isRec = () => isRecurring(story);
-                    const recCompleted = () => todayCompletionSet().has(story.id);
+                <Key each={activeStories()} by="id">
+                  {(storyAcc) => {
+                    const isRec = () => isRecurring(storyAcc());
+                    const recCompleted = () => todayCompletionSet().has(storyAcc().id);
                     return (
                       <Motion.div
-                        initial={justArrived.has(story.id) ? ENTER_FROM_COMPLETED : false}
+                        initial={justArrived.has(storyAcc().id) ? ENTER_FROM_COMPLETED : false}
                         animate={SETTLED}
                         transition={GLIDE}
-                        onMotionComplete={() => justArrived.delete(story.id)}
-                        onContextMenu={(e: MouseEvent) => !isRec() && openCtxMenu(e, story)}
-                        onClick={() => setSelectedStory(story)}
+                        onMotionComplete={() => justArrived.delete(storyAcc().id)}
+                        onContextMenu={(e: MouseEvent) => !isRec() && openCtxMenu(e, storyAcc())}
+                        onClick={() => setSelectedStory(storyAcc())}
                         class={`flex items-center gap-2 px-3 py-3 rounded-xl cursor-pointer transition-colors group ${
                           isRec() && recCompleted() ? 'bg-base-200/40' : 'bg-base-200/60 hover:bg-base-200/90'
-                        } ${cardClass(story.id)}`}
+                        } ${cardClass(storyAcc().id)}`}
                       >
                         {/* Recurring: circular completion toggle. Normal: check to done */}
                         <Show
@@ -1164,7 +1165,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                               hover={{ scale: 1.15 }}
                               press={{ scale: 0.85 }}
                               transition={{ duration: 0.18, easing: [0.34, 1.56, 0.64, 1] }}
-                              onClick={(e: MouseEvent) => { e.stopPropagation(); moveStory(story.id, 'done'); }}
+                              onClick={(e: MouseEvent) => { e.stopPropagation(); moveStory(storyAcc().id, 'done'); }}
                               class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 transition-colors shrink-0"
                               title="Marcar completada"
                             >
@@ -1173,7 +1174,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                           }
                         >
                           <button
-                            onClick={(e) => { e.stopPropagation(); toggleRecurringCompletion(story.id); }}
+                            onClick={(e) => { e.stopPropagation(); toggleRecurringCompletion(storyAcc().id); }}
                             class="shrink-0"
                           >
                             <div class={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
@@ -1190,18 +1191,18 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                           </button>
                         </Show>
                         <div class="flex items-center gap-2 flex-1 min-w-0 text-left">
-                          <span class={`text-sm flex-1 truncate transition-colors ${isRec() && recCompleted() ? 'text-base-content/30 line-through' : ''}`}>{story.title}</span>
+                          <span class={`text-sm flex-1 truncate transition-colors ${isRec() && recCompleted() ? 'text-base-content/30 line-through' : ''}`}>{storyAcc().title}</span>
                           {/* Recurring badge */}
                           <Show when={isRec()}>
                             <span class="text-[9px] font-bold text-purple-500/60 bg-purple-500/10 px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
                               <RefreshCw size={8} />
-                              {frequencyLabel(story)}
+                              {frequencyLabel(storyAcc())}
                             </span>
                           </Show>
                           {/* Date badge for non-recurring */}
                           <Show when={!isRec()}>
                             {(() => {
-                              const dateStr = getReportStoryDateKey(story, today);
+                              const dateStr = getReportStoryDateKey(storyAcc(), today);
                               if (!dateStr) return null;
                               const isOverdue = dateStr < today;
                               const isToday = dateStr === today;
@@ -1217,9 +1218,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                               );
                             })()}
                           </Show>
-                          <ProjectBadge story={story} />
+                          <ProjectBadge story={storyAcc()} />
                         </div>
-                        <Show when={!isRec() && story.status === 'in_progress'}>
+                        <Show when={!isRec() && storyAcc().status === 'in_progress'}>
                           <span class="relative flex h-2 w-2 shrink-0 opacity-70" title="En progreso">
                             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-ios-blue-500 opacity-50" />
                             <span class="relative inline-flex rounded-full h-2 w-2 bg-ios-blue-500" />
@@ -1229,10 +1230,10 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                             con el contenido de la tarjeta */}
                         <Show when={props.onFocusStory}>
                           <button
-                            onClick={(e) => { e.stopPropagation(); props.onFocusStory?.(story); }}
+                            onClick={(e) => { e.stopPropagation(); props.onFocusStory?.(storyAcc()); }}
                             class="shrink-0 rounded-md p-1.5 text-base-content/15 opacity-0 transition-all hover:bg-ios-blue-500/10 hover:text-ios-blue-500 focus-visible:opacity-100 group-hover:opacity-100"
                             title="Enfocar esta tarea"
-                            aria-label={`Enfocar: ${story.title}`}
+                            aria-label={`Enfocar: ${storyAcc().title}`}
                           >
                             <Play size={14} />
                           </button>
@@ -1240,7 +1241,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                       </Motion.div>
                     );
                   }}
-                </For>
+                </Key>
                 <Show when={activeStories().length === 0}>
                   <div class="px-3 py-4 rounded-xl bg-base-200/30 text-center">
                     <span class="text-sm text-base-content/20">Mueve tareas aquí desde el backlog</span>
