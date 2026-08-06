@@ -11,7 +11,6 @@ import {
   ExternalLink, Clipboard, EyeOff, Inbox, PlayCircle, CheckCircle2
 } from 'lucide-solid';
 import { isRecurring, frequencyLabel } from '../lib/recurrence';
-import { Motion } from 'solid-motionone';
 import { Key } from '@solid-primitives/keyed';
 import StoryDetail from '../components/StoryDetail';
 import LearningDetail from '../components/LearningDetail';
@@ -23,34 +22,6 @@ import { playInteractionSuccess } from '../lib/interactionMotion';
 import { getReportDateWindow, getReportStoryDateKey, isRecurringReportCompletion, selectDailyReportStories } from '../lib/reportSelectors';
 import { activeTab } from '../lib/activeTab';
 import { useRealtimeRefetch } from '../lib/realtime';
-
-// ─── Movimiento de las tarjetas entre columnas ───
-// "Completado" está a la izquierda y "activo" a la derecha, así que cada
-// tarjeta entra desde el lado de su columna de origen: el gesto se lee como un
-// traslado y no como "aparece de la nada".
-//
-// Solo se anima la entrada. El <Presence> de solid-motionone 1.0.4 es un
-// switch de un único hijo (usa resolveFirst): al envolver un <For> se queda
-// con el primer elemento y el resto de la lista desaparece. Animar la salida
-// de una lista exige createListTransition, y no compensa la complejidad.
-// Motion One no atiende `prefers-reduced-motion` por su cuenta: quien lo pida
-// recibe un fundido casi instantáneo, sin desplazamiento ni rebote.
-const reduceMotion =
-  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-
-const SETTLED = { opacity: 1, x: 0, scale: 1 };
-const shift = (x: number) => (reduceMotion ? { opacity: 0 } : { opacity: 0, x, scale: 0.97 });
-const ENTER_FROM_ACTIVE = shift(14);
-const ENTER_FROM_COMPLETED = shift(-14);
-
-// Curva neutra para el trabajo pendiente.
-const GLIDE = reduceMotion
-  ? { duration: 0.01 }
-  : { duration: 0.24, easing: [0.22, 1, 0.36, 1] as [number, number, number, number] };
-// Al completar, un rebote corto: es el único momento que celebra algo.
-const REWARD_SPRING = reduceMotion
-  ? { duration: 0.01 }
-  : { duration: 0.34, easing: [0.34, 1.56, 0.64, 1] as [number, number, number, number] };
 
 interface ReportPageProps {
   onCreateStory?: (category: ReportCategory) => void;
@@ -326,9 +297,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
     if (completedLocally) playInteractionSuccess({ source: 'report', tone: 'success' });
     justArrived.add(storyId);
 
-    // El estado cambia de inmediato y Motion anima la llegada a la otra
-    // columna. Antes esto eran dos setTimeout encadenados con las duraciones
-    // duplicadas en el CSS, que se desincronizaban al tocar una sola de las dos.
+    // El estado cambia de inmediato y la llegada a la otra columna se anima
+    // con una clase CSS. Antes esto eran dos setTimeout encadenados con las
+    // duraciones duplicadas, que se desincronizaban al tocar una sola.
     setLocalStories(prev => prev.map(s =>
       s.id === storyId
         ? { ...s, status: newStatus, completed_at: newStatus === 'done' ? now : null } as Story
@@ -358,7 +329,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       });
   };
 
-  // Entrar/salir lo maneja Motion; aquí solo queda el atenuado al ocultar.
+  // La entrada la anima una clase CSS; aquí solo queda el atenuado al ocultar.
   const cardClass = (storyId: string) =>
     archivingIds().has(storyId) ? 'opacity-45 pointer-events-none' : '';
 
@@ -609,7 +580,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
       if (pending.story) {
         // Remove from deleted tracking
         setDeletedIds(prev => { const n = new Set(prev); n.delete(pending.story!.id); return n; });
-        // Vuelve a la lista; Motion anima su entrada.
+        // Vuelve a la lista y se anima su entrada.
         setLocalStories(prev => [...prev, pending.story!]);
       } else if (pending.goalId) {
         refetchGoals();
@@ -1046,11 +1017,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                   {(storyAcc) => {
                     const completedByOccurrence = () => isRecurringReportCompletion(storyAcc());
                     return (
-                      <Motion.div
-                        initial={justArrived.has(storyAcc().id) ? ENTER_FROM_ACTIVE : false}
-                        animate={SETTLED}
-                        transition={REWARD_SPRING}
-                        onMotionComplete={() => justArrived.delete(storyAcc().id)}
+                      <div
+                        classList={{ 'animate-card-in-right': justArrived.has(storyAcc().id) }}
+                        onAnimationEnd={() => justArrived.delete(storyAcc().id)}
                         onContextMenu={(e: MouseEvent) => !completedByOccurrence() && openCtxMenu(e, storyAcc())}
                         onClick={() => setSelectedStory(storyAcc())}
                         class={`flex items-center gap-2 px-3 py-3 rounded-xl bg-base-200/60 cursor-pointer hover:bg-base-200/90 transition-colors group ${cardClass(storyAcc().id)}`}
@@ -1077,7 +1046,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                           <ProjectBadge story={storyAcc()} />
                         </div>
                         <span class="text-[9px] text-base-content/15 shrink-0">hoy</span>
-                      </Motion.div>
+                      </div>
                     );
                   }}
                 </Key>
@@ -1146,11 +1115,9 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                     const isRec = () => isRecurring(storyAcc());
                     const recCompleted = () => todayCompletionSet().has(storyAcc().id);
                     return (
-                      <Motion.div
-                        initial={justArrived.has(storyAcc().id) ? ENTER_FROM_COMPLETED : false}
-                        animate={SETTLED}
-                        transition={GLIDE}
-                        onMotionComplete={() => justArrived.delete(storyAcc().id)}
+                      <div
+                        classList={{ 'animate-card-in-left': justArrived.has(storyAcc().id) }}
+                        onAnimationEnd={() => justArrived.delete(storyAcc().id)}
                         onContextMenu={(e: MouseEvent) => !isRec() && openCtxMenu(e, storyAcc())}
                         onClick={() => setSelectedStory(storyAcc())}
                         class={`flex items-center gap-2 px-3 py-3 rounded-xl cursor-pointer transition-colors group ${
@@ -1161,16 +1128,13 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                         <Show
                           when={isRec()}
                           fallback={
-                            <Motion.button
-                              hover={{ scale: 1.15 }}
-                              press={{ scale: 0.85 }}
-                              transition={{ duration: 0.18, easing: [0.34, 1.56, 0.64, 1] }}
-                              onClick={(e: MouseEvent) => { e.stopPropagation(); moveStory(storyAcc().id, 'done'); }}
-                              class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 transition-colors shrink-0"
+                            <button
+                              onClick={(e) => { e.stopPropagation(); moveStory(storyAcc().id, 'done'); }}
+                              class="p-1.5 rounded-md text-base-content/15 hover:text-ios-green-500 hover:bg-ios-green-500/10 hover:scale-115 active:scale-90 transition-all duration-150 shrink-0"
                               title="Marcar completada"
                             >
                               <Check size={14} />
-                            </Motion.button>
+                            </button>
                           }
                         >
                           <button
@@ -1238,7 +1202,7 @@ const ReportPage: Component<ReportPageProps> = (props) => {
                             <Play size={14} />
                           </button>
                         </Show>
-                      </Motion.div>
+                      </div>
                     );
                   }}
                 </Key>
