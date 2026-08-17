@@ -38,6 +38,24 @@ const writeToClipboard = async (text: string): Promise<void> => {
   if (!ok) throw new Error('clipboard-unavailable');
 };
 
+/**
+ * Cuenta atrás legible en cualquier escala. El formato m:ss servía cuando los
+ * enlaces duraban minutos, pero desde que la app puede emitirlos de hasta un
+ * año mostraba cosas como "525600:00". Los enlaces creados desde iOS aparecen
+ * en esta misma lista, así que la web tiene que saber pintarlos.
+ */
+const formatCountdown = (ms: number): string => {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+
+  if (days > 0) return `${days} d ${hours} h`;
+  if (hours > 0) return `${hours} h ${minutes} min`;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
 const formatRelative = (dateStr: string | null): string => {
   if (!dateStr) return 'nunca';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -142,10 +160,7 @@ const SecretDetailView: Component<Props> = (props) => {
   onCleanup(() => clearInterval(ticker));
 
   const remainingMs = (expiresAt: string): number => new Date(expiresAt).getTime() - now();
-  const fmtRemaining = (expiresAt: string): string => {
-    const s = Math.max(0, Math.round(remainingMs(expiresAt) / 1000));
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  };
+  const fmtRemaining = (expiresAt: string): string => formatCountdown(remainingMs(expiresAt));
   // Remaining fraction of the created link's TTL, as a CSS width.
   const remainingPct = (createdAt: string, expiresAt: string): string => {
     const total = new Date(expiresAt).getTime() - new Date(createdAt).getTime();
