@@ -11,9 +11,23 @@ import {
   hashToken,
 } from '../lib/tokenCrypto';
 import { recordAlmaShareEvent } from './almaShare';
+import { SHARE_LINK_TTL_MINUTES, type ShareLinkTtlMinutes } from './secrets';
 
 const alma = new Hono<{ Bindings: Env; Variables: Variables }>();
 const ALMA_SHARE_TTL_MS = 5 * 60 * 1000;
+
+// Mismas duraciones que los enlaces de secretos: la hoja de compartir de la app
+// es un único componente para ambos, así que si divergen el usuario vería
+// opciones que un lado no honra. Antes este endpoint ignoraba en silencio
+// cualquier duración pedida y siempre daba 5 minutos.
+const ALMA_TTL_ERROR = `ttl_minutes must be one of: ${SHARE_LINK_TTL_MINUTES.join(', ')}`;
+
+const parseTtlMinutes = (raw: unknown): ShareLinkTtlMinutes | null | 'invalid' => {
+  if (raw === undefined) return null;
+  return (SHARE_LINK_TTL_MINUTES as readonly number[]).includes(raw as number)
+    ? (raw as ShareLinkTtlMinutes)
+    : 'invalid';
+};
 
 // ----- Validation helpers --------------------------------------------------
 
@@ -601,11 +615,16 @@ alma.post('/:id/share', async (c) => {
   const document = await getOwnedAlma(db, c.req.param('id'), user.userId);
   if (!document) return c.json({ error: 'Not found' }, 404);
 
+  const body = await c.req.json().catch(() => null);
+  const parsedTtl = parseTtlMinutes(body?.ttl_minutes);
+  if (parsedTtl === 'invalid') return c.json({ error: ALMA_TTL_ERROR }, 400);
+  const ttlMs = parsedTtl === null ? ALMA_SHARE_TTL_MS : parsedTtl * 60 * 1000;
+
   const raw = generateAlmaShareToken();
   const linkId = crypto.randomUUID();
   const now = Date.now();
   const createdAt = new Date(now).toISOString();
-  const expiresAt = new Date(now + ALMA_SHARE_TTL_MS).toISOString();
+  const expiresAt = new Date(now + ttlMs).toISOString();
   const prefix = almaShareTokenPrefix(raw);
 
   await db.insert(schema.almaShareLinks).values({
@@ -655,6 +674,52 @@ alma.get('/:id/share', async (c) => {
 
   c.header('Cache-Control', 'private, no-store');
   return c.json({ links: rows.filter((link) => !link.revoked_at && link.expires_at > now) });
+});
+
+// PATCH /:id/share/:linkId — amplía un enlace VIVO conservando la misma URL.
+// No revive enlaces expirados ni revocados: para eso hay que crear otro.
+alma.patch('/:id/share/:linkId', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const document = await getOwnedAlma(db, c.req.param('id'), user.userId);
+  if (!document) return c.json({ error: 'Not found' }, 404);
+
+  const body = await c.req.json().catch(() => null);
+  const parsedTtl = parseTtlMinutes(body?.ttl_minutes);
+  if (parsedTtl === 'invalid') return c.json({ error: ALMA_TTL_ERROR }, 400);
+  if (parsedTtl === null) return c.json({ error: 'ttl_minutes is required' }, 400);
+
+  const linkId = c.req.param('linkId');
+  const [link] = await db
+    .select()
+    .from(schema.almaShareLinks)
+    .where(eq(schema.almaShareLinks.id, linkId))
+    .limit(1);
+  if (!link || link.alma_id !== document.id) return c.json({ error: 'Not found' }, 404);
+  if (link.revoked_at) return c.json({ error: 'link_revoked' }, 409);
+  const previousExpiry = link.expires_at;
+  if (previousExpiry <= new Date().toISOString()) return c.json({ error: 'link_expired' }, 409);
+
+  const expiresAt = new Date(Date.now() + parsedTtl * 60 * 1000).toISOString();
+  await db
+    .update(schema.almaShareLinks)
+    .set({ expires_at: expiresAt })
+    .where(eq(schema.almaShareLinks.id, linkId));
+  await recordAlmaShareEvent(db, c, {
+    alma: document,
+    eventType: 'alma.share_extended',
+    linkId,
+  });
+
+  c.header('Cache-Control', 'private, no-store');
+  return c.json({
+    id: link.id,
+    prefix: link.prefix,
+    expires_at: expiresAt,
+    created_at: link.created_at,
+    last_used_at: link.last_used_at,
+    revoked_at: null,
+  });
 });
 
 alma.delete('/:id/share/:linkId', async (c) => {

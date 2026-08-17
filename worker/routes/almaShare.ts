@@ -25,7 +25,7 @@ export async function recordAlmaShareEvent(
   c: { get: (key: 'user' | 'tokenKind' | 'tokenId') => any },
   args: {
     alma: Pick<AlmaRow, 'id' | 'team_id'>;
-    eventType: 'alma.share_created' | 'alma.share_resolved' | 'alma.share_revoked';
+    eventType: 'alma.share_created' | 'alma.share_resolved' | 'alma.share_revoked' | 'alma.share_extended';
     linkId: string;
   },
 ): Promise<void> {

@@ -252,7 +252,7 @@ app.get('/api/meta', async (c) => {
       audit: 'GET /api/secrets/:id/audit',
       share_create: 'POST /api/secrets/:id/share',
       share_list: 'GET /api/secrets/:id/share',
-      share_revoke: 'DELETE /api/secrets/:id/share/:linkId',
+      share_extend: 'PATCH /api/secrets/:id/share/:linkId {ttl_minutes}', share_revoke: 'DELETE /api/secrets/:id/share/:linkId',
       share_resolve: 'GET /api/secret-share/:ref',
     };
   }
@@ -310,7 +310,7 @@ app.get('/api/meta', async (c) => {
       get: 'GET /api/alma/:id',
       share_create: 'POST /api/alma/:id/share',
       share_list: 'GET /api/alma/:id/share',
-      share_revoke: 'DELETE /api/alma/:id/share/:linkId',
+      share_extend: 'PATCH /api/alma/:id/share/:linkId {ttl_minutes}', share_revoke: 'DELETE /api/alma/:id/share/:linkId',
       share_resolve: 'GET /api/alma-share/:ref',
     };
   }

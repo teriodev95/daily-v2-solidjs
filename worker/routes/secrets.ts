@@ -599,13 +599,34 @@ secrets.get('/:id/audit', async (c) => {
   return c.json(events);
 });
 
-// ----- Share links (ephemeral, 5/15/60-minute TTL) -------------------------
+// ----- Share links -------------------------------------------------------
 
-// 5 is the default; a longer window is an explicit caller choice. The rest of
-// the security model (unguessable hashed token, auditing, revocation) is
-// unchanged, so the only widened surface is the validity window itself.
-export const SHARE_LINK_TTL_MINUTES = [5, 15, 60] as const;
+// Duraciones permitidas, en minutos. 5 sigue siendo el default: cualquier
+// ventana mayor es una elección explícita de quien llama.
+//
+// Las largas (24 h en adelante) existen para el flujo de la app móvil. Ojo con
+// lo que implican: el resolve es una URL PÚBLICA sin autenticación, así que un
+// enlace de un año es un año de acceso para quien tenga la URL. Por eso el TTL
+// elegido queda registrado en la auditoría y el enlace se puede revocar.
+export const SHARE_LINK_TTL_MINUTES = [
+  5, 15, 60,          // minutos / 1 h
+  1440,               // 24 h
+  4320,               // 3 días
+  10080,              // 1 semana
+  43200,              // 30 días
+  525600,             // 365 días
+] as const;
 export type ShareLinkTtlMinutes = (typeof SHARE_LINK_TTL_MINUTES)[number];
+
+const TTL_ERROR = `ttl_minutes must be one of: ${SHARE_LINK_TTL_MINUTES.join(', ')}`;
+
+/** Valida el ttl_minutes de un body; devuelve null si no viene. */
+const parseTtlMinutes = (raw: unknown): ShareLinkTtlMinutes | null | 'invalid' => {
+  if (raw === undefined) return null;
+  return (SHARE_LINK_TTL_MINUTES as readonly number[]).includes(raw as number)
+    ? (raw as ShareLinkTtlMinutes)
+    : 'invalid';
+};
 
 // Loads a team-scoped secret by id. Returns null when missing or off-team.
 // `requireActive` additionally rejects soft-deleted (revoked) secrets.
@@ -638,14 +659,10 @@ secrets.post('/:id/share', async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
 
-  let ttlMinutes: ShareLinkTtlMinutes = 5;
   const body = await c.req.json().catch(() => null);
-  if (body?.ttl_minutes !== undefined) {
-    if (!SHARE_LINK_TTL_MINUTES.includes(body.ttl_minutes)) {
-      return c.json({ error: 'ttl_minutes must be one of: 5, 15, 60' }, 400);
-    }
-    ttlMinutes = body.ttl_minutes;
-  }
+  const parsed = parseTtlMinutes(body?.ttl_minutes);
+  if (parsed === 'invalid') return c.json({ error: TTL_ERROR }, 400);
+  const ttlMinutes: ShareLinkTtlMinutes = parsed ?? 5;
 
   const raw = generateSecretShareToken();
   const linkId = crypto.randomUUID();
@@ -711,6 +728,69 @@ secrets.get('/:id/share', async (c) => {
   const links = rows.filter((r) => !r.revoked_at && r.expires_at > nowIso);
   c.header('Cache-Control', 'private, no-store');
   return c.json({ links });
+});
+
+// PATCH /:id/share/:linkId — amplía la vigencia de un enlace VIVO, con body
+// `{ ttl_minutes }`. Conserva la misma URL: el token no se regenera, solo se
+// recalcula `expires_at` desde ahora. Así se puede extender antes de que expire
+// sin tener que revocar y repartir un enlace nuevo.
+//
+// Un enlace ya expirado o revocado NO se reactiva: para eso hay que crear otro.
+// Reabrir un enlace muerto sería resucitar una URL que pudo quedar en un chat.
+secrets.patch('/:id/share/:linkId', async (c) => {
+  const user = c.get('user');
+  const db = c.get('db');
+  const id = c.req.param('id');
+  const linkId = c.req.param('linkId');
+
+  const secret = await loadTeamSecret(db, id, user.teamId, true);
+  if (!secret) return c.json({ error: 'Not found' }, 404);
+
+  const body = await c.req.json().catch(() => null);
+  const parsed = parseTtlMinutes(body?.ttl_minutes);
+  if (parsed === 'invalid') return c.json({ error: TTL_ERROR }, 400);
+  if (parsed === null) return c.json({ error: 'ttl_minutes is required' }, 400);
+  const ttlMinutes = parsed;
+
+  const [link] = await db
+    .select()
+    .from(schema.secretShareLinks)
+    .where(eq(schema.secretShareLinks.id, linkId))
+    .limit(1);
+
+  if (!link || link.secret_id !== secret.id) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  if (link.revoked_at) {
+    return c.json({ error: 'link_revoked' }, 409);
+  }
+  const previousExpiry = link.expires_at;
+  if (previousExpiry <= new Date().toISOString()) {
+    return c.json({ error: 'link_expired' }, 409);
+  }
+
+  const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString();
+  await db
+    .update(schema.secretShareLinks)
+    .set({ expires_at: expiresAt })
+    .where(eq(schema.secretShareLinks.id, linkId));
+
+  // Auditoría: queda quién amplió, cuánto y desde qué vencimiento.
+  await recordSecretEvent(db, c, {
+    secret,
+    event_type: 'secret.share_extended',
+    metadata: { link_id: linkId, ttl_minutes: ttlMinutes, previous_expires_at: previousExpiry, expires_at: expiresAt },
+  });
+
+  c.header('Cache-Control', 'private, no-store');
+  return c.json({
+    id: link.id,
+    prefix: link.prefix,
+    expires_at: expiresAt,
+    created_at: link.created_at,
+    last_used_at: link.last_used_at,
+    revoked_at: null,
+  });
 });
 
 // DELETE /:id/share/:linkId — soft-revoke a share link (keeps audit intact).
