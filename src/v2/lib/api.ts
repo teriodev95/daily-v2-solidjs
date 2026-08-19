@@ -180,6 +180,26 @@ export interface SecretShareCreated {
   created_at: string;
 }
 
+
+// ─── Búsqueda global (cruza módulos) ───
+
+export type SearchHitType =
+  | 'story' | 'wiki' | 'person' | 'project'
+  | 'secret' | 'learning' | 'assignment' | 'alma';
+
+export interface SearchHit {
+  type: SearchHitType;
+  id: string;
+  title: string;
+  subtitle?: string;
+  extra?: string;
+}
+
+export interface SearchResponse {
+  results: SearchHit[];
+  counts: Partial<Record<SearchHitType, number>>;
+}
+
 // ─── Share Tokens (per-story URL share for agents) ───
 
 export interface ShareTokenResponse {
@@ -506,6 +526,10 @@ export const api = {
       revoke: (secretId: string, linkId: string) =>
         request<{ ok: boolean }>(`/api/secrets/${secretId}/share/${linkId}`, { method: 'DELETE' }),
     },
+  },
+
+  search: {
+    all: (q: string) => request<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`),
   },
 
   presence: {

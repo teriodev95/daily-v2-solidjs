@@ -125,6 +125,20 @@ const AdminPage: Component = () => {
   // detail stays fresh and auto-returns to the list if the secret is deleted.
   const [detailSecretId, setDetailSecretId] = createSignal<string | null>(null);
   const detailSecret = () => activeSecrets().find((s) => s.id === detailSecretId()) ?? null;
+
+  // La búsqueda global vive en AppV2 y no alcanza este estado, así que pide
+  // abrir una ficha por evento. Sin esto, un resultado de tipo secreto solo
+  // podría dejarte en la pantalla, no en el secreto.
+  onMount(() => {
+    const openFromSearch = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id;
+      if (!id) return;
+      setActiveTab('secrets');
+      setDetailSecretId(id);
+    };
+    window.addEventListener('open-secret', openFromSearch);
+    onCleanup(() => window.removeEventListener('open-secret', openFromSearch));
+  });
   const [confirmDeleteSecret, setConfirmDeleteSecret] = createSignal<SecretMeta | null>(null);
   const [deletingSecret, setDeletingSecret] = createSignal(false);
 

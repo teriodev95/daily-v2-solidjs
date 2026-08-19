@@ -1,206 +1,264 @@
-import { createSignal, onMount, onCleanup, For, Show, type Component } from 'solid-js';
-import type { Story } from '../types';
-import { useData } from '../lib/data';
-import { api } from '../lib/api';
-import { Search, ArrowRight, X, RefreshCw } from 'lucide-solid';
-
-const statusDot: Record<string, string> = {
-  backlog: 'bg-base-content/20',
-  todo: 'bg-ios-blue-500',
-  in_progress: 'bg-amber-500',
-  done: 'bg-ios-green-500',
-};
+import { createSignal, createMemo, onMount, onCleanup, For, Show, type Component } from 'solid-js';
+import { api, type SearchHit, type SearchHitType } from '../lib/api';
+import {
+  Search, X, ClipboardList, BookOpen, Users, FolderKanban,
+  Lock, GraduationCap, Flag, Brain, CornerDownLeft,
+} from 'lucide-solid';
 
 interface Props {
   onClose: () => void;
-  onSelect: (story: Story) => void;
+  onSelect: (hit: SearchHit) => void;
 }
 
+/** Orden de las secciones: lo que más se busca, primero. */
+const TYPE_ORDER: SearchHitType[] = [
+  'story', 'wiki', 'secret', 'person', 'project', 'assignment', 'learning', 'alma',
+];
+
+const TYPE_META: Record<SearchHitType, { label: string; icon: any; tone: string }> = {
+  story:      { label: 'Historias',    icon: ClipboardList,  tone: 'text-ios-blue-500' },
+  wiki:       { label: 'Wiki',         icon: BookOpen,       tone: 'text-amber-500' },
+  secret:     { label: 'Secretos',     icon: Lock,           tone: 'text-red-400' },
+  person:     { label: 'Personas',     icon: Users,          tone: 'text-purple-400' },
+  project:    { label: 'Proyectos',    icon: FolderKanban,   tone: 'text-teal-400' },
+  assignment: { label: 'Encomiendas',  icon: Flag,           tone: 'text-pink-400' },
+  learning:   { label: 'Aprendizajes', icon: GraduationCap,  tone: 'text-ios-green-500' },
+  alma:       { label: 'Alma',         icon: Brain,          tone: 'text-indigo-400' },
+};
+
+/** Resalta la coincidencia sin recurrir a innerHTML. */
+const Highlight: Component<{ text: string; query: string }> = (props) => {
+  const idx = () => props.text.toLowerCase().indexOf(props.query.toLowerCase());
+  return (
+    <Show when={props.query && idx() >= 0} fallback={<>{props.text}</>}>
+      <>
+        {props.text.slice(0, idx())}
+        <mark class="rounded-sm bg-ios-blue-500/25 px-px text-inherit">
+          {props.text.slice(idx(), idx() + props.query.length)}
+        </mark>
+        {props.text.slice(idx() + props.query.length)}
+      </>
+    </Show>
+  );
+};
+
 const SearchModal: Component<Props> = (props) => {
-  const data = useData();
   const [query, setQuery] = createSignal('');
-  const [results, setResults] = createSignal<Story[]>([]);
+  const [hits, setHits] = createSignal<SearchHit[]>([]);
   const [loading, setLoading] = createSignal(false);
   const [activeIdx, setActiveIdx] = createSignal(0);
 
   let inputRef!: HTMLInputElement;
+  let listRef: HTMLDivElement | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
+  let requestSeq = 0;
 
   onMount(() => inputRef.focus());
   onCleanup(() => clearTimeout(debounce));
 
+  // Agrupa conservando el orden de secciones, y aplana para que el teclado
+  // recorra una sola lista aunque visualmente estén separadas.
+  const groups = createMemo(() => {
+    const byType = new Map<SearchHitType, SearchHit[]>();
+    for (const hit of hits()) {
+      const list = byType.get(hit.type) ?? [];
+      list.push(hit);
+      byType.set(hit.type, list);
+    }
+    return TYPE_ORDER.filter((t) => byType.has(t)).map((t) => ({ type: t, items: byType.get(t)! }));
+  });
+
+  const flat = createMemo(() => groups().flatMap((g) => g.items));
+
   const doSearch = (q: string) => {
     clearTimeout(debounce);
     if (q.trim().length < 2) {
-      setResults([]);
+      setHits([]);
       setLoading(false);
       return;
     }
     setLoading(true);
     debounce = setTimeout(async () => {
+      // Descarta respuestas de peticiones ya superadas: al teclear rápido, una
+      // lenta podía pisar a la última y mostrar resultados de otra consulta.
+      const seq = ++requestSeq;
       try {
-        const res = await api.stories.search(q.trim());
-        setResults(res as Story[]);
+        const res = await api.search.all(q.trim());
+        if (seq !== requestSeq) return;
+        setHits(res.results);
         setActiveIdx(0);
       } catch {
-        setResults([]);
+        if (seq === requestSeq) setHits([]);
       } finally {
-        setLoading(false);
+        if (seq === requestSeq) setLoading(false);
       }
-    }, 250);
+    }, 220);
   };
 
-  const select = (story: Story) => {
-    props.onSelect(story);
+  const select = (hit: SearchHit) => {
+    props.onSelect(hit);
     props.onClose();
   };
 
+  const move = (delta: number) => {
+    const total = flat().length;
+    if (total === 0) return;
+    const next = (activeIdx() + delta + total) % total;
+    setActiveIdx(next);
+    listRef?.querySelector(`[data-idx="${next}"]`)?.scrollIntoView({ block: 'nearest' });
+  };
+
   const handleKeyDown = (e: KeyboardEvent) => {
-    const list = results();
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if (e.key === 'Enter') {
       e.preventDefault();
-      setActiveIdx(i => Math.min(i + 1, list.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActiveIdx(i => Math.max(i - 1, 0));
-    } else if (e.key === 'Enter' && list.length > 0) {
-      e.preventDefault();
-      select(list[activeIdx()]);
+      const hit = flat()[activeIdx()];
+      if (hit) select(hit);
     } else if (e.key === 'Escape') {
+      e.preventDefault();
       props.onClose();
     }
   };
 
-  const highlight = (text: string, q: string) => {
-    if (!q || q.length < 2) return text;
-    const idx = text.toLowerCase().indexOf(q.toLowerCase());
-    if (idx === -1) return text;
-    return (
-      <>
-        {text.slice(0, idx)}
-        <mark class="bg-ios-blue-500/20 text-inherit rounded-sm px-px">{text.slice(idx, idx + q.length)}</mark>
-        {text.slice(idx + q.length)}
-      </>
-    );
-  };
-
-  const matchField = (story: Story, q: string): string | null => {
-    const lower = q.toLowerCase();
-    if (story.title.toLowerCase().includes(lower)) return null; // already shown
-    if (story.description?.toLowerCase().includes(lower)) return story.description;
-    return null;
-  };
+  const indexOfHit = (hit: SearchHit) => flat().indexOf(hit);
+  const searching = () => query().trim().length >= 2;
 
   return (
     <div
-      class="fixed inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-end sm:items-start sm:justify-center sm:pt-[15vh] animate-in fade-in duration-200"
-      onClick={() => props.onClose()}
+      class="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 backdrop-blur-md duration-200 animate-in fade-in sm:items-start sm:pt-[12vh]"
+      onClick={(e) => { if (e.target === e.currentTarget) props.onClose(); }}
     >
       <div
-        class="w-full sm:max-w-xl bg-base-100 rounded-t-[24px] sm:rounded-[24px] shadow-2xl shadow-black/50 border border-base-content/[0.06] overflow-hidden animate-in slide-in-from-bottom-8 sm:zoom-in-95 duration-300"
+        class="w-full overflow-hidden rounded-t-[24px] border border-base-content/[0.06] bg-base-100 shadow-2xl shadow-black/50 duration-300 animate-in slide-in-from-bottom-8 sm:max-w-2xl sm:rounded-[24px] sm:zoom-in-95"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Search input */}
-        <div class="flex items-center gap-3 px-6 h-16 sm:h-[60px] border-b border-base-content/[0.06] bg-base-100/50 backdrop-blur-md relative group">
-          <div class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-md bg-transparent transition-colors group-focus-within:bg-ios-blue-500/40" />
-          <Search size={18} strokeWidth={2.5} class="text-base-content/30 shrink-0" />
+        {/* Campo */}
+        <div class="group relative flex h-16 items-center gap-3 border-b border-base-content/[0.06] px-5 sm:h-[60px]">
+          <Search size={18} strokeWidth={2.5} class="shrink-0 text-base-content/30" />
           <input
             ref={inputRef}
-            type="text"
             value={query()}
-            onInput={(e) => {
-              const val = e.currentTarget.value;
-              setQuery(val);
-              doSearch(val);
-            }}
+            onInput={(e) => { setQuery(e.currentTarget.value); doSearch(e.currentTarget.value); }}
             onKeyDown={handleKeyDown}
-            placeholder="Buscar por título, código o contenido..."
-            class="flex-1 bg-transparent outline-none text-[16px] sm:text-[15px] font-bold tracking-tight placeholder:text-base-content/20 text-base-content/90 focus:text-base-content transition-colors"
+            placeholder="Buscar en todo Daily Check..."
+            class="flex-1 bg-transparent text-[16px] font-bold tracking-tight outline-none transition-colors placeholder:text-base-content/20 focus:text-base-content sm:text-[15px]"
           />
+          <Show when={loading()}>
+            <span class="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-base-content/15 border-t-ios-blue-500" />
+          </Show>
           <Show when={query()}>
             <button
-              onClick={() => { setQuery(''); setResults([]); inputRef.focus(); }}
-              class="p-2 rounded-xl text-base-content/30 hover:text-base-content/60 hover:bg-base-content/[0.04] transition-all"
+              type="button"
+              onClick={() => { setQuery(''); setHits([]); inputRef.focus(); }}
+              aria-label="Limpiar búsqueda"
+              class="rounded-xl p-2 text-base-content/30 transition-all hover:bg-base-content/[0.04] hover:text-base-content/60"
             >
-              <X size={16} strokeWidth={2.5} />
+              <X size={15} />
             </button>
           </Show>
-          <kbd class="hidden sm:flex items-center text-[10px] font-bold text-base-content/30 bg-base-content/[0.04] border border-base-content/[0.08] rounded-md px-2 py-1 uppercase tracking-widest">esc</kbd>
         </div>
 
-        {/* Results */}
-        <div class="max-h-[60vh] sm:max-h-[50vh] overflow-y-auto">
-          <Show when={query().trim().length >= 2}>
-            <Show when={!loading() && results().length === 0}>
-              <div class="px-6 py-12 text-center">
-                <p class="text-[13px] font-bold text-base-content/40 tracking-wide">
-                  Sin resultados para "{query()}"
-                </p>
-              </div>
-            </Show>
-
-            <Show when={results().length > 0}>
-              <div class="py-2 px-2">
-                <For each={results()}>
-                  {(story, i) => {
-                    const proj = story.project_id ? data.getProjectById(story.project_id) : null;
-                    const match = () => matchField(story, query());
-
+        {/* Resultados */}
+        <div ref={listRef} class="max-h-[60vh] overflow-y-auto sm:max-h-[52vh]">
+          {/* Estado inicial: decir qué se puede buscar es la mitad del affordance */}
+          <Show when={!searching()}>
+            <div class="px-5 py-8">
+              <p class="text-[11px] font-bold uppercase tracking-[0.14em] text-base-content/25">
+                Busca en
+              </p>
+              <div class="mt-3 flex flex-wrap gap-1.5">
+                <For each={TYPE_ORDER}>
+                  {(type) => {
+                    const meta = TYPE_META[type];
                     return (
-                      <button
-                        onClick={() => select(story)}
-                        onMouseEnter={() => setActiveIdx(i())}
-                        class={`w-full flex items-start gap-4 px-4 py-3 sm:py-3 rounded-xl text-left transition-all duration-200 group ${activeIdx() === i()
-                          ? 'bg-base-content/[0.04]'
-                          : 'hover:bg-base-content/[0.04] bg-transparent'
-                          }`}
-                      >
-                        <div class={`w-2 h-2 rounded-full mt-2.5 shrink-0 ${statusDot[story.status] ?? 'bg-base-content/20'}`} />
-                        <div class="flex-1 min-w-0 space-y-1">
-                          <div class="flex items-center gap-2.5">
-                            <Show when={story.code}>
-                              <span class="text-[10px] font-mono font-bold text-base-content/30 bg-base-content/[0.04] px-1.5 py-0.5 rounded">{story.code}</span>
-                            </Show>
-                            <Show when={story.frequency}><RefreshCw size={9} class="text-purple-500/50 shrink-0" /></Show>
-                            <span class="text-[14px] sm:text-sm font-bold truncate group-hover:text-ios-blue-500 transition-colors tracking-wide text-base-content/90">{highlight(story.title, query())}</span>
-                          </div>
-                          <Show when={match()}>
-                            <p class="text-[12px] font-medium text-base-content/40 truncate leading-relaxed">
-                              {highlight(match()!, query())}
-                            </p>
-                          </Show>
-                        </div>
-                        <Show when={proj}>
-                          <span
-                            class="text-[10px] font-bold px-2 py-1 rounded-lg shrink-0 mt-0.5 shadow-sm"
-                            style={{ "background-color": `${proj!.color}15`, color: proj!.color }}
-                          >
-                            {proj!.prefix}
-                          </span>
-                        </Show>
-                      </button>
+                      <span class="inline-flex items-center gap-1.5 rounded-lg bg-base-content/[0.04] px-2.5 py-1.5 text-[12px] font-semibold text-base-content/55">
+                        <meta.icon size={12} class={meta.tone} />
+                        {meta.label}
+                      </span>
                     );
                   }}
                 </For>
               </div>
-            </Show>
+              <p class="mt-4 text-[12px] leading-relaxed text-base-content/35">
+                Escribe al menos dos letras. Busca por título, código, contenido, clave o etiqueta.
+              </p>
+            </div>
           </Show>
 
-          {/* Empty state — before typing */}
-          <Show when={query().trim().length < 2}>
-            <div class="px-6 py-12 pb-[calc(3rem+env(safe-area-inset-bottom))] sm:pb-12 text-center space-y-4">
-              <p class="text-[13px] font-bold text-base-content/30 tracking-wide">Busca por título, descripción, objetivo o código</p>
-              <div class="hidden sm:flex items-center justify-center gap-3 text-[11px] font-bold text-base-content/25 uppercase tracking-widest">
-                <div class="flex items-center gap-1.5">
-                  <kbd class="bg-base-content/[0.04] border border-base-content/[0.08] rounded-md px-2 py-1">↑↓</kbd>
-                  <span>navegar</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <kbd class="bg-base-content/[0.04] border border-base-content/[0.08] rounded-md px-2 py-1">↵</kbd>
-                  <span>abrir</span>
-                </div>
-              </div>
+          {/* Sin resultados */}
+          <Show when={searching() && !loading() && flat().length === 0}>
+            <div class="px-6 py-14 text-center">
+              <p class="text-[13px] font-bold tracking-wide text-base-content/45">
+                Sin resultados para «{query().trim()}»
+              </p>
+              <p class="mx-auto mt-1.5 max-w-xs text-[12px] leading-relaxed text-base-content/30">
+                Revisa la ortografía o prueba con una palabra más corta.
+              </p>
             </div>
+          </Show>
+
+          {/* Agrupados por tipo */}
+          <Show when={flat().length > 0}>
+            <div class="py-2">
+              <For each={groups()}>
+                {(group) => {
+                  const meta = TYPE_META[group.type];
+                  return (
+                    <div class="mb-1">
+                      <div class="flex items-center gap-2 px-5 py-1.5">
+                        <meta.icon size={12} class={meta.tone} />
+                        <span class="text-[10px] font-bold uppercase tracking-[0.14em] text-base-content/30">
+                          {meta.label}
+                        </span>
+                        <span class="text-[10px] font-bold text-base-content/20">{group.items.length}</span>
+                      </div>
+                      <For each={group.items}>
+                        {(hit) => {
+                          const idx = () => indexOfHit(hit);
+                          const active = () => idx() === activeIdx();
+                          return (
+                            <button
+                              type="button"
+                              data-idx={idx()}
+                              onClick={() => select(hit)}
+                              onMouseEnter={() => setActiveIdx(idx())}
+                              class={`flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors ${
+                                active() ? 'bg-ios-blue-500/[0.09]' : 'hover:bg-base-content/[0.03]'
+                              }`}
+                            >
+                              <div class="min-w-0 flex-1">
+                                <p class="truncate text-[13.5px] font-semibold text-base-content/85">
+                                  <Highlight text={hit.title} query={query().trim()} />
+                                </p>
+                                <Show when={hit.subtitle || hit.extra}>
+                                  <p class="mt-0.5 truncate text-[11px] text-base-content/35">
+                                    {[hit.subtitle, hit.extra].filter(Boolean).join(' · ')}
+                                  </p>
+                                </Show>
+                              </div>
+                              <Show when={active()}>
+                                <CornerDownLeft size={13} class="shrink-0 text-base-content/30" />
+                              </Show>
+                            </button>
+                          );
+                        }}
+                      </For>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
+        </div>
+
+        {/* Pie con los atajos: el teclado deja de ser un secreto */}
+        <div class="flex items-center gap-4 border-t border-base-content/[0.06] px-5 py-2.5 text-[10px] font-semibold text-base-content/30">
+          <span class="flex items-center gap-1"><kbd class="rounded bg-base-content/[0.06] px-1.5 py-0.5 font-mono">↑↓</kbd> navegar</span>
+          <span class="flex items-center gap-1"><kbd class="rounded bg-base-content/[0.06] px-1.5 py-0.5 font-mono">↵</kbd> abrir</span>
+          <span class="flex items-center gap-1"><kbd class="rounded bg-base-content/[0.06] px-1.5 py-0.5 font-mono">esc</kbd> cerrar</span>
+          <Show when={flat().length > 0}>
+            <span class="ml-auto tabular-nums">{flat().length} resultados</span>
           </Show>
         </div>
       </div>

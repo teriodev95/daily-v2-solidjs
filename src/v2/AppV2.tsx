@@ -4,6 +4,7 @@ import { setActiveTab as setSharedActiveTab } from './lib/activeTab';
 import { ClipboardList, Users, FolderKanban, Settings, Sun, Moon, LogOut, Plus, Search, Send, CalendarDays, ListChecks, Archive, BookOpen } from 'lucide-solid';
 import dailyIcon from '../assets/daily-icon.png';
 import type { ReportCategory, Story } from './types';
+import type { SearchHit } from './lib/api';
 import { AuthProvider, useAuth } from './lib/auth';
 import { DataProvider, useData } from './lib/data';
 import LoginPage from './pages/LoginPage';
@@ -157,6 +158,32 @@ const AppShell: Component = () => {
       clearFocusSession();
     }
   });
+
+  // Enrutado de un resultado de búsqueda: cada tipo aterriza donde vive.
+  // Las historias abren su detalle directo (hay que traerlas: la búsqueda solo
+  // devuelve id y título). Los secretos abren su ficha vía evento, porque su
+  // estado vive dentro de AdminPage. El resto lleva a su pantalla.
+  const openSearchHit = async (hit: SearchHit) => {
+    switch (hit.type) {
+      case 'story': {
+        try {
+          const full = await api.stories.get(hit.id);
+          setSearchSelectedStory(full as Story);
+        } catch { /* si ya no existe, no pasa nada */ }
+        return;
+      }
+      case 'secret':
+        switchTab('admin');
+        window.dispatchEvent(new CustomEvent('open-secret', { detail: { id: hit.id } }));
+        return;
+      case 'wiki': switchTab('wiki'); return;
+      case 'person': switchTab('team'); return;
+      case 'project': switchTab('projects'); return;
+      case 'alma': switchTab('alma'); return;
+      case 'assignment':
+      case 'learning': switchTab('report'); return;
+    }
+  };
 
   const handleStoryCreated = () => {
     setRefreshKey(k => k + 1);
@@ -451,7 +478,7 @@ const AppShell: Component = () => {
       <Show when={showSearch()}>
         <SearchModal
           onClose={() => setShowSearch(false)}
-          onSelect={(story) => setSearchSelectedStory(story)}
+          onSelect={(hit) => void openSearchHit(hit)}
         />
       </Show>
 

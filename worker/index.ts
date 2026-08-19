@@ -27,6 +27,7 @@ import almaRoutes from './routes/alma';
 import almaShareRoutes, { purgeExpiredAlmaShareLinks } from './routes/almaShare';
 import presenceRoutes from './routes/presence';
 import renderRoutes from './routes/render';
+import searchRoutes from './routes/search';
 import { wikiAgentRoutes } from './features/wikiShare';
 import { billingRoutes, billingPortalRoutes, processBillingSchedules } from './features/billing';
 import seedRoutes from './db/seed';
@@ -119,6 +120,11 @@ app.get('/api/avatars/:key{.+}', async (c) => {
 // the session cookie / global API_KEY as before.
 app.use('/api/meta', tokenAuthMiddleware);
 app.use('/api/meta', authMiddleware);
+
+// Búsqueda global: cruza módulos, así que no lleva enforceScope de prefijo.
+// El propio handler decide qué módulos puede ver quien llama.
+app.use('/api/search', tokenAuthMiddleware);
+app.use('/api/search', authMiddleware);
 
 app.use('/api/team/*', tokenAuthMiddleware);
 app.use('/api/team/*', authMiddleware);
@@ -382,6 +388,7 @@ app.get('/api/meta', async (c) => {
 });
 
 // Protected routes
+app.route('/api/search', searchRoutes);
 app.route('/api/team', teamRoutes);
 app.route('/api/projects', projectRoutes);
 app.route('/api/stories', storiesRoutes);
