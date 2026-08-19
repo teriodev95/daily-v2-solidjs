@@ -28,6 +28,7 @@ import almaShareRoutes, { purgeExpiredAlmaShareLinks } from './routes/almaShare'
 import presenceRoutes from './routes/presence';
 import renderRoutes from './routes/render';
 import searchRoutes from './routes/search';
+import { mcpRoutes } from './routes/mcp';
 import { wikiAgentRoutes } from './features/wikiShare';
 import { billingRoutes, billingPortalRoutes, processBillingSchedules } from './features/billing';
 import seedRoutes from './db/seed';
@@ -125,6 +126,19 @@ app.use('/api/meta', authMiddleware);
 // El propio handler decide qué módulos puede ver quien llama.
 app.use('/api/search', tokenAuthMiddleware);
 app.use('/api/search', authMiddleware);
+
+// Endpoint MCP. Misma autenticación que la API (PAT `dk_*` o cookie de
+// sesión): tokenAuthMiddleware puebla scopes y tokenId, que el router usa para
+// decidir qué herramientas ve el llamador. No lleva enforceScope de prefijo —
+// cada tool declara su módulo, y la llamada se re-despacha contra la ruta REST
+// real, que aplica la barrera definitiva.
+app.use('/mcp', async (c, next) => {
+  const db = drizzle(c.env.DB, { schema: dbSchema });
+  c.set('db', db);
+  await next();
+});
+app.use('/mcp', tokenAuthMiddleware);
+app.use('/mcp', authMiddleware);
 
 app.use('/api/team/*', tokenAuthMiddleware);
 app.use('/api/team/*', authMiddleware);
@@ -382,12 +396,24 @@ app.get('/api/meta', async (c) => {
         },
       },
       meta: { get: 'GET /api/meta' },
+      // Servidor MCP sobre Streamable HTTP. Mismo token, mismos scopes: las
+      // herramientas visibles en tools/list son las que el token autoriza.
+      mcp: {
+        endpoint: 'POST /mcp',
+        transport: 'streamable-http',
+        eras: 'initialize (<=2025-11-25) y per-request _meta (>=2026-07-28)',
+        methods: 'initialize, server/discover, tools/list, tools/call',
+      },
     },
     capabilities,
   });
 });
 
 // Protected routes
+// El re-despacho recibe `app` por closure: se evalúa en tiempo de petición,
+// cuando el router ya está completo.
+app.route('/mcp', mcpRoutes(async (req, env, ctx) => app.fetch(req, env, ctx)));
+
 app.route('/api/search', searchRoutes);
 app.route('/api/team', teamRoutes);
 app.route('/api/projects', projectRoutes);
