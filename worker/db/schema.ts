@@ -271,6 +271,9 @@ export const secretShareLinks = sqliteTable('secret_share_links', {
   created_at: text('created_at').notNull(),
   last_used_at: text('last_used_at'),
   revoked_at: text('revoked_at'),
+  // Tope de resoluciones. NULL = sin límite (como nacieron los enlaces previos).
+  max_uses: integer('max_uses'),
+  use_count: integer('use_count').notNull().default(0),
 });
 
 // Alma: per-user layered technical memory. Three tiers: 0 = always-loaded core

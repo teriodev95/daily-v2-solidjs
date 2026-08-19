@@ -19,7 +19,7 @@ import { recordSecretEvent } from './secrets';
 const secretShare = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const NOT_FOUND_HINT =
-  'Enlace no disponible: no existe, fue revocado o expiró. Los enlaces duran 5-60 minutos; pide al dueño uno nuevo.';
+  'Enlace no disponible: no existe, fue revocado, expiró o agotó sus usos. Pide al dueño uno nuevo.';
 
 // `?format=raw` (or `Accept: text/plain`) returns the bare value — friendlier
 // for agents and for `curl ... > .env` piping than the JSON envelope.
@@ -48,6 +48,22 @@ secretShare.get('/:ref', async (c) => {
     return notFound();
   }
 
+  // Consumo de un uso. Se hace ANTES de descifrar y como UNA sola sentencia
+  // condicional: si fuese leer-comprobar-escribir, dos resoluciones simultáneas
+  // podrían pasar ambas el control y entregar el valor una vez de más. Aquí, el
+  // que pierde la carrera no modifica ninguna fila y recibe 404.
+  if (link.max_uses !== null) {
+    const consumed = await c.env.DB
+      .prepare(
+        `UPDATE secret_share_links
+            SET use_count = use_count + 1, last_used_at = ?
+          WHERE id = ? AND max_uses IS NOT NULL AND use_count < max_uses`,
+      )
+      .bind(new Date().toISOString(), link.id)
+      .run();
+    if (!consumed.meta?.changes) return notFound();
+  }
+
   const [secret] = await db
     .select()
     .from(schema.secrets)
@@ -70,14 +86,17 @@ secretShare.get('/:ref', async (c) => {
     return c.json({ error: 'Failed to decrypt secret value' }, 500);
   }
 
-  // Best-effort usage tracking — never block the resolve on a write failure.
-  try {
-    await db
-      .update(schema.secretShareLinks)
-      .set({ last_used_at: new Date().toISOString() })
-      .where(eq(schema.secretShareLinks.id, link.id));
-  } catch {
-    // swallow
+  // Enlaces sin tope: solo se anota el último uso (los que tienen tope ya lo
+  // escribieron en la misma sentencia que consumió el crédito).
+  if (link.max_uses === null) {
+    try {
+      await db
+        .update(schema.secretShareLinks)
+        .set({ last_used_at: new Date().toISOString() })
+        .where(eq(schema.secretShareLinks.id, link.id));
+    } catch {
+      // swallow
+    }
   }
 
   // Audit: metadata carries ids only; the value never touches the log. There
@@ -85,7 +104,9 @@ secretShare.get('/:ref', async (c) => {
   await recordSecretEvent(db, c, {
     secret,
     event_type: 'secret.share_resolved',
-    metadata: { link_id: link.id },
+    metadata: link.max_uses === null
+      ? { link_id: link.id }
+      : { link_id: link.id, use: link.use_count + 1, max_uses: link.max_uses },
   });
 
   c.header('Cache-Control', 'private, no-store');

@@ -620,6 +620,22 @@ export type ShareLinkTtlMinutes = (typeof SHARE_LINK_TTL_MINUTES)[number];
 
 const TTL_ERROR = `ttl_minutes must be one of: ${SHARE_LINK_TTL_MINUTES.join(', ')}`;
 
+// Tope de resoluciones de un enlace. El TTL acota el tiempo; esto acota las
+// veces: un agente que no guarda la clave la vuelve a pedir al enlace, así que
+// la ventana temporal por sí sola no limita la exposición.
+// Omitirlo = sin límite, que es como se comportaban los enlaces hasta ahora.
+export const SHARE_LINK_MAX_USES = [1, 5, 10, 50, 100] as const;
+export type ShareLinkMaxUses = (typeof SHARE_LINK_MAX_USES)[number];
+
+const MAX_USES_ERROR = `max_uses must be one of: ${SHARE_LINK_MAX_USES.join(', ')}`;
+
+const parseMaxUses = (raw: unknown): ShareLinkMaxUses | null | 'invalid' => {
+  if (raw === undefined || raw === null) return null;
+  return (SHARE_LINK_MAX_USES as readonly number[]).includes(raw as number)
+    ? (raw as ShareLinkMaxUses)
+    : 'invalid';
+};
+
 /** Valida el ttl_minutes de un body; devuelve null si no viene. */
 const parseTtlMinutes = (raw: unknown): ShareLinkTtlMinutes | null | 'invalid' => {
   if (raw === undefined) return null;
@@ -664,6 +680,10 @@ secrets.post('/:id/share', async (c) => {
   if (parsed === 'invalid') return c.json({ error: TTL_ERROR }, 400);
   const ttlMinutes: ShareLinkTtlMinutes = parsed ?? 5;
 
+  const parsedUses = parseMaxUses(body?.max_uses);
+  if (parsedUses === 'invalid') return c.json({ error: MAX_USES_ERROR }, 400);
+  const maxUses = parsedUses;
+
   const raw = generateSecretShareToken();
   const linkId = crypto.randomUUID();
   const now = Date.now();
@@ -680,20 +700,22 @@ secrets.post('/:id/share', async (c) => {
     created_at: createdAt,
     last_used_at: null,
     revoked_at: null,
+    max_uses: maxUses,
+    use_count: 0,
   });
 
   // Audit: metadata carries only ids — NEVER the raw token or the secret value.
   await recordSecretEvent(db, c, {
     secret,
     event_type: 'secret.share_created',
-    metadata: { link_id: linkId, expires_at: expiresAt, ttl_minutes: ttlMinutes },
+    metadata: { link_id: linkId, expires_at: expiresAt, ttl_minutes: ttlMinutes, max_uses: maxUses },
   });
 
   const url = `${new URL(c.req.url).origin}/api/secret-share/${raw}`;
   c.header('Cache-Control', 'private, no-store');
   c.header('X-Content-Type-Options', 'nosniff');
   return c.json(
-    { id: linkId, url, token: raw, prefix, expires_at: expiresAt, created_at: createdAt },
+    { id: linkId, url, token: raw, prefix, expires_at: expiresAt, created_at: createdAt, max_uses: maxUses, use_count: 0 },
     201,
   );
 });
@@ -719,6 +741,8 @@ secrets.get('/:id/share', async (c) => {
       created_at: schema.secretShareLinks.created_at,
       last_used_at: schema.secretShareLinks.last_used_at,
       revoked_at: schema.secretShareLinks.revoked_at,
+      max_uses: schema.secretShareLinks.max_uses,
+      use_count: schema.secretShareLinks.use_count,
     })
     .from(schema.secretShareLinks)
     .where(eq(schema.secretShareLinks.secret_id, secret.id))
@@ -790,6 +814,8 @@ secrets.patch('/:id/share/:linkId', async (c) => {
     created_at: link.created_at,
     last_used_at: link.last_used_at,
     revoked_at: null,
+    max_uses: link.max_uses,
+    use_count: link.use_count,
   });
 });
 

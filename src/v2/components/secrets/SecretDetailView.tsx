@@ -8,6 +8,7 @@ import {
   type SecretMeta,
   type SecretShareCreated,
   type SecretShareTtlMinutes,
+  type SecretShareMaxUses,
 } from '../../lib/api';
 
 interface Props {
@@ -168,9 +169,16 @@ const SecretDetailView: Component<Props> = (props) => {
     const frac = Math.max(0, Math.min(1, remainingMs(expiresAt) / total));
     return `${(frac * 100).toFixed(1)}%`;
   };
-  const liveLinks = () => (links() ?? []).filter((l) => !l.revoked_at && remainingMs(l.expires_at) > 0);
+  // Un enlace agotado ya no sirve aunque le quede tiempo: el servidor lo
+  // rechaza igual, así que tampoco se ofrece como activo.
+  const isSpent = (l: { max_uses: number | null; use_count: number }) =>
+    l.max_uses !== null && l.use_count >= l.max_uses;
+  const liveLinks = () =>
+    (links() ?? []).filter((l) => !l.revoked_at && remainingMs(l.expires_at) > 0 && !isSpent(l));
 
   const [ttlMinutes, setTtlMinutes] = createSignal<SecretShareTtlMinutes>(5);
+  // Tope de lecturas. null = sin límite, el comportamiento previo.
+  const [maxUses, setMaxUses] = createSignal<SecretShareMaxUses | null>(null);
   const [generating, setGenerating] = createSignal(false);
   const [createError, setCreateError] = createSignal('');
   // The just-created link, holding the once-visible url. Wiped on cleanup.
@@ -189,7 +197,7 @@ const SecretDetailView: Component<Props> = (props) => {
     setGenerating(true);
     setCreateError('');
     try {
-      const res = await api.secrets.shares.create(props.secret.id, ttlMinutes());
+      const res = await api.secrets.shares.create(props.secret.id, ttlMinutes(), maxUses());
       if (!alive) return;
       setCreated(res);
       setCopiedUrl(false);
@@ -550,10 +558,35 @@ const SecretDetailView: Component<Props> = (props) => {
                 </For>
               </div>
             </div>
-            <p class="flex-1 text-[11px] leading-relaxed text-base-content/40">
-              Enlace público efímero: quien lo tenga puede leer el valor durante {ttlMinutes()} minutos. Cada lectura queda auditada.
-            </p>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="text-[11px] font-semibold text-base-content/35">Usos</span>
+              <div class="flex rounded-lg bg-base-content/[0.05] p-0.5" role="radiogroup" aria-label="Límite de usos del enlace">
+                <For each={[null, 1, 5, 10, 50, 100] as (SecretShareMaxUses | null)[]}>
+                  {(uses) => (
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={maxUses() === uses}
+                      onClick={() => setMaxUses(uses)}
+                      class={`rounded-md px-2 py-1.5 text-[11px] font-semibold tabular-nums transition-colors ${
+                        maxUses() === uses
+                          ? 'bg-base-100 text-base-content shadow-sm'
+                          : 'text-base-content/45 hover:text-base-content/75'
+                      }`}
+                    >
+                      {uses === null ? 'Sin tope' : uses}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
           </div>
+          <p class="text-[11px] leading-relaxed text-base-content/40">
+            Enlace público efímero: quien lo tenga puede leer el valor durante {ttlMinutes()} minutos
+            {maxUses() === null
+              ? ', las veces que quiera'
+              : maxUses() === 1 ? ' y una sola vez' : `, hasta ${maxUses()} veces`}. Cada lectura queda auditada.
+          </p>
 
           <Show when={createError()}>
             <div class="flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.08] px-3 py-2.5 text-red-500">
@@ -590,6 +623,19 @@ const SecretDetailView: Component<Props> = (props) => {
                           <Clock size={10} />
                           {fmtRemaining(link.expires_at)}
                         </span>
+                        {/* Consumo: aquí se ve si un agente lo está reconsultando */}
+                        <Show when={link.max_uses !== null}>
+                          <span
+                            class={`inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+                              link.use_count >= (link.max_uses ?? 0)
+                                ? 'bg-red-500/10 text-red-400'
+                                : 'bg-base-content/[0.06] text-base-content/45'
+                            }`}
+                            title="Lecturas consumidas de su tope"
+                          >
+                            {link.use_count}/{link.max_uses} usos
+                          </span>
+                        </Show>
                       </div>
                       <p class="mt-0.5 truncate text-[11px] text-base-content/40">
                         Creado {formatRelative(link.created_at)} · Último uso {formatRelative(link.last_used_at)}

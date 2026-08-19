@@ -161,6 +161,8 @@ export interface SecretAuditEvent {
 // Ephemeral secret share links (5/15/60-minute TTL, public resolve). The list
 // only ever carries metadata; the raw url/token appears once, on creation.
 export type SecretShareTtlMinutes = 5 | 15 | 60;
+/** Tope de resoluciones del enlace. null = sin límite. */
+export type SecretShareMaxUses = 1 | 5 | 10 | 50 | 100;
 
 export interface SecretShareLink {
   id: string;
@@ -169,6 +171,8 @@ export interface SecretShareLink {
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
+  max_uses: number | null;
+  use_count: number;
 }
 
 export interface SecretShareCreated {
@@ -178,6 +182,8 @@ export interface SecretShareCreated {
   prefix: string;
   expires_at: string;
   created_at: string;
+  max_uses: number | null;
+  use_count: number;
 }
 
 
@@ -518,10 +524,14 @@ export const api = {
     shares: {
       list: (secretId: string) =>
         request<{ links: SecretShareLink[] }>(`/api/secrets/${secretId}/share`).then((r) => r.links),
-      create: (secretId: string, ttlMinutes: SecretShareTtlMinutes = 5) =>
+      create: (
+        secretId: string,
+        ttlMinutes: SecretShareTtlMinutes = 5,
+        maxUses: SecretShareMaxUses | null = null,
+      ) =>
         request<SecretShareCreated>(`/api/secrets/${secretId}/share`, {
           method: 'POST',
-          body: JSON.stringify({ ttl_minutes: ttlMinutes }),
+          body: JSON.stringify({ ttl_minutes: ttlMinutes, max_uses: maxUses }),
         }),
       revoke: (secretId: string, linkId: string) =>
         request<{ ok: boolean }>(`/api/secrets/${secretId}/share/${linkId}`, { method: 'DELETE' }),
