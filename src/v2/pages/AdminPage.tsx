@@ -21,6 +21,7 @@ import SecretEditor from '../components/secrets/SecretEditor';
 import SecretDetailView from '../components/secrets/SecretDetailView';
 import { billingApi } from '../features/billing/lib/api';
 import TopNavigation from '../components/TopNavigation';
+import HeaderSearchBar from '../components/HeaderSearchBar';
 import { frequencyLabel, isRecurring } from '../lib/recurrence';
 import type { User, Project, Assignment, Story } from '../types';
 
@@ -107,6 +108,17 @@ const AdminPage: Component = () => {
   // Billing — client count for the tab badge. The tab itself fetches its own data.
   const [billingClients, { refetch: refetchBillingClients }] = createResource(() => billingApi.clients.list());
   const activeSecrets = () => (secretsList() ?? []).filter((s) => !s.revoked_at);
+
+  // Filtro local de la lista, como el de Equipo o Wiki. Busca por nombre, clave
+  // y etiquetas: son los tres campos por los que uno recuerda un secreto.
+  const [secretSearch, setSecretSearch] = createSignal('');
+  const visibleSecrets = () => {
+    const q = secretSearch().trim().toLowerCase();
+    if (!q) return activeSecrets();
+    return activeSecrets().filter((s) =>
+      `${s.name} ${s.key} ${s.tags.join(' ')} ${s.environments.join(' ')}`.toLowerCase().includes(q),
+    );
+  };
   const [showSecretEditor, setShowSecretEditor] = createSignal(false);
   const [editingSecret, setEditingSecret] = createSignal<SecretMeta | null>(null);
   // In-place navigation (list ⇄ detail). Derived from the live list so the
@@ -303,6 +315,15 @@ const AdminPage: Component = () => {
       <div class="space-y-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <TopNavigation
           breadcrumbs={[{ label: 'Administración', icon: <Shield size={14} /> }]}
+          center={
+            <Show when={activeTab() === 'secrets'}>
+              <HeaderSearchBar
+                value={secretSearch()}
+                onInput={setSecretSearch}
+                placeholder="Filtrar secretos..."
+              />
+            </Show>
+          }
         />
 
         {/* Tab Selector */}
@@ -768,18 +789,37 @@ const AdminPage: Component = () => {
           >
           <div class="space-y-3 stagger-in">
             <div class="overflow-hidden rounded-[18px] border border-base-content/[0.06] bg-base-100/55 divide-y divide-base-content/[0.055]">
-              <Show when={activeSecrets().length === 0 && secretsReady()}>
+              <Show when={visibleSecrets().length === 0 && secretsReady()}>
                 <div class="px-4 py-10 text-center">
                   <div class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-ios-blue-500/10 text-ios-blue-500">
                     <Lock size={18} />
                   </div>
-                  <p class="text-sm font-semibold">Aún no hay secretos</p>
-                  <p class="mx-auto mt-1 max-w-xs text-xs text-base-content/40">
-                    Guarda claves y credenciales del equipo y revélalas solo cuando las necesites.
-                  </p>
+                  <Show
+                    when={secretSearch().trim()}
+                    fallback={
+                      <>
+                        <p class="text-sm font-semibold">Aún no hay secretos</p>
+                        <p class="mx-auto mt-1 max-w-xs text-xs text-base-content/40">
+                          Guarda claves y credenciales del equipo y revélalas solo cuando las necesites.
+                        </p>
+                      </>
+                    }
+                  >
+                    <p class="text-sm font-semibold">Sin coincidencias</p>
+                    <p class="mx-auto mt-1 max-w-xs text-xs text-base-content/40">
+                      Ningún secreto coincide con «{secretSearch().trim()}».
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSecretSearch('')}
+                      class="mt-3 rounded-lg bg-base-content/[0.06] px-3 py-1.5 text-[12px] font-semibold text-base-content/65 transition-colors hover:bg-base-content/[0.1]"
+                    >
+                      Limpiar filtro
+                    </button>
+                  </Show>
                 </div>
               </Show>
-              <For each={activeSecrets()}>
+              <For each={visibleSecrets()}>
                 {(secret) => {
                   const proj = () => secretProjectName(secret.project_id);
                   return (
