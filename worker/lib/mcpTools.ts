@@ -469,6 +469,141 @@ export const MCP_TOOLS: McpTool[] = [
     inputSchema: obj({ user_id: str('Filtrar por persona.') }),
     toRequest: (a) => ({ method: 'GET', path: '/api/learnings', query: pick(a, ['user_id']) }),
   },
+
+  {
+    name: 'create_secret',
+    description:
+      'Guarda un secreto nuevo en la bóveda. El valor se cifra en reposo y no vuelve a devolverse en las lecturas: para recuperarlo hace falta reveal_secret o un enlace efímero. Requiere rol admin y scope secrets:write.',
+    module: 'secrets',
+    action: 'write',
+    adminOnly: true,
+    forbidGlobalApiKey: true,
+    inputSchema: obj(
+      {
+        name: str('Nombre legible del secreto, 1-100 caracteres.'),
+        key: str('Clave o identificador, p. ej. STRIPE_API_KEY. 1-100 caracteres.'),
+        value: str('Valor a cifrar. Obligatorio y no vacío.'),
+        project_id: str('Proyecto al que pertenece.'),
+        environments: {
+          type: 'array',
+          items: { type: 'string' },
+          description: "Entornos donde aplica: 'dev', 'staging', 'prod', 'local' o un slug ^[a-z0-9_-]{1,20}$.",
+        },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Etiquetas para organizarlo.' },
+      },
+      ['name', 'key', 'value'],
+    ),
+    toRequest: (a) => ({
+      method: 'POST',
+      path: '/api/secrets',
+      body: body(a, ['name', 'key', 'value', 'project_id', 'environments', 'tags']),
+    }),
+  },
+
+  // -------------------------------------------------------------- cobranza
+  // /api/billing/* lleva requireAdmin además del scope `billing`.
+  {
+    name: 'list_billing_clients',
+    description: 'Lista los clientes de cobranza con su razón social y RFC. Requiere rol admin.',
+    module: 'billing',
+    action: 'read',
+    adminOnly: true,
+    inputSchema: obj({}),
+    toRequest: () => ({ method: 'GET', path: '/api/billing/clients' }),
+  },
+  {
+    name: 'get_billing_client',
+    description: 'Obtiene un cliente de cobranza por id. Requiere rol admin.',
+    module: 'billing',
+    action: 'read',
+    adminOnly: true,
+    inputSchema: obj({ id: str('Id del cliente.') }, ['id']),
+    toRequest: (a) => ({ method: 'GET', path: `/api/billing/clients/${encodeURIComponent(a.id)}` }),
+  },
+  {
+    name: 'get_client_statement',
+    description:
+      'Estado de cuenta de un cliente: todas sus facturas más los totales pagado y pendiente. Requiere rol admin.',
+    module: 'billing',
+    action: 'read',
+    adminOnly: true,
+    inputSchema: obj({ id: str('Id del cliente.') }, ['id']),
+    toRequest: (a) => ({ method: 'GET', path: `/api/billing/clients/${encodeURIComponent(a.id)}/statement` }),
+  },
+  {
+    name: 'create_billing_client',
+    description: 'Da de alta un cliente de cobranza. Requiere rol admin y scope billing:write.',
+    module: 'billing',
+    action: 'write',
+    adminOnly: true,
+    inputSchema: obj(
+      {
+        name: str('Nombre comercial, 1-200 caracteres.'),
+        razon_social: str('Razón social fiscal.'),
+        rfc: str('RFC del cliente.'),
+        project_id: str('Proyecto asociado.'),
+      },
+      ['name'],
+    ),
+    toRequest: (a) => ({
+      method: 'POST',
+      path: '/api/billing/clients',
+      body: body(a, ['name', 'razon_social', 'rfc', 'project_id']),
+    }),
+  },
+  {
+    name: 'list_invoices',
+    description: 'Lista facturas, opcionalmente filtradas por cliente o estado de pago. Requiere rol admin.',
+    module: 'billing',
+    action: 'read',
+    adminOnly: true,
+    inputSchema: obj({
+      client_id: str('Filtrar por cliente.'),
+      status: enumOf(['pending', 'paid'], 'Filtrar por estado de pago.'),
+    }),
+    toRequest: (a) => ({ method: 'GET', path: '/api/billing/invoices', query: pick(a, ['client_id', 'status']) }),
+  },
+  {
+    name: 'get_invoice',
+    description: 'Obtiene una factura por id, con sus archivos adjuntos. Requiere rol admin.',
+    module: 'billing',
+    action: 'read',
+    adminOnly: true,
+    inputSchema: obj({ id: str('Id de la factura.') }, ['id']),
+    toRequest: (a) => ({ method: 'GET', path: `/api/billing/invoices/${encodeURIComponent(a.id)}` }),
+  },
+  {
+    name: 'create_invoice',
+    description:
+      'Emite una factura para un cliente. Si no se indica total, se calcula como subtotal menos descuento. Requiere rol admin y scope billing:write.',
+    module: 'billing',
+    action: 'write',
+    adminOnly: true,
+    inputSchema: obj(
+      {
+        client_id: str('Id del cliente. Obligatorio.'),
+        period: str('Periodo facturado en formato YYYY-MM. Obligatorio.'),
+        subtotal: num('Subtotal antes de descuento. Por defecto 0.'),
+        discount: num('Descuento aplicado. Por defecto 0.'),
+        total: num('Total. Si se omite, se calcula como subtotal - discount.'),
+        status: enumOf(['pending', 'paid'], 'Estado de pago. Por defecto pending.'),
+        description: str('Concepto de la factura.'),
+        note: str('Nota interna.'),
+        issue_date: str('Fecha de emisión YYYY-MM-DD. Por defecto hoy.'),
+        is_estimated: bool('Marca la factura como estimada, no definitiva.'),
+        schedule_id: str('Id de la programación recurrente que la origina.'),
+      },
+      ['client_id', 'period'],
+    ),
+    toRequest: (a) => ({
+      method: 'POST',
+      path: '/api/billing/invoices',
+      body: body(a, [
+        'client_id', 'period', 'subtotal', 'discount', 'total', 'status',
+        'description', 'note', 'issue_date', 'is_estimated', 'schedule_id',
+      ]),
+    }),
+  },
 ];
 
 export const MCP_TOOLS_BY_NAME = new Map(MCP_TOOLS.map((t) => [t.name, t]));
