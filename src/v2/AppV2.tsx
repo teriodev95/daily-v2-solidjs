@@ -445,11 +445,13 @@ const AppShell: Component = () => {
 
           {/* Calendar (Mobile) */}
           <button
-            onClick={() => setShowCalendar(v => !v)}
-            class="relative flex flex-col items-center justify-center w-10 h-12 shrink-0 rounded-[22px] transition-all duration-300 active:scale-90 text-base-content/40"
+            onClick={() => switchTab('calendar')}
+            class={`relative flex flex-col items-center justify-center w-10 h-12 shrink-0 rounded-[22px] transition-all duration-300 active:scale-90 ${
+              activeTab() === 'calendar' ? 'text-base-content' : 'text-base-content/40'
+            }`}
             style={{ "-webkit-tap-highlight-color": "transparent" }}
           >
-            <CalendarDays size={20} strokeWidth={2} />
+            <CalendarDays size={20} strokeWidth={activeTab() === 'calendar' ? 2.5 : 2} />
           </button>
 
           {/* Create FAB (Mobile) */}
