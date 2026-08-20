@@ -1,5 +1,5 @@
 import { createSignal, createMemo, For, Show, type Component } from 'solid-js';
-import { Plug, Copy, Check, Terminal, Braces, Info, Plus, Loader2 } from 'lucide-solid';
+import { Plug, Copy, Check, Terminal, Braces, FileCode, Info, Plus, Loader2 } from 'lucide-solid';
 import { API_BASE, api, type Token, type TokenScope } from '../../lib/api';
 import { MODULES } from './PermissionMatrix';
 
@@ -15,7 +15,7 @@ import { MODULES } from './PermissionMatrix';
  * valor real solo viaja al portapapeles, igual que en la lista de tokens.
  */
 
-type Format = 'cli' | 'json';
+type Format = 'cli' | 'json' | 'codex';
 
 const TOKEN_PLACEHOLDER = 'dk_live_…';
 
@@ -50,22 +50,40 @@ const McpSetupPanel: Component<{
     () => props.tokens.find((t) => t.id === selectedId()) ?? props.tokens[0] ?? null,
   );
 
-  const snippet = (key: string) =>
-    format() === 'cli'
-      ? `claude mcp add --transport http daily-check ${mcpUrl()} \\\n  --header "Authorization: Bearer ${key}"`
-      : JSON.stringify(
-          {
-            mcpServers: {
-              'daily-check': {
-                type: 'http',
-                url: mcpUrl(),
-                headers: { Authorization: `Bearer ${key}` },
-              },
-            },
+  const snippet = (key: string) => {
+    if (format() === 'cli') {
+      return `claude mcp add --transport http daily-check ${mcpUrl()} \\\n  --header "Authorization: Bearer ${key}"`;
+    }
+    if (format() === 'codex') {
+      // Codex usa TOML y nombra la cabecera de forma explícita: no tiene un
+      // campo `type`, deduce el transporte HTTP de que haya `url`.
+      return [
+        '[mcp_servers.daily-check]',
+        `url = "${mcpUrl()}"`,
+        `http_headers = { Authorization = "Bearer ${key}" }`,
+      ].join('\n');
+    }
+    return JSON.stringify(
+      {
+        mcpServers: {
+          'daily-check': {
+            type: 'http',
+            url: mcpUrl(),
+            headers: { Authorization: `Bearer ${key}` },
           },
-          null,
-          2,
-        );
+        },
+      },
+      null,
+      2,
+    );
+  };
+
+  // Cada formato va a un sitio distinto; decirlo evita el paso de adivinar.
+  const destination = () => {
+    if (format() === 'cli') return 'Ejecútalo en tu terminal, en cualquier carpeta.';
+    if (format() === 'codex') return 'Va en ~/.codex/config.toml (o .codex/config.toml del repo).';
+    return 'Va en el archivo de configuración de tu cliente: claude_desktop_config.json o .cursor/mcp.json.';
+  };
 
   const copy = async (text: string, id: string) => {
     try {
@@ -227,6 +245,7 @@ const McpSetupPanel: Component<{
               <For
                 each={[
                   { key: 'cli' as const, label: 'Claude Code', icon: Terminal },
+                  { key: 'codex' as const, label: 'Codex', icon: FileCode },
                   { key: 'json' as const, label: 'Desktop / Cursor', icon: Braces },
                 ]}
               >
@@ -253,7 +272,9 @@ const McpSetupPanel: Component<{
             </div>
           </div>
 
-          <pre class="mt-2.5 overflow-x-auto rounded-[12px] bg-base-content/[0.04] px-3 py-2.5 font-mono text-[11px] leading-relaxed text-base-content/80">
+          <p class="mt-2 text-[10.5px] text-base-content/45">{destination()}</p>
+
+          <pre class="mt-1.5 overflow-x-auto rounded-[12px] bg-base-content/[0.04] px-3 py-2.5 font-mono text-[11px] leading-relaxed text-base-content/80">
             {snippet(TOKEN_PLACEHOLDER)}
           </pre>
 
