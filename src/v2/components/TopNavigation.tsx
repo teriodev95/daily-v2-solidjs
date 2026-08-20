@@ -1,6 +1,6 @@
 import { Show, For, createSignal, onCleanup, onMount, type Component, type JSX } from 'solid-js';
 import { useAuth } from '../lib/auth';
-import { Search, Moon, Sun, LogOut, ChevronRight, Key, Sparkles, BrainCircuit } from 'lucide-solid';
+import { Search, Moon, Sun, LogOut, ChevronRight, Key, Sparkles, BrainCircuit, Plug } from 'lucide-solid';
 import { isDark, toggleTheme } from '../lib/theme';
 import dailyIcon from '../../assets/daily-icon.png';
 
@@ -68,6 +68,12 @@ const TopNavigation: Component<Props> = (props) => {
     setMenuOpen(false);
     setMobileMenuOpen(false);
     window.dispatchEvent(new Event('open-agent-bootstrap'));
+  };
+
+  const openMcpSetup = () => {
+    setMenuOpen(false);
+    setMobileMenuOpen(false);
+    window.dispatchEvent(new Event('open-mcp-setup'));
   };
 
   const doLogout = () => {
@@ -181,6 +187,15 @@ const TopNavigation: Component<Props> = (props) => {
                       <Sparkles size={14} class="text-ios-blue-500/70" />
                       Punto de entrada
                     </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={openMcpSetup}
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/70 hover:bg-base-content/5 transition-colors"
+                    >
+                      <Plug size={14} class="text-ios-blue-500/70" />
+                      Conectar por MCP
+                    </button>
                     <div class="my-1 h-px bg-base-content/[0.06]" />
                     <button
                       type="button"
@@ -275,6 +290,15 @@ const TopNavigation: Component<Props> = (props) => {
                     >
                       <Sparkles size={14} class="text-ios-blue-500/70" />
                       Punto de entrada
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={openMcpSetup}
+                      class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-base-content/70 hover:bg-base-content/5 transition-colors"
+                    >
+                      <Plug size={14} class="text-ios-blue-500/70" />
+                      Conectar por MCP
                     </button>
                     <div class="my-1 h-px bg-base-content/[0.06]" />
                     <button

@@ -22,6 +22,7 @@ import CalendarPage from './pages/CalendarPage';
 import StoryDetail from './components/StoryDetail';
 import InstallPrompt from './components/InstallPrompt';
 import AgentBootstrapModal from './components/AgentBootstrapModal';
+import McpSetupModal from './components/McpSetupModal';
 import UpdateToast from './components/UpdateToast';
 import SyncIndicator from './components/SyncIndicator';
 import OnlineUsers from './components/OnlineUsers';
@@ -79,6 +80,7 @@ const AppShell: Component = () => {
   const [shareRequested, setShareRequested] = createSignal(0);
   const [hiddenRequested, setHiddenRequested] = createSignal(0);
   const [showAgentBootstrap, setShowAgentBootstrap] = createSignal(false);
+  const [showMcpSetup, setShowMcpSetup] = createSignal(false);
   let unmountDockMotion: (() => void) | undefined;
 
   const triggerShare = () => {
@@ -298,6 +300,7 @@ const AppShell: Component = () => {
     const onOpenTokens = () => switchTab('tokens');
     const onOpenAlma = () => switchTab('alma');
     const onOpenAgentBootstrap = () => setShowAgentBootstrap(true);
+    const onOpenMcpSetup = () => setShowMcpSetup(true);
 
     window.addEventListener('open-search', onOpenSearch);
     window.addEventListener('open-share', onOpenShare);
@@ -305,6 +308,7 @@ const AppShell: Component = () => {
     window.addEventListener('open-tokens', onOpenTokens);
     window.addEventListener('open-alma', onOpenAlma);
     window.addEventListener('open-agent-bootstrap', onOpenAgentBootstrap);
+    window.addEventListener('open-mcp-setup', onOpenMcpSetup);
 
     onCleanup(() => {
       document.removeEventListener('keydown', handleKey);
@@ -314,6 +318,7 @@ const AppShell: Component = () => {
       window.removeEventListener('open-tokens', onOpenTokens);
       window.removeEventListener('open-alma', onOpenAlma);
       window.removeEventListener('open-agent-bootstrap', onOpenAgentBootstrap);
+      window.removeEventListener('open-mcp-setup', onOpenMcpSetup);
     });
   });
 
@@ -501,6 +506,17 @@ const AppShell: Component = () => {
         <AgentBootstrapModal
           onClose={() => setShowAgentBootstrap(false)}
           onOpenTokens={() => switchTab('tokens')}
+        />
+      </Show>
+
+      {/* MCP setup modal */}
+      <Show when={showMcpSetup()}>
+        <McpSetupModal
+          onClose={() => setShowMcpSetup(false)}
+          onOpenTokens={() => {
+            setShowMcpSetup(false);
+            switchTab('tokens');
+          }}
         />
       </Show>
 
