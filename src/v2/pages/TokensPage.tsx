@@ -1,9 +1,10 @@
 import { createEffect, createSignal, createResource, onCleanup, For, Show, type Component } from 'solid-js';
-import { Key, Settings, Plus, Copy, Check, Trash2, AlertCircle, X, Clock, Pencil } from 'lucide-solid';
+import { Key, Settings, Plus, Copy, Check, Trash2, AlertCircle, X, Clock, Pencil, Plug } from 'lucide-solid';
 import TopNavigation from '../components/TopNavigation';
 import CreateTokenModal from '../components/tokens/CreateTokenModal';
 import TokenRevealDialog from '../components/tokens/TokenRevealDialog';
 import { MODULES } from '../components/tokens/PermissionMatrix';
+import McpSetupPanel from '../components/tokens/McpSetupPanel';
 import { api, type Token, type CreatedToken, type TokenScope } from '../lib/api';
 import { useOnceReady } from '../lib/onceReady';
 import { useRefetchOnActive } from '../lib/refetchOnActive';
@@ -60,6 +61,7 @@ const TokensPage: Component = () => {
   const [revealingId, setRevealingId] = createSignal<string | null>(null);
   const [revoking, setRevoking] = createSignal(false);
   const [editingToken, setEditingToken] = createSignal<Token | null>(null);
+  const [tab, setTab] = createSignal<'tokens' | 'mcp'>('tokens');
 
   const showToast = (type: 'ok' | 'error', message: string) => {
     setToast({ type, message });
@@ -166,11 +168,12 @@ const TokensPage: Component = () => {
           <div>
             <h1 class="text-lg font-bold">API Tokens</h1>
             <p class="text-xs text-base-content/50 mt-1 max-w-xl">
-              Crea tokens para que agentes o integraciones externas accedan a tus
-              datos con permisos específicos por módulo.
+              {tab() === 'tokens'
+                ? 'Crea tokens para que agentes o integraciones externas accedan a tus datos con permisos específicos por módulo.'
+                : 'Conecta un cliente MCP al servidor. El token que elijas decide qué herramientas verá el agente.'}
             </p>
           </div>
-          <Show when={(activeTokens().length > 0)}>
+          <Show when={tab() === 'tokens' && activeTokens().length > 0}>
             <button
               onClick={() => setShowCreate(true)}
               class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-ios-blue-500 text-white text-xs font-semibold hover:bg-ios-blue-600 transition-colors shrink-0"
@@ -181,7 +184,52 @@ const TokensPage: Component = () => {
           </Show>
         </div>
 
+        {/* Selector de pestaña — mismo patrón que las pestañas de Gestión. */}
+        <div class="flex flex-wrap items-center gap-2 px-0.5">
+          <For each={[
+            { key: 'tokens' as const, label: 'Tokens', icon: Key, count: activeTokens().length },
+            { key: 'mcp' as const, label: 'MCP', icon: Plug, count: null },
+          ]}>
+            {(item) => {
+              const Icon = item.icon;
+              const active = () => tab() === item.key;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setTab(item.key)}
+                  aria-pressed={active()}
+                  class={`group flex h-10 items-center gap-2 rounded-[14px] border px-3 text-xs font-semibold whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ios-blue-500/30 ${
+                    active()
+                      ? 'bg-base-100 text-base-content border-ios-blue-500/70 ring-1 ring-ios-blue-500/70 shadow-[0_0_0_4px_rgba(0,122,255,0.08)]'
+                      : 'bg-base-100/55 text-base-content/58 border-base-content/[0.075] hover:bg-base-content/[0.025] hover:text-base-content/82 hover:border-base-content/[0.13]'
+                  }`}
+                >
+                  <Icon size={14} strokeWidth={2.35} />
+                  <span>{item.label}</span>
+                  <Show when={item.count !== null}>
+                    <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-base-content/[0.055] px-1.5 text-[10px] font-bold text-base-content/48 tabular-nums">
+                      {item.count}
+                    </span>
+                  </Show>
+                </button>
+              );
+            }}
+          </For>
+        </div>
+
         {/* Content */}
+        <Show when={tab() === 'mcp'}>
+          <Show when={ready()} fallback={<TokensSkeleton />}>
+            <McpSetupPanel
+              tokens={activeTokens()}
+              writeToClipboard={writeToClipboard}
+              showToast={showToast}
+              onCreateToken={() => setShowCreate(true)}
+            />
+          </Show>
+        </Show>
+
+        <Show when={tab() === 'tokens'}>
         <Show when={ready()} fallback={<TokensSkeleton />}>
           <Show
             when={activeTokens().length > 0}
@@ -312,6 +360,7 @@ const TokensPage: Component = () => {
               </div>
             </div>
           </Show>
+        </Show>
         </Show>
       </div>
 
